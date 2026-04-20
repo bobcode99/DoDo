@@ -171,6 +171,59 @@ struct EpisodeTranscriptStatusView: View {
                         }
                         .buttonStyle(.borderedProminent)
                     }
+                } else if effectiveEngine == .yapServer {
+                    // Yap can stream directly from the RSS URL — no download needed
+                    VStack(spacing: 12) {
+                        Image(systemName: "server.rack")
+                            .font(.system(size: 50))
+                            .foregroundStyle(.blue)
+                        Text("Ready to Generate via Yap Server").font(.headline)
+                        Text("The episode will be streamed directly to your yap server. No download required.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        // Engine picker
+                        Picker("Engine", selection: Binding(
+                            get: { effectiveEngine },
+                            set: { newEngine in
+                                viewModel.selectedTranscriptEngine = newEngine
+                                if newEngine != .whisper, let selected = viewModel.selectedTranscriptLanguage {
+                                    let resolved = resolvedLanguage(selected)
+                                    if !SettingsViewModel.locales(for: newEngine).contains(where: { $0.id == resolved }) {
+                                        viewModel.selectedTranscriptLanguage = nil
+                                    }
+                                }
+                            }
+                        )) {
+                            ForEach(TranscriptEngine.allCases) { engine in
+                                Label(engine.displayName, systemImage: engine.systemImage).tag(engine)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.subheadline)
+
+                        // Language picker
+                        Picker("Language", selection: Binding(
+                            get: { resolvedLanguage(viewModel.selectedTranscriptLanguage ?? viewModel.podcastLanguage) },
+                            set: { newValue in
+                                let defaultLocale = resolvedLanguage(viewModel.podcastLanguage)
+                                viewModel.selectedTranscriptLanguage = (newValue == defaultLocale) ? nil : newValue
+                            }
+                        )) {
+                            ForEach(pickerLocales) { locale in
+                                Text(locale.name).tag(locale.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.subheadline)
+
+                        Button(action: { viewModel.generateTranscript() }) {
+                            Label("Generate Transcript", systemImage: "text.bubble")
+                                .font(.subheadline)
+                                .padding(.horizontal, 20).padding(.vertical, 10)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: "arrow.down.circle")

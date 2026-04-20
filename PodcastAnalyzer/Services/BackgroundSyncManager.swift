@@ -224,6 +224,16 @@ class BackgroundSyncManager {
 
       syncProgressTotal = podcasts.count
 
+      // Pre-fetch episode keys that have user data so we can preserve orphaned episodes
+      // (episodes that aged off the RSS feed but were downloaded / starred / played).
+      let allEpisodeModels = (try? context.fetch(FetchDescriptor<EpisodeDownloadModel>())) ?? []
+      let episodesWithUserData: Set<String> = Set(
+        allEpisodeModels
+          .filter { $0.localAudioPath != nil || $0.isStarred || $0.isCompleted
+                    || $0.lastPlaybackPosition > 0 || $0.playCount > 0 }
+          .map { $0.id }
+      )
+
       var totalNewEpisodes = 0
       var newEpisodeDetails: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)] = []
 
@@ -242,6 +252,7 @@ class BackgroundSyncManager {
             if let result = await group.next() {
               processSyncResult(
                 result, podcasts: podcasts,
+                episodesWithUserData: episodesWithUserData,
                 totalNewEpisodes: &totalNewEpisodes,
                 newEpisodeDetails: &newEpisodeDetails
               )
@@ -280,6 +291,7 @@ class BackgroundSyncManager {
         for await result in group {
           processSyncResult(
             result, podcasts: podcasts,
+            episodesWithUserData: episodesWithUserData,
             totalNewEpisodes: &totalNewEpisodes,
             newEpisodeDetails: &newEpisodeDetails
           )
@@ -354,6 +366,7 @@ class BackgroundSyncManager {
   private func processSyncResult(
     _ result: (index: Int, podcast: PodcastInfo?, cacheHeader: String?, error: Error?),
     podcasts: [PodcastInfoModel],
+    episodesWithUserData: Set<String>,
     totalNewEpisodes: inout Int,
     newEpisodeDetails: inout [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)]
   ) {
@@ -394,8 +407,10 @@ class BackgroundSyncManager {
         ))
       }
 
-      // Update the podcast with new episodes
-      podcast.podcastInfo = updatedPodcast
+      // Merge: RSS episodes + orphaned episodes the user has touched (downloaded/starred/played)
+      // so they don't vanish when a feed trims its backlog.
+      let merged = podcast.podcastInfo.merging(updatedFrom: updatedPodcast, preservedKeys: episodesWithUserData)
+      podcast.podcastInfo = merged
       podcast.lastUpdated = Date()
 
       // Update release schedule prediction from the latest episode pub dates

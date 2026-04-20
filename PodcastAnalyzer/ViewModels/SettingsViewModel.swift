@@ -96,10 +96,13 @@ final class SettingsViewModel {
     UserDefaults.standard.set(engine.rawValue, forKey: Keys.transcriptEngine)
     logger.info("Transcript engine set to \(engine.rawValue)")
     // Refresh Apple Speech model status whenever switching back
-    if engine == .appleSpeech {
+    switch engine {
+    case .appleSpeech:
       checkTranscriptModelStatus()
-    } else {
+    case .whisper:
       WhisperModelManager.shared.checkAllModelStatuses()
+    case .yapServer:
+      logger.info("Yap Server engine selected — no model download required")
     }
   }
 
@@ -254,6 +257,7 @@ final class SettingsViewModel {
     switch engine {
     case .appleSpeech: return appleSpeechLocales
     case .whisper: return availableTranscriptLocales
+    case .yapServer: return appleSpeechLocales
     }
   }
 

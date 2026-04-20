@@ -40,6 +40,38 @@ public struct PodcastInfo: Sendable, Identifiable {
   }
 }
 
+// MARK: - Episode Merge
+
+extension PodcastInfo {
+  /// Returns a new PodcastInfo whose episode list is the union of:
+  ///   1. All episodes from `updated` (current RSS snapshot, de-duplicated)
+  ///   2. Episodes from `self` that are no longer in `updated` **but** whose
+  ///      `EpisodeDownloadModel` key (`"\(podcastTitle)\u{1F}\(episodeTitle)"`) is
+  ///      in `preservedKeys` — meaning the user downloaded, starred, or played them.
+  ///
+  /// This prevents episodes from silently vanishing when a feed trims its backlog.
+  func merging(updatedFrom updated: PodcastInfo, preservedKeys: Set<String>) -> PodcastInfo {
+    let newRSSKeys = Set(updated.episodes.map { $0.guid ?? $0.audioURL ?? $0.title })
+
+    let orphanedUserEpisodes = episodes.filter { ep in
+      // Skip if the episode is still in the new RSS (it's already included).
+      guard !newRSSKeys.contains(ep.guid ?? ep.audioURL ?? ep.title) else { return false }
+      // Keep only if the user has touched it (download, star, playback).
+      let modelKey = "\(updated.title)\u{1F}\(ep.title)"
+      return preservedKeys.contains(modelKey)
+    }
+
+    return PodcastInfo(
+      title: updated.title,
+      description: updated.podcastInfoDescription,
+      episodes: updated.episodes + orphanedUserEpisodes,
+      rssUrl: updated.rssUrl,
+      imageURL: updated.imageURL,
+      language: updated.language
+    )
+  }
+}
+
 // Explicit Codable conformance to avoid MainActor isolation issues with SwiftData
 extension PodcastInfo: Codable {
   private enum CodingKeys: String, CodingKey {

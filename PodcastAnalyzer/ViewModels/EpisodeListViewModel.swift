@@ -418,7 +418,18 @@ final class EpisodeListViewModel {
     do {
       let updatedPodcast = try await rssService.fetchPodcast(
         from: podcastModel.podcastInfo.rssUrl)
-      podcastModel.podcastInfo = updatedPodcast
+      // Merge instead of replace: episodes with user data that aged off the RSS feed
+      // (downloaded, starred, played, or in-progress) are preserved.
+      let preservedKeys: Set<String> = Set(
+        episodeModels
+          .filter { _, model in
+            model.localAudioPath != nil || model.isStarred || model.isCompleted
+              || model.lastPlaybackPosition > 0 || model.playCount > 0
+          }
+          .map { key, _ in key }
+      )
+      podcastModel.podcastInfo = podcastModel.podcastInfo.merging(
+        updatedFrom: updatedPodcast, preservedKeys: preservedKeys)
       recomputeFilteredEpisodes()
       try? modelContext?.save()
       lastRefreshDate = Date()

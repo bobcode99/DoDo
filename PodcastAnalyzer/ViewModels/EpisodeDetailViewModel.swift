@@ -1235,27 +1235,37 @@ final class EpisodeDetailViewModel {
   }
 
   func generateTranscript() {
-    guard let audioPath = localAudioPath else {
+    let effectiveEngine = selectedTranscriptEngine ?? TranscriptEngine(
+      rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
+    ) ?? .appleSpeech
+
+    // Non-yap engines require a downloaded file
+    if effectiveEngine != .yapServer, localAudioPath == nil {
       transcriptState = .error(
         "No local audio file available. Please download the episode first.")
       return
     }
 
-    // Preserve engine-specific defaults when no explicit language override is selected.
-    let effectiveEngine = selectedTranscriptEngine ?? TranscriptEngine(
-      rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
-    ) ?? .appleSpeech
+    // Yap also needs either a local file or a remote URL
+    if effectiveEngine == .yapServer, localAudioPath == nil, (episode.audioURL ?? "").isEmpty {
+      transcriptState = .error("No audio URL available for this episode.")
+      return
+    }
+
     let language: String? = switch effectiveEngine {
     case .whisper:
       selectedTranscriptLanguage.flatMap { $0 == "auto" ? nil : $0 }
     case .appleSpeech:
+      selectedTranscriptLanguage ?? getPodcastLanguage()
+    case .yapServer:
       selectedTranscriptLanguage ?? getPodcastLanguage()
     }
 
     TranscriptManager.shared.queueTranscript(
       episodeTitle: episode.title,
       podcastTitle: podcastTitle,
-      audioPath: audioPath,
+      audioPath: localAudioPath ?? "",
+      audioRemoteURL: episode.audioURL,
       language: language,
       engine: selectedTranscriptEngine
     )

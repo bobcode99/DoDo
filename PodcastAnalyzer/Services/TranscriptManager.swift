@@ -25,6 +25,7 @@ struct TranscriptJob: Identifiable {
   let episodeTitle: String
   let podcastTitle: String
   let audioPath: String
+  let audioRemoteURL: String?  // Remote RSS audio URL — used by yap when episode not downloaded
   let language: String?
   let engine: TranscriptEngine?  // nil = use global Settings default
   var status: TranscriptJobStatus = .queued
@@ -76,7 +77,8 @@ class TranscriptManager {
 
   /// Queues a transcript generation job
   func queueTranscript(
-    episodeTitle: String, podcastTitle: String, audioPath: String, language: String?,
+    episodeTitle: String, podcastTitle: String, audioPath: String,
+    audioRemoteURL: String? = nil, language: String?,
     engine: TranscriptEngine? = nil
   ) {
     let jobId = makeJobId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
@@ -97,6 +99,7 @@ class TranscriptManager {
       episodeTitle: episodeTitle,
       podcastTitle: podcastTitle,
       audioPath: audioPath,
+      audioRemoteURL: audioRemoteURL,
       language: language,
       engine: engine
     )
@@ -191,7 +194,10 @@ class TranscriptManager {
 
     do {
       let audioURL = URL(fileURLWithPath: job.audioPath)
-      guard FileManager.default.fileExists(atPath: job.audioPath) else {
+      let fileExists = FileManager.default.fileExists(atPath: job.audioPath)
+
+      // Non-yap engines always need the local file
+      if engine != .yapServer && !fileExists {
         throw NSError(
           domain: "TranscriptManager", code: 3,
           userInfo: [NSLocalizedDescriptionKey: "Audio file not found: \(job.audioPath)"]
@@ -346,6 +352,48 @@ class TranscriptManager {
             userInfo: [NSLocalizedDescriptionKey: "Whisper transcription produced no content"]
           )
         }
+
+        _ = try await fileStorage.saveCaptionFile(
+          content: srtContent,
+          episodeTitle: job.episodeTitle,
+          podcastTitle: job.podcastTitle
+        )
+
+      // MARK: Yap Server path
+      case .yapServer:
+        // No model download needed — jump straight to transcribing
+        activeJobs[job.id]?.status = .transcribing(progress: 0)
+
+        let serverURL = await MainActor.run { YapServerSettings.shared.serverURL }
+        let apiKey = await MainActor.run { YapServerSettings.shared.apiKey }
+        let key = apiKey.isEmpty ? nil : apiKey
+
+        let yapService = YapTranscriptService()
+        let srtContent: String
+        if fileExists {
+          // Episode is downloaded — stream the local file
+          srtContent = try await yapService.transcribeToSRT(
+            audioURL: audioURL,
+            locale: job.language,
+            serverURL: serverURL,
+            apiKey: key
+          )
+        } else if let remoteURLString = job.audioRemoteURL, !remoteURLString.isEmpty {
+          // Episode not downloaded — pass the RSS audio URL to yap directly
+          srtContent = try await yapService.transcribeRemoteURL(
+            remoteURL: remoteURLString,
+            locale: job.language,
+            serverURL: serverURL,
+            apiKey: key
+          )
+        } else {
+          throw NSError(
+            domain: "TranscriptManager", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "No local file or remote URL available for yap transcription"]
+          )
+        }
+
+        activeJobs[job.id]?.status = .transcribing(progress: 1.0)
 
         _ = try await fileStorage.saveCaptionFile(
           content: srtContent,

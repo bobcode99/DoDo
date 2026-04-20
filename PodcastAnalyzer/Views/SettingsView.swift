@@ -363,7 +363,7 @@ struct SettingsView: View {
 
           // Language picker (applies to both engines)
           Picker(selection: $viewModel.selectedTranscriptLocale) {
-            ForEach(SettingsViewModel.availableTranscriptLocales) { locale in
+            ForEach(SettingsViewModel.locales(for: viewModel.selectedTranscriptEngine)) { locale in
               Text(locale.name).tag(locale.id)
             }
           } label: {
@@ -412,15 +412,24 @@ struct SettingsView: View {
         } header: {
           Text("Transcript")
         } footer: {
-          Text(viewModel.selectedTranscriptEngine == .whisper
-            ? "Whisper models are downloaded once and stored on device. Larger models produce more accurate transcripts."
-            : "Download the Apple Speech model for your preferred language. Each podcast uses its own language from the RSS feed."
-          )
+          switch viewModel.selectedTranscriptEngine {
+          case .whisper:
+            Text("Whisper models are downloaded once and stored on device. Larger models produce more accurate transcripts.")
+          case .yapServer:
+            Text("Yap Server uses a local HTTP service wrapping Apple Speech. No model download required.")
+          case .appleSpeech:
+            Text("Download the Apple Speech model for your preferred language. Each podcast uses its own language from the RSS feed.")
+          }
         }
 
         // MARK: - Whisper Models Section (only shown when Whisper engine selected)
         if viewModel.selectedTranscriptEngine == .whisper {
           WhisperModelsSection()
+        }
+
+        // MARK: - Yap Server Section (only shown when Yap Server engine selected)
+        if viewModel.selectedTranscriptEngine == .yapServer {
+          YapServerSection()
         }
 
         // MARK: - AI Settings Section
