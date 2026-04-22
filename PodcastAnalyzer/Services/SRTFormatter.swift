@@ -8,7 +8,7 @@
 import Foundation
 import Speech
 
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 nonisolated enum SRTFormatter {
 
   /// Formats a TimeInterval into SRT time format (HH:MM:SS,mmm)

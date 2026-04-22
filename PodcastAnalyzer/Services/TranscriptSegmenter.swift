@@ -10,7 +10,7 @@ import NaturalLanguage
 import Speech
 
 /// Word-level timing data for a single word
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 public nonisolated struct WordTimingData: Codable, Sendable {
   public let word: String
   public let startTime: Double
@@ -18,7 +18,7 @@ public nonisolated struct WordTimingData: Codable, Sendable {
 }
 
 /// Segment data with word-level timing information
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 public nonisolated struct SegmentData: Codable, Sendable {
   public let id: Int
   public let startTime: Double
@@ -28,12 +28,12 @@ public nonisolated struct SegmentData: Codable, Sendable {
 }
 
 /// Transcript data containing segments with word timings
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 public nonisolated struct TranscriptData: Codable, Sendable {
   public let segments: [SegmentData]
 }
 
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 nonisolated struct TranscriptSegmenter {
   let isCJK: Bool
   let maxLength: Int

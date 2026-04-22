@@ -10,7 +10,7 @@ import Foundation
 import Speech
 import Synchronization
 
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 nonisolated enum ChunkedTranscriptionService {
 
   /// Represents an audio chunk for parallel transcription
@@ -257,7 +257,7 @@ nonisolated enum ChunkedTranscriptionService {
 /// Thread-safe progress tracker for parallel chunk processing.
 /// Uses Mutex instead of actor to allow synchronous access from onProgress callbacks,
 /// eliminating the need for unstructured Task {} per progress update.
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 nonisolated final class ChunkProgressTracker: Sendable {
   private let totalChunks: Int
   private let state: Mutex<[Int: Double]>
