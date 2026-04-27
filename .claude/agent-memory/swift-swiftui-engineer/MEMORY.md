@@ -1,0 +1,2 @@
+- [Yap Server transcript engine](project_yap_server.md) — YapTranscriptService + YapServerSettings + .yapServer TranscriptEngine case; exhaustive switches to update when adding future engine cases
+- [Auto-download coordinator architecture](project_auto_download_coordinator.md) — AutoDownloadCoordinator actor, three-state AutoDownloadSetting, EpisodeFilterEvaluator, PowerMonitor; DownloadManager.modelContainer is now internal

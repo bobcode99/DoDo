@@ -121,14 +121,6 @@ struct TranscriptToolbar: View {
                             .disabled(mode.requiresTranslation && !viewModel.hasExistingTranslation)
                         }
                         Divider()
-                        Toggle(isOn: Binding(
-                            get: { subtitleSettings.sentenceHighlightEnabled && !viewModel.hasExistingTranslation },
-                            set: { subtitleSettings.sentenceHighlightEnabled = $0 }
-                        )) {
-                            Label("Sentence Highlight", systemImage: "text.line.first.and.arrowtriangle.forward")
-                        }
-                        .disabled(viewModel.hasExistingTranslation)
-                        Divider()
                         Button {
                             onShowSubtitleSettings()
                         } label: {

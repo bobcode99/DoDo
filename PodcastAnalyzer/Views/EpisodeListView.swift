@@ -61,6 +61,7 @@ struct EpisodeListView: View {
   @State private var isLoadingRSS = false
   @State private var loadError: String?
   @State private var podcastModel: PodcastInfoModel?
+  @State private var showEpisodeFilterSheet = false
 
   private let applePodcastService = ApplePodcastService()
 
@@ -416,6 +417,47 @@ struct EpisodeListView: View {
               systemImage: "arrow.clockwise"
             )
           }
+
+          if podcastModel != nil && isSubscribed {
+            Divider()
+
+            Menu {
+              ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
+                Button {
+                  podcastModel?.autoDownloadSetting = setting.rawValue
+                  try? modelContext.save()
+                } label: {
+                  if podcastModel?.autoDownloadSetting == setting.rawValue {
+                    Label(setting.displayName, systemImage: "checkmark")
+                  } else {
+                    Text(setting.displayName)
+                  }
+                }
+              }
+            } label: {
+              let current = AutoDownloadSetting(rawValue: podcastModel?.autoDownloadSetting ?? "") ?? .inheritGlobal
+              Label("Auto Download: \(current.displayName)", systemImage: "arrow.down.circle")
+            }
+
+            if !YapServerSettings.shared.serverURL.isEmpty {
+              Button {
+                podcastModel?.autoTranscribeWithYap.toggle()
+                try? modelContext.save()
+              } label: {
+                if podcastModel?.autoTranscribeWithYap == true {
+                  Label("Auto Transcript (Yap): On", systemImage: "waveform.badge.plus")
+                } else {
+                  Label("Auto Transcript (Yap): Off", systemImage: "waveform")
+                }
+              }
+            }
+
+            Button {
+              showEpisodeFilterSheet = true
+            } label: {
+              Label("Episode Filter\u{2026}", systemImage: "line.3.horizontal.decrease.circle")
+            }
+          }
         } label: {
           Image(systemName: "ellipsis.circle")
         }
@@ -463,6 +505,11 @@ struct EpisodeListView: View {
       Text(
         "Are you sure you want to unsubscribe from this podcast? Downloaded episodes will remain available."
       )
+    }
+    .sheet(isPresented: $showEpisodeFilterSheet) {
+      if let model = podcastModel {
+        PodcastEpisodeFilterView(podcast: model, modelContext: modelContext)
+      }
     }
   }
 

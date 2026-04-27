@@ -153,10 +153,10 @@ final class EpisodeDetailViewModel {
   @ObservationIgnored
   private let fileStorage = FileStorageManager.shared
 
-  // Parsed transcript segments for live captions
+  // Parsed transcript segments — always the raw SRT entries (one segment per
+  // SRT cue). Sentence-block grouping happens once in `regroupSentences()` and
+  // is consumed via `groupedSentences` / `transcriptSentences`.
   var transcriptSegments: [TranscriptSegment] = []
-  // Raw (unmerged) segments for sentence highlight mode's per-segment granularity
-  var rawTranscriptSegments: [TranscriptSegment] = []
   var transcriptSearchQuery: String = ""
 
   // Sentence grouping (precomputed, not per-render)
@@ -1288,7 +1288,6 @@ final class EpisodeDetailViewModel {
   func regenerateTranscript() {
     // Clear current transcript
     transcriptSegments = []
-    rawTranscriptSegments = []
     groupedSentences = []
     transcriptText = ""
 
@@ -1461,7 +1460,6 @@ final class EpisodeDetailViewModel {
   func parseTranscriptSegments() {
     guard !transcriptText.isEmpty else {
       transcriptSegments = []
-      rawTranscriptSegments = []
       return
     }
 
@@ -1561,22 +1559,11 @@ final class EpisodeDetailViewModel {
         ))
     }
 
-    // Always store raw segments for sentence highlight mode
-    rawTranscriptSegments = segments
-
-    // Apply sentence grouping if enabled
-    if subtitleSettings.groupSegmentsIntoSentences {
-      let grouped = groupSegmentsIntoSentences(segments)
-      transcriptSegments = grouped
-      logger.info(
-        "Grouped \(segments.count) segments into \(grouped.count) sentences"
-      )
-    } else {
-      transcriptSegments = segments
-      logger.info(
-        "Successfully parsed \(segments.count) transcript segments from \(matches.count) regex matches"
-      )
-    }
+    // Store raw SRT entries — sentence-block grouping is performed once below.
+    transcriptSegments = segments
+    logger.info(
+      "Parsed \(segments.count) transcript segments from \(matches.count) regex matches"
+    )
 
     // Precompute sentence grouping for transcript views
     regroupSentences()
@@ -1588,82 +1575,6 @@ final class EpisodeDetailViewModel {
         logger.info("Second segment: \(segments[1].text.prefix(50))...")
       }
     }
-  }
-
-  // MARK: - Sentence Grouping
-
-  /// Groups transcript segments into complete sentences by merging segments that don't end with sentence-ending punctuation
-  private func groupSegmentsIntoSentences(_ segments: [TranscriptSegment]) -> [TranscriptSegment] {
-    let sentenceEndings = CharacterSet(charactersIn: ".!?。！？")
-    var grouped: [TranscriptSegment] = []
-    var currentGroup: [TranscriptSegment] = []
-
-    let gapThreshold: TimeInterval = 2.0  // Force sentence break on gaps > 2s
-
-    for segment in segments {
-      let trimmedText = segment.text.trimmingCharacters(in: .whitespaces)
-
-      // Force a sentence break when there's a large time gap between segments.
-      // This prevents merging across music interludes or long pauses.
-      if let lastInGroup = currentGroup.last,
-         segment.startTime - lastInGroup.endTime > gapThreshold {
-        if let merged = mergeSegments(currentGroup) {
-          grouped.append(merged)
-        }
-        currentGroup = []
-      }
-
-      currentGroup.append(segment)
-
-      // Check if this segment ends with sentence-ending punctuation
-      if let lastChar = trimmedText.unicodeScalars.last,
-         sentenceEndings.contains(lastChar) {
-        // End of sentence - merge the group
-        if let merged = mergeSegments(currentGroup) {
-          grouped.append(merged)
-        }
-        currentGroup = []
-      }
-    }
-
-    // Handle any remaining segments that didn't end with punctuation
-    if !currentGroup.isEmpty, let merged = mergeSegments(currentGroup) {
-      grouped.append(merged)
-    }
-
-    return grouped
-  }
-
-  /// Merges multiple transcript segments into a single segment
-  private func mergeSegments(_ segments: [TranscriptSegment]) -> TranscriptSegment? {
-    guard let first = segments.first, let last = segments.last else { return nil }
-
-    // Combine text with CJK-aware spacing
-    let texts = segments.map { $0.text.trimmingCharacters(in: .whitespaces) }
-    let combinedText = CJKTextUtils.joinTexts(texts)
-
-    // Combine translated text if all segments have translations
-    let translatedText: String?
-    if segments.allSatisfy({ $0.translatedText != nil }) {
-      let translations = segments.compactMap { $0.translatedText?.trimmingCharacters(in: .whitespaces) }
-      translatedText = CJKTextUtils.joinTexts(translations)
-    } else {
-      translatedText = nil
-    }
-
-    // Combine word timings from all segments (if any have them)
-    let combinedWordTimings: [WordTiming]?
-    let allTimings = segments.compactMap { $0.wordTimings }.flatMap { $0 }
-    combinedWordTimings = allTimings.isEmpty ? nil : allTimings
-
-    return TranscriptSegment(
-      id: first.id,
-      startTime: first.startTime,
-      endTime: last.endTime,
-      text: combinedText,
-      translatedText: translatedText,
-      wordTimings: combinedWordTimings
-    )
   }
 
   /// Parses SRT time format (HH:MM:SS,mmm) to TimeInterval
@@ -1775,10 +1686,11 @@ final class EpisodeDetailViewModel {
   /// Seeks to the start of a transcript segment and starts playback if needed.
   func seekToSegment(_ segment: TranscriptSegment) {
     let targetTime = segment.startTime
-    // If not playing this episode, start playback first
+    logger.info("seekToSegment id=\(segment.id) target=\(String(format: "%.3f", targetTime))s")
+
     if !isPlayingThisEpisode {
       playAction()
-      // Give player time to initialize, then seek
+      // Give the player time to initialize before seeking.
       seekTask?.cancel()
       seekTask = Task { [weak self] in
         try? await Task.sleep(for: .seconds(0.3))
@@ -1801,30 +1713,13 @@ final class EpisodeDetailViewModel {
     }
   }
 
-  /// Sentences to display based on display mode and search state.
-  /// Centralizes the selection logic formerly in EpisodeDetailView.
+  /// Sentences to display: search-filtered when a query is active, otherwise
+  /// the precomputed `groupedSentences`.
   var transcriptSentences: [TranscriptSentence] {
-    let settings = SubtitleSettingsManager.shared
-    if !transcriptSearchQuery.isEmpty {
-      return filteredGroupedSentences
-    } else if settings.sentenceHighlightEnabled && !hasExistingTranslation {
-      return paragraphGroupedSentences
-    } else {
-      return groupedSentences
-    }
+    transcriptSearchQuery.isEmpty ? groupedSentences : filteredGroupedSentences
   }
 
-  /// Paragraph-grouped sentences for sentence highlight mode (larger grouping: up to 8 segments)
-  /// Uses raw (unmerged) segments for per-segment highlight granularity.
-  /// Falls back to merged segments when translations exist (translations are on merged segments).
-  var paragraphGroupedSentences: [TranscriptSentence] {
-    let hasTranslations = transcriptSegments.contains { $0.translatedText != nil }
-    let segments = (!rawTranscriptSegments.isEmpty && !hasTranslations)
-      ? rawTranscriptSegments : transcriptSegments
-    return TranscriptGrouping.groupIntoParagraphSentences(segments)
-  }
-
-  /// Regroup filtered segments into sentences (for search-filtered view)
+  /// Search-filtered sentences (regrouped from the filtered raw segments).
   var filteredGroupedSentences: [TranscriptSentence] {
     guard !transcriptSearchQuery.isEmpty else { return groupedSentences }
     return TranscriptGrouping.groupIntoSentences(filteredTranscriptSegments)
@@ -2401,7 +2296,6 @@ final class EpisodeDetailViewModel {
     // Release large transcript data
     transcriptText = ""
     transcriptSegments = []
-    rawTranscriptSegments = []
     groupedSentences = []
     wordTimingsData = nil
   }

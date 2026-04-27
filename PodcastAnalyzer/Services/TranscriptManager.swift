@@ -68,6 +68,12 @@ class TranscriptManager {
   private var runningJobIds: Set<String> = []
   private var processingTasks: [String: Task<Void, Never>] = [:]
 
+  // Session-scoped failure counter for yap auto-transcript.
+  // After yapFailureLimit consecutive failures for a podcast, auto-queuing is paused
+  // for that podcast until the next app launch (manual queue still works).
+  private var yapConsecutiveFailures: [String: Int] = [:]
+  private let yapFailureLimit = 3
+
   private init() {}
 
   // No deinit needed — TranscriptManager is a singleton (static let shared)
@@ -369,6 +375,17 @@ class TranscriptManager {
         let key = apiKey.isEmpty ? nil : apiKey
 
         let yapService = YapTranscriptService()
+        let jobID = job.id
+
+        // Fire-and-forget progress updates back onto the TranscriptManager actor.
+        // Polls arrive every 1–5 s so no throttling is needed.
+        // TranscriptManager is a singleton — no weak reference needed.
+        let onProgress: @Sendable (Double) -> Void = { [self] progress in
+          Task { [self] in
+            await self.setYapProgress(jobID: jobID, progress: progress)
+          }
+        }
+
         let srtContent: String
         if fileExists {
           // Episode is downloaded — stream the local file
@@ -376,7 +393,8 @@ class TranscriptManager {
             audioURL: audioURL,
             locale: job.language,
             serverURL: serverURL,
-            apiKey: key
+            apiKey: key,
+            onProgress: onProgress
           )
         } else if let remoteURLString = job.audioRemoteURL, !remoteURLString.isEmpty {
           // Episode not downloaded — pass the RSS audio URL to yap directly
@@ -384,7 +402,8 @@ class TranscriptManager {
             remoteURL: remoteURLString,
             locale: job.language,
             serverURL: serverURL,
-            apiKey: key
+            apiKey: key,
+            onProgress: onProgress
           )
         } else {
           throw NSError(
@@ -394,6 +413,7 @@ class TranscriptManager {
         }
 
         activeJobs[job.id]?.status = .transcribing(progress: 1.0)
+        yapConsecutiveFailures[job.podcastTitle] = 0
 
         _ = try await fileStorage.saveCaptionFile(
           content: srtContent,
@@ -415,6 +435,13 @@ class TranscriptManager {
     } catch {
       activeJobs[job.id]?.status = .failed(error: error.localizedDescription)
       logger.error("Transcript failed for \(job.episodeTitle): \(error.localizedDescription)")
+      // Track consecutive yap failures to gate auto-queuing.
+      let engine = job.engine ?? TranscriptEngine(
+        rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
+      ) ?? .appleSpeech
+      if engine == .yapServer {
+        yapConsecutiveFailures[job.podcastTitle, default: 0] += 1
+      }
     }
 
     runningJobIds.remove(job.id)
@@ -423,5 +450,20 @@ class TranscriptManager {
       isProcessing = false
     }
     startProcessingIfNeeded()
+  }
+
+  // MARK: - Yap auto-transcript helpers
+
+  /// Returns `true` when the podcast has not hit the consecutive-failure cap for
+  /// automatic yap transcript queuing. Manual queuing is always allowed.
+  func canAutoQueueYap(podcastTitle: String) -> Bool {
+    (yapConsecutiveFailures[podcastTitle] ?? 0) < yapFailureLimit
+  }
+
+  private func setYapProgress(jobID: String, progress: Double) {
+    // Monotonic guard: never let a late-arriving callback regress progress.
+    guard case .transcribing(let current) = activeJobs[jobID]?.status,
+          progress > current else { return }
+    activeJobs[jobID]?.status = .transcribing(progress: progress)
   }
 }

@@ -45,20 +45,6 @@ struct SubtitleSettingsSheet: View {
           }
         }
 
-        // Sentence Highlight Section
-        Section {
-          Toggle(isOn: Binding(
-            get: { settings.sentenceHighlightEnabled },
-            set: { settings.sentenceHighlightEnabled = $0 }
-          )) {
-            Label("Sentence Highlight", systemImage: "text.line.first.and.arrowtriangle.forward")
-          }
-        } header: {
-          Text("Playback Highlight")
-        } footer: {
-          Text("Highlight the currently playing segment within each sentence during playback")
-        }
-
         // Info Section
         Section {
           VStack(alignment: .leading, spacing: 8) {

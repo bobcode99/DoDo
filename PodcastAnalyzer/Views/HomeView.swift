@@ -96,6 +96,26 @@ struct HomeView: View {
       }
       .padding(.vertical)
     }
+    .navigationDestination(for: UpNextListRoute.self) { route in
+      UpNextListView(
+        episodes: route.episodes,
+        onToggleStar: { viewModel.toggleStar(for: $0) },
+        onTogglePlayed: { viewModel.togglePlayed(for: $0) },
+        onDownload: {
+          DownloadManager.shared.downloadEpisode(
+            episode: $0.episodeInfo,
+            podcastTitle: $0.podcastTitle,
+            language: $0.language
+          )
+        },
+        onDeleteDownload: {
+          DownloadManager.shared.deleteDownload(
+            episodeTitle: $0.episodeInfo.title,
+            podcastTitle: $0.podcastTitle
+          )
+        }
+      )
+    }
     .navigationDestination(for: AppleRSSPodcast.self) { podcast in
       EpisodeListView(
         podcastName: podcast.name,
@@ -224,24 +244,7 @@ struct HomeView: View {
         Spacer()
 
         if !viewModel.upNextEpisodes.isEmpty {
-          NavigationLink(destination: UpNextListView(
-            episodes: viewModel.upNextEpisodes,
-            onToggleStar: { viewModel.toggleStar(for: $0) },
-            onTogglePlayed: { viewModel.togglePlayed(for: $0) },
-            onDownload: {
-              DownloadManager.shared.downloadEpisode(
-                episode: $0.episodeInfo,
-                podcastTitle: $0.podcastTitle,
-                language: $0.language
-              )
-            },
-            onDeleteDownload: {
-              DownloadManager.shared.deleteDownload(
-                episodeTitle: $0.episodeInfo.title,
-                podcastTitle: $0.podcastTitle
-              )
-            }
-          )) {
+          NavigationLink(value: UpNextListRoute(episodes: viewModel.upNextEpisodes)) {
             Text("See All")
               .font(.subheadline)
               .foregroundStyle(.blue)
@@ -292,7 +295,7 @@ struct HomeView: View {
           .padding(.horizontal)
         }
         .scrollIndicators(.hidden)
-        .animation(.default, value: viewModel.scoredUpNextEpisodes.map(\.id))
+        .animation(.default, value: viewModel.scoredUpNextIDs)
       }
     }
   }

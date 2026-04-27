@@ -16,6 +16,18 @@ struct SettingsView: View {
   @State private var showOPMLImporter = false
   @State private var opmlImportMessage: String?
 
+  @AppStorage("allowCellularAutoDownload") private var allowCellularAutoDownload = false
+  @AppStorage("allowAutoDownloadOnBattery") private var allowAutoDownloadOnBattery = false
+  @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
+
+  private let cacheLimitOptions: [(label: String, value: Int)] = [
+    ("Unlimited", 0),
+    ("5 episodes", 5),
+    ("10 episodes", 10),
+    ("25 episodes", 25),
+    ("50 episodes", 50)
+  ]
+
   private let playbackSpeeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
   private let skipIntervalOptions: [Int] = [5, 10, 15, 20, 30, 45, 60]
 
@@ -103,6 +115,54 @@ struct SettingsView: View {
           } else {
             Text("Automatically check for new episodes every 4 hours")
           }
+        }
+
+        // MARK: - Auto-Download Section
+        Section {
+          Toggle(isOn: $allowCellularAutoDownload) {
+            HStack {
+              Image(systemName: "antenna.radiowaves.left.and.right")
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Download on Cellular")
+                Text("Allow auto-downloads when not on Wi-Fi")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+
+          Toggle(isOn: $allowAutoDownloadOnBattery) {
+            HStack {
+              Image(systemName: "battery.50")
+                .foregroundStyle(.green)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Download on Battery")
+                Text("Allow auto-downloads when not charging")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+
+          Picker(selection: $episodeCacheLimit) {
+            ForEach(cacheLimitOptions, id: \.value) { option in
+              Text(option.label).tag(option.value)
+            }
+          } label: {
+            HStack {
+              Image(systemName: "archivebox")
+                .foregroundStyle(.orange)
+                .frame(width: 24)
+              Text("Episode Cache Limit")
+            }
+          }
+        } header: {
+          Text("Auto-Download")
+        } footer: {
+          Text("Per-podcast settings (Always / Never / Use Global) are in each podcast's context menu. Cache limit caps total auto-downloaded episodes; 0 = unlimited.")
         }
 
         // MARK: - Appearance Section

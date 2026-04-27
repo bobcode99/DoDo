@@ -167,18 +167,8 @@ final class SubtitleSettingsManager {
     didSet { saveSettings() }
   }
 
-  /// Group transcript segments into complete sentences (merge segments that don't end with sentence-ending punctuation)
-  var groupSegmentsIntoSentences: Bool = true {
-    didSet { saveSettings() }
-  }
-
   /// Automatically generate transcripts for downloaded episodes
   var autoGenerateTranscripts: Bool = false {
-    didSet { saveSettings() }
-  }
-
-  /// Per-segment playback highlighting (works with all display modes)
-  var sentenceHighlightEnabled: Bool = true {
     didSet { saveSettings() }
   }
 
@@ -189,9 +179,7 @@ final class SubtitleSettingsManager {
     static let targetLanguage = "subtitle_target_language"
     static let autoTranslate = "subtitle_auto_translate"
     static let autoDownloadTranscripts = "subtitle_auto_download_transcripts"
-    static let groupSegmentsIntoSentences = "subtitle_group_segments_into_sentences"
     static let autoGenerateTranscripts = "subtitle_auto_generate_transcripts"
-    static let sentenceHighlightEnabled = "subtitle_sentence_highlight_enabled"
   }
 
   // MARK: - Initialization
@@ -224,22 +212,8 @@ final class SubtitleSettingsManager {
       autoDownloadTranscripts = defaults.bool(forKey: Keys.autoDownloadTranscripts)
     }
 
-    // Default to true for sentence grouping if not set
-    if defaults.object(forKey: Keys.groupSegmentsIntoSentences) == nil {
-      groupSegmentsIntoSentences = true
-    } else {
-      groupSegmentsIntoSentences = defaults.bool(forKey: Keys.groupSegmentsIntoSentences)
-    }
-
     if defaults.object(forKey: Keys.autoGenerateTranscripts) != nil {
       autoGenerateTranscripts = defaults.bool(forKey: Keys.autoGenerateTranscripts)
-    }
-
-    // Default to true for sentence highlight if not set
-    if defaults.object(forKey: Keys.sentenceHighlightEnabled) == nil {
-      sentenceHighlightEnabled = true
-    } else {
-      sentenceHighlightEnabled = defaults.bool(forKey: Keys.sentenceHighlightEnabled)
     }
   }
 
@@ -249,9 +223,7 @@ final class SubtitleSettingsManager {
     defaults.set(targetLanguage.rawValue, forKey: Keys.targetLanguage)
     defaults.set(autoTranslateOnLoad, forKey: Keys.autoTranslate)
     defaults.set(autoDownloadTranscripts, forKey: Keys.autoDownloadTranscripts)
-    defaults.set(groupSegmentsIntoSentences, forKey: Keys.groupSegmentsIntoSentences)
     defaults.set(autoGenerateTranscripts, forKey: Keys.autoGenerateTranscripts)
-    defaults.set(sentenceHighlightEnabled, forKey: Keys.sentenceHighlightEnabled)
   }
 
   // MARK: - Translation Availability

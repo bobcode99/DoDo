@@ -37,11 +37,17 @@ actor YapTranscriptService {
     ///
     /// Uses `URLSession.shared.upload(for:fromFile:)` to stream the audio without
     /// loading it into memory.
+    ///
+    /// - Parameter onProgress: Called with a 0.0–1.0 fraction each time the server
+    ///   reports a `running` status. The closure is invoked synchronously on the
+    ///   YapTranscriptService actor — use `Task { await ... }` inside it to hop to
+    ///   another actor if needed.
     func transcribeToSRT(
         audioURL: URL,
         locale: String?,
         serverURL: String,
-        apiKey: String?
+        apiKey: String?,
+        onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
         guard let base = URL(string: serverURL) else {
             throw YapError.invalidServerURL
@@ -56,16 +62,20 @@ actor YapTranscriptService {
 
         logger.info("Yap job submitted, id=\(jobID)")
 
-        return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey)
+        return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
     }
 
     /// Submits a remote audio URL to the yap server (JSON body mode).
     /// Use this when the episode hasn't been downloaded locally.
+    ///
+    /// - Parameter onProgress: Called with a 0.0–1.0 fraction each time the server
+    ///   reports a `running` status. See ``transcribeToSRT`` for threading notes.
     func transcribeRemoteURL(
         remoteURL: String,
         locale: String?,
         serverURL: String,
-        apiKey: String?
+        apiKey: String?,
+        onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
         guard let base = URL(string: serverURL) else {
             throw YapError.invalidServerURL
@@ -77,7 +87,7 @@ actor YapTranscriptService {
             apiKey: apiKey
         )
         logger.info("Yap remote-URL job submitted, id=\(jobID)")
-        return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey)
+        return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
     }
 
     // MARK: - Private helpers
@@ -169,7 +179,8 @@ actor YapTranscriptService {
     private func pollForResult(
         jobID: String,
         baseURL: URL,
-        apiKey: String?
+        apiKey: String?,
+        onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
         let pollURL = baseURL.appending(path: "transcriptions/\(jobID)")
         var delay: Duration = .seconds(1)
@@ -201,6 +212,7 @@ actor YapTranscriptService {
             struct PollResponse: Decodable {
                 let id: String
                 let status: String
+                let progress: Int?   // 0–99 when status == "running"
                 let format: String?
                 let transcript: String?
                 let error: String?
@@ -209,6 +221,11 @@ actor YapTranscriptService {
 
             switch decoded.status {
             case "queued", "running":
+                if decoded.status == "running", let pct = decoded.progress {
+                    // Divide by 100 so the maximum running value is 0.99;
+                    // 1.0 is reserved for the explicit "done" signal in the caller.
+                    onProgress?(Double(pct) / 100.0)
+                }
                 logger.debug("Yap job \(jobID) status=\(decoded.status), retrying…")
                 continue
             case "done":

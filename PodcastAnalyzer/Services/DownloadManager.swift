@@ -15,6 +15,7 @@
 import Foundation
 import Observation
 import OSLog
+import SwiftData
 
 #if DEBUG
 private let signpostLog = OSLog(subsystem: "com.podcast.analyzer", category: "PointsOfInterest")
@@ -273,6 +274,21 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
           manager.inFlightProgress.removeValue(forKey: episodeKey)
           manager.downloadStates[episodeKey] = .downloaded(localPath: destinationURL.path)
 
+          // AntennaPod pattern: disable per-episode auto-download after successful download
+          // so the coordinator never re-downloads the same episode automatically.
+          if let container = DownloadManager.shared.modelContainer {
+            let ctx = ModelContext(container)
+            let descriptor = FetchDescriptor<EpisodeDownloadModel>(
+              predicate: #Predicate { $0.id == episodeKey }
+            )
+            if let epModel = try? ctx.fetch(descriptor).first {
+              epModel.autoDownloadEnabled = false
+              try? ctx.save()
+            }
+            // Remove from coordinator's pending list.
+            Task { await AutoDownloadCoordinator.shared.removePending(podcastTitle: podcastTitle, episodeTitle: episodeTitle) }
+          }
+
           // Post notification
           NotificationCenter.default.post(
             name: .episodeDownloadCompleted,
@@ -284,7 +300,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
             ]
           )
 
-          // Trigger auto-transcript if enabled
+          // Trigger auto-transcript if enabled (global engine)
           if SubtitleSettingsManager.shared.autoGenerateTranscripts {
             TranscriptManager.shared.queueTranscript(
               episodeTitle: episodeTitle,
@@ -292,6 +308,30 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
               audioPath: destinationURL.path,
               language: language
             )
+          }
+
+          // Trigger per-podcast Yap auto-transcript if enabled
+          let container = DownloadManager.shared.modelContainer
+          if let container,
+             !ProcessInfo.processInfo.isLowPowerModeEnabled,
+             TranscriptManager.shared.canAutoQueueYap(podcastTitle: podcastTitle) {
+            let ctx = ModelContext(container)
+            let title = podcastTitle
+            let descriptor = FetchDescriptor<PodcastInfoModel>(
+              predicate: #Predicate { $0.title == title && $0.isSubscribed == true }
+            )
+            if let podcast = try? ctx.fetch(descriptor).first,
+               podcast.autoTranscribeWithYap,
+               !TranscriptManager.shared.isGenerating(episodeTitle: episodeTitle, podcastTitle: podcastTitle) {
+              TranscriptManager.shared.queueTranscript(
+                episodeTitle: episodeTitle,
+                podcastTitle: podcastTitle,
+                audioPath: destinationURL.path,
+                audioRemoteURL: nil,
+                language: language,
+                engine: .yapServer
+              )
+            }
           }
         }
 
@@ -407,6 +447,13 @@ final class DownloadManager {
 
   @ObservationIgnored
   private let fileStorage = FileStorageManager.shared
+
+  @ObservationIgnored
+  var modelContainer: ModelContainer?
+
+  func setModelContainer(_ container: ModelContainer) {
+    self.modelContainer = container
+  }
 
   /// Episode keys whose on-disk presence has already been checked.
   /// Prevents `getDownloadState` from repeating 7-extension disk scans on every call.

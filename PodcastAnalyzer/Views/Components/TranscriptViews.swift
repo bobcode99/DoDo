@@ -2,251 +2,132 @@
 //  TranscriptViews.swift
 //  PodcastAnalyzer
 //
-//  Shared transcript display components with sentence-based layout
-//  and segment-level highlighting within sentences.
+//  Sentence-block transcript display with per-segment highlighting.
 //
-//  Architecture:
-//  - Segments are grouped into Sentences (until sentence-ending punctuation)
-//  - Each sentence is displayed as one visual block
-//  - Within a sentence, the currently playing segment is highlighted
-//  - SentenceHighlightState enables efficient SwiftUI diffing
+//  Architecture (single source of truth):
+//  - Raw SRT segments are grouped once by `TranscriptGrouping.groupIntoSentences`
+//    using sentence-ending punctuation, time gaps, and a CJK/Latin soft cap.
+//  - Each sentence keeps the id of its first segment (stable across regroup).
+//  - The view computes the active sentence as `sentences.last { startTime ≤ time }`
+//    (last-started semantics) and the active segment within it the same way.
 //
 
 import SwiftUI
 
-// MARK: - Transcript Sentence Model
+// MARK: - Sentence Model
 
-/// A sentence composed of multiple transcript segments
+/// A sentence-block composed of one or more SRT segments.
 struct TranscriptSentence: Identifiable {
+    /// Stable id = first segment's id. Survives regrouping.
     let id: Int
     let segments: [TranscriptSegment]
 
-    /// Start time of the first segment
-    var startTime: TimeInterval {
-        segments.first?.startTime ?? 0
-    }
+    var startTime: TimeInterval { segments.first?.startTime ?? 0 }
+    var endTime: TimeInterval { segments.last?.endTime ?? 0 }
+    var formattedStartTime: String { segments.first?.formattedStartTime ?? "0:00" }
 
-    /// End time of the last segment
-    var endTime: TimeInterval {
-        segments.last?.endTime ?? 0
-    }
-
-    /// Combined text of all segments with CJK-aware spacing
+    /// Combined original text with CJK-aware spacing.
     var text: String {
-        let texts = segments.map { $0.text.trimmingCharacters(in: .whitespaces) }
-        return CJKTextUtils.joinTexts(texts)
+        CJKTextUtils.joinTexts(segments.map { $0.text.trimmingCharacters(in: .whitespaces) })
     }
 
-    /// Combined translated text (if available)
+    /// Combined translated text. Returns nil unless every segment has a translation.
     var translatedText: String? {
-        let translations = segments.compactMap { $0.translatedText?.trimmingCharacters(in: .whitespaces) }
-        guard translations.count == segments.count else { return nil }
-        return CJKTextUtils.joinTexts(translations)
+        let parts = segments.compactMap { $0.translatedText?.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == segments.count else { return nil }
+        return CJKTextUtils.joinTexts(parts)
     }
 
-    /// Formatted start time string
-    var formattedStartTime: String {
-        segments.first?.formattedStartTime ?? "0:00"
-    }
-
-    /// Check if a given time falls within this sentence.
-    /// Only returns true if time is within an actual segment or a small gap
-    /// (< 2s) between consecutive segments — NOT for large gaps like music interludes.
-    func containsTime(_ time: TimeInterval) -> Bool {
-        // Fast path: outside overall range
-        guard time >= startTime && time <= endTime else { return false }
-
-        // Check if time is within any segment
-        if segments.contains(where: { time >= $0.startTime && time <= $0.endTime }) {
-            return true
-        }
-
-        // Allow small gaps between consecutive segments (natural speech pauses)
-        for i in 0..<(segments.count - 1) {
-            if time > segments[i].endTime && time < segments[i + 1].startTime {
-                let gap = segments[i + 1].startTime - segments[i].endTime
-                return gap <= 2.0
-            }
-        }
-
-        return false
-    }
-
-    /// Find the segment that contains the given time
-    /// Returns nil if time is in a gap between segments
-    func activeSegment(at time: TimeInterval) -> TranscriptSegment? {
-        segments.first { time >= $0.startTime && time <= $0.endTime }
+    /// Index of the active segment at `time` using last-started semantics.
+    /// A segment becomes active at its `startTime` and stays active until the
+    /// next segment's `startTime`. Returns nil if `time < startTime`.
+    func activeSegmentIndex(at time: TimeInterval) -> Int? {
+        segments.indices.last { segments[$0].startTime <= time }
     }
 }
 
-// MARK: - Sentence Highlight State
-
-/// POD enum for efficient SwiftUI diffing — prevents 100-225 unnecessary re-renders per timer tick
-enum SentenceHighlightState: Equatable {
-    case active(activeSegmentIndex: Int)
-    case played
-    case future
-}
-
-// MARK: - Sentence Grouping Utilities
+// MARK: - Sentence Grouping
 
 enum TranscriptGrouping {
-    /// Sentence-ending punctuation marks (English and CJK)
+    /// Sentence terminators (Latin + CJK).
     private static let sentenceEndings: Set<Character> = [".", "!", "?", "\u{3002}", "\u{FF01}", "\u{FF1F}"]
 
-    /// Maximum segments per sentence to handle long unpunctuated streams
-    static let maxSegmentsPerSentence = 4
+    /// Force a sentence break when consecutive segments are separated by more
+    /// than this many seconds (music interludes, long pauses).
+    static let gapThreshold: TimeInterval = 2.0
 
-    /// Check if text ends with a sentence-ending punctuation
-    static func isSentenceEnd(_ text: String) -> Bool {
-        guard let lastChar = text.trimmingCharacters(in: .whitespaces).last else { return false }
-        return sentenceEndings.contains(lastChar)
-    }
+    /// Soft character cap for CJK content. CJK glyphs render wider per character,
+    /// and tighter blocks read better.
+    static let cjkSoftCap = 30
 
-    /// Time gap threshold — force a sentence break when consecutive segments
-    /// are separated by more than this many seconds (e.g. music interludes).
-    private static let gapThreshold: TimeInterval = 2.0
+    /// Soft character cap for Latin content. Roughly one phone-screen line.
+    static let latinSoftCap = 80
 
-    /// Group segments into sentences
-    /// Segments are accumulated until a segment ending with sentence punctuation is found,
-    /// maxSegmentsPerSentence is reached, or a large time gap is detected.
+    /// Group raw SRT segments into sentence blocks.
+    /// Splits at: sentence-ending punctuation, time gap > `gapThreshold`,
+    /// or once the accumulated trimmed character count reaches the soft cap.
     static func groupIntoSentences(_ segments: [TranscriptSegment]) -> [TranscriptSentence] {
         var sentences: [TranscriptSentence] = []
-        var currentGroup: [TranscriptSegment] = []
-        var sentenceId = 0
-
-        for segment in segments {
-            // Force break when there's a large time gap — prevents merging
-            // across music interludes or long pauses.
-            if let lastInGroup = currentGroup.last,
-               segment.startTime - lastInGroup.endTime > gapThreshold {
-                sentences.append(TranscriptSentence(id: sentenceId, segments: currentGroup))
-                sentenceId += 1
-                currentGroup = []
-            }
-
-            currentGroup.append(segment)
-
-            // Check if this segment ends the sentence OR we've reached max segments
-            let shouldEndSentence = isSentenceEnd(segment.text) ||
-                                    currentGroup.count >= maxSegmentsPerSentence
-
-            if shouldEndSentence {
-                sentences.append(TranscriptSentence(id: sentenceId, segments: currentGroup))
-                sentenceId += 1
-                currentGroup = []
-            }
-        }
-
-        // Add any remaining segments as the last sentence
-        if !currentGroup.isEmpty {
-            sentences.append(TranscriptSentence(id: sentenceId, segments: currentGroup))
-        }
-
-        return sentences
-    }
-
-    /// Maximum segments per paragraph sentence (sentence highlight mode)
-    static let maxSegmentsPerParagraphSentence = 8
-
-    /// Character limit fallback for unpunctuated content in paragraph mode
-    static let paragraphCharLimit = 300
-
-    /// Group segments into paragraph-sized sentences for sentence highlight mode.
-    /// More aggressive grouping: up to 8 segments, only splits on sentence-ending punctuation
-    /// or paragraph boundaries (double newline). Falls back at ~300 chars for unpunctuated content.
-    static func groupIntoParagraphSentences(_ segments: [TranscriptSegment]) -> [TranscriptSentence] {
-        var sentences: [TranscriptSentence] = []
-        var currentGroup: [TranscriptSegment] = []
-        var sentenceId = 0
+        var group: [TranscriptSegment] = []
         var charCount = 0
+        var groupIsCJK = false
+
+        func flush() {
+            guard let first = group.first else { return }
+            sentences.append(TranscriptSentence(id: first.id, segments: group))
+            group = []
+            charCount = 0
+            groupIsCJK = false
+        }
 
         for segment in segments {
-            // Force break on large time gaps (music interludes, long pauses)
-            if let lastInGroup = currentGroup.last,
-               segment.startTime - lastInGroup.endTime > gapThreshold {
-                sentences.append(TranscriptSentence(id: sentenceId, segments: currentGroup))
-                sentenceId += 1
-                currentGroup = []
-                charCount = 0
+            if let last = group.last,
+               segment.startTime - last.endTime > gapThreshold {
+                flush()
             }
 
-            currentGroup.append(segment)
-            charCount += segment.text.count
+            let trimmed = segment.text.trimmingCharacters(in: .whitespaces)
+            group.append(segment)
+            charCount += trimmed.count
+            if !groupIsCJK { groupIsCJK = CJKTextUtils.containsCJK(trimmed) }
 
-            // Check for paragraph boundary (double newline in segment text)
-            let hasParagraphBreak = segment.text.contains("\n\n")
+            let cap = groupIsCJK ? cjkSoftCap : latinSoftCap
+            let endsSentence = trimmed.last.map { sentenceEndings.contains($0) } ?? false
+            let hitCap = charCount >= cap
 
-            // Check if segment ends with sentence-ending punctuation
-            let isSentEnd = isSentenceEnd(segment.text)
-
-            // Force break at max segments or character limit (for unpunctuated content)
-            let atMaxSegments = currentGroup.count >= maxSegmentsPerParagraphSentence
-            let atCharLimit = charCount >= paragraphCharLimit
-
-            if isSentEnd || hasParagraphBreak || atMaxSegments || atCharLimit {
-                sentences.append(TranscriptSentence(id: sentenceId, segments: currentGroup))
-                sentenceId += 1
-                currentGroup = []
-                charCount = 0
+            if endsSentence || hitCap {
+                flush()
             }
         }
-
-        if !currentGroup.isEmpty {
-            sentences.append(TranscriptSentence(id: sentenceId, segments: currentGroup))
-        }
-
+        flush()
         return sentences
-    }
-
-    /// Compute highlight state for a sentence given the current playback time
-    static func highlightState(for sentence: TranscriptSentence, currentTime: TimeInterval?) -> SentenceHighlightState {
-        guard let time = currentTime else { return .future }
-
-        if sentence.containsTime(time) {
-            // Find which segment is active
-            if let activeIndex = sentence.segments.firstIndex(where: { time >= $0.startTime && time <= $0.endTime }) {
-                return .active(activeSegmentIndex: activeIndex)
-            }
-            // Time is in a gap between segments within the sentence
-            return .active(activeSegmentIndex: -1)
-        } else if time > sentence.endTime {
-            return .played
-        } else {
-            return .future
-        }
     }
 }
 
 // MARK: - CJK Text Utilities
 
 nonisolated enum CJKTextUtils {
-    /// CJK Unicode ranges
     private static let cjkRanges: [ClosedRange<UInt32>] = [
-        0x4E00...0x9FFF,    // CJK Unified Ideographs
-        0x3400...0x4DBF,    // CJK Unified Ideographs Extension A
-        0x20000...0x2A6DF,  // CJK Unified Ideographs Extension B
-        0x2A700...0x2B73F,  // CJK Unified Ideographs Extension C
-        0x2B740...0x2B81F,  // CJK Unified Ideographs Extension D
-        0x3040...0x309F,    // Hiragana
-        0x30A0...0x30FF,    // Katakana
-        0xAC00...0xD7AF,    // Hangul Syllables
-        0x1100...0x11FF,    // Hangul Jamo
+        0x4E00...0x9FFF,
+        0x3400...0x4DBF,
+        0x20000...0x2A6DF,
+        0x2A700...0x2B73F,
+        0x2B740...0x2B81F,
+        0x3040...0x309F,
+        0x30A0...0x30FF,
+        0xAC00...0xD7AF,
+        0x1100...0x11FF,
     ]
 
-    /// Check if text contains CJK characters
     static func containsCJK(_ text: String) -> Bool {
         for scalar in text.unicodeScalars {
-            for range in cjkRanges {
-                if range.contains(scalar.value) {
-                    return true
-                }
+            for range in cjkRanges where range.contains(scalar.value) {
+                return true
             }
         }
         return false
     }
 
-    /// Tokenize text appropriately for CJK (character-by-character) or non-CJK (word-by-word)
     static func tokenize(_ text: String) -> [String] {
         if containsCJK(text) {
             return text.map { String($0) }.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -255,14 +136,12 @@ nonisolated enum CJKTextUtils {
         }
     }
 
-    /// Check if a Unicode scalar is in CJK ranges
     static func isCJKScalar(_ scalar: Unicode.Scalar) -> Bool {
         let value = scalar.value
         return cjkRanges.contains { $0.contains(value) }
     }
 
-    /// Join text segments with CJK-aware spacing.
-    /// Uses no separator when either boundary character is CJK, space otherwise.
+    /// Join text parts with CJK-aware spacing — no space when either side is CJK.
     static func joinTexts(_ texts: [String]) -> String {
         guard var result = texts.first else { return "" }
         for i in 1..<texts.count {
@@ -279,7 +158,7 @@ nonisolated enum CJKTextUtils {
     }
 }
 
-// MARK: - Transcript Segment Links
+// MARK: - Segment Tap Links
 
 nonisolated enum TranscriptSegmentLink {
     static let urlScheme = "pa-transcript-segment"
@@ -298,7 +177,6 @@ nonisolated enum TranscriptSegmentLink {
 
 // MARK: - Search Highlighted Text
 
-/// Text view with search term highlighting
 struct SearchHighlightedText: View {
     let text: String
     let query: String
@@ -313,76 +191,60 @@ struct SearchHighlightedText: View {
         var result = AttributedString()
         let lowercasedText = text.lowercased()
         let lowercasedQuery = query.lowercased()
-
         var currentIndex = text.startIndex
 
         while let range = lowercasedText[currentIndex...].range(of: lowercasedQuery) {
-            // Add text before match
             let beforeRange = currentIndex..<range.lowerBound
             if !beforeRange.isEmpty {
                 result.append(AttributedString(String(text[beforeRange])))
             }
-
-            // Add highlighted match
-            let originalRange = Range(uncheckedBounds: (
-                lower: text.index(text.startIndex, offsetBy: text.distance(from: text.startIndex, to: range.lowerBound)),
-                upper: text.index(text.startIndex, offsetBy: text.distance(from: text.startIndex, to: range.upperBound))
-            ))
-            var highlighted = AttributedString(String(text[originalRange]))
+            var highlighted = AttributedString(String(text[range]))
             highlighted.backgroundColor = .yellow.opacity(0.3)
             highlighted.font = .system(size: 17, weight: .semibold)
             result.append(highlighted)
-
             currentIndex = range.upperBound
         }
-
-        // Add remaining text
         if currentIndex < text.endIndex {
             result.append(AttributedString(String(text[currentIndex...])))
         }
-
         return result
     }
 }
 
-// MARK: - Sentence-Based Transcript View (Primary View)
+// MARK: - Sentence-Based Transcript View
 
-/// Displays transcript as sentences with segment-level highlighting within each sentence
-/// This is the main transcript view used by EpisodeDetailView and ExpandedPlayerView
+/// Renders a list of sentence blocks. Computes the active sentence/segment
+/// from `currentTime` using last-started semantics.
 struct SentenceBasedTranscriptView: View {
     let sentences: [TranscriptSentence]
     let currentTime: TimeInterval?
     let searchQuery: String
     let onSegmentTap: (TranscriptSegment) -> Void
 
-    /// Whether to show timestamps on the left
     var showTimestamps: Bool = false
-
-    /// Subtitle display mode
     var subtitleMode: SubtitleDisplayMode = .originalOnly
-
-    /// Whether sentence highlight (per-segment playback highlighting) is enabled
-    var sentenceHighlightEnabled: Bool = false
-
-    /// Search match IDs for navigation highlight
     var searchMatchIds: Set<Int> = []
-
-    /// Currently focused search match ID
     var currentSearchMatchId: Int?
 
+    /// The single active sentence — the last one whose `startTime ≤ currentTime`.
+    private var activeSentenceID: Int? {
+        guard let t = currentTime else { return nil }
+        return sentences.last { $0.startTime <= t }?.id
+    }
+
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: sentenceHighlightEnabled ? 4 : 14) {
+        LazyVStack(alignment: .leading, spacing: 6) {
             ForEach(sentences) { sentence in
-                let highlightState = TranscriptGrouping.highlightState(
-                    for: sentence,
-                    currentTime: currentTime
-                )
+                let isActive = sentence.id == activeSentenceID
+                let activeIdx = isActive
+                    ? sentence.activeSegmentIndex(at: currentTime ?? 0)
+                    : nil
                 SentenceView(
                     sentence: sentence,
-                    highlightState: highlightState,
+                    isActive: isActive,
+                    activeSegmentIndex: activeIdx,
                     searchQuery: searchQuery,
                     subtitleMode: subtitleMode,
-                    sentenceHighlightEnabled: sentenceHighlightEnabled,
                     showTimestamp: showTimestamps,
                     isSearchMatch: searchMatchIds.contains(sentence.id),
                     isCurrentSearchMatch: currentSearchMatchId == sentence.id,
@@ -395,16 +257,17 @@ struct SentenceBasedTranscriptView: View {
     }
 }
 
-// MARK: - Sentence View (displays one sentence with segment highlighting)
+// MARK: - Sentence View
 
-/// Displays a single sentence with individual segment highlighting.
-/// Conforms to Equatable for efficient SwiftUI diffing with `.equatable()`.
+/// Displays one sentence block. Active segment within the active sentence is
+/// rendered blue + semibold; already-spoken segments fade to secondary; upcoming
+/// segments stay primary.
 struct SentenceView: View, Equatable {
     let sentence: TranscriptSentence
-    let highlightState: SentenceHighlightState
+    let isActive: Bool
+    let activeSegmentIndex: Int?
     let searchQuery: String
     let subtitleMode: SubtitleDisplayMode
-    var sentenceHighlightEnabled: Bool = false
     var showTimestamp: Bool = false
     var isSearchMatch: Bool = false
     var isCurrentSearchMatch: Bool = false
@@ -413,27 +276,19 @@ struct SentenceView: View, Equatable {
     static func == (lhs: SentenceView, rhs: SentenceView) -> Bool {
         lhs.sentence.id == rhs.sentence.id &&
         lhs.sentence.translatedText == rhs.sentence.translatedText &&
-        lhs.highlightState == rhs.highlightState &&
+        lhs.isActive == rhs.isActive &&
+        lhs.activeSegmentIndex == rhs.activeSegmentIndex &&
         lhs.searchQuery == rhs.searchQuery &&
         lhs.subtitleMode == rhs.subtitleMode &&
-        lhs.sentenceHighlightEnabled == rhs.sentenceHighlightEnabled &&
         lhs.showTimestamp == rhs.showTimestamp &&
         lhs.isSearchMatch == rhs.isSearchMatch &&
         lhs.isCurrentSearchMatch == rhs.isCurrentSearchMatch
     }
 
-    /// Whether this sentence is the active one
-    private var isActive: Bool {
-        if case .active = highlightState { return true }
-        return false
-    }
-
-    /// Whether the sentence can provide inline per-segment tap targets.
     private var supportsInlineSegmentLinks: Bool {
         searchQuery.isEmpty && !primaryIsTranslated
     }
 
-    /// Primary text to display based on subtitle mode
     private var primaryText: String {
         switch subtitleMode {
         case .originalOnly, .dualOriginalFirst:
@@ -443,7 +298,6 @@ struct SentenceView: View, Equatable {
         }
     }
 
-    /// Whether primary text uses translated content
     private var primaryIsTranslated: Bool {
         switch subtitleMode {
         case .originalOnly, .dualOriginalFirst:
@@ -453,7 +307,6 @@ struct SentenceView: View, Equatable {
         }
     }
 
-    /// Secondary text for dual modes (nil for single modes)
     private var secondaryText: String? {
         switch subtitleMode {
         case .originalOnly, .translatedOnly:
@@ -478,18 +331,18 @@ struct SentenceView: View, Equatable {
                         return .handled
                     })
             } else {
-                Button(action: {
+                Button {
                     if let firstSegment = sentence.segments.first {
                         onSegmentTap(firstSegment)
                     }
-                }) {
+                } label: {
                     sentenceRow
                 }
                 .buttonStyle(.plain)
             }
         }
         .background {
-            if sentenceHighlightEnabled && isActive {
+            if isActive {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.blue.opacity(0.08))
             }
@@ -521,57 +374,35 @@ struct SentenceView: View, Equatable {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, sentenceHighlightEnabled ? 6 : 10)
-        .padding(.leading, sentenceHighlightEnabled ? 0 : 8)
-        .padding(.trailing, 12)
-        .overlay(alignment: .leading) {
-            if !sentenceHighlightEnabled {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.blue)
-                    .frame(width: 3)
-                    .opacity(isActive ? 1 : 0)
-                    .scaleEffect(x: 1, y: isActive ? 1 : 0.5, anchor: .leading)
-                    .animation(.easeInOut(duration: 0.25), value: isActive)
-            }
-        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
     }
 
-    /// Builds the sentence text with segment-level or search highlighting
     @ViewBuilder
     private func buildSentenceText() -> some View {
         if !searchQuery.isEmpty {
-            // Show search highlighting with yellow backgrounds
             SearchHighlightedText(text: primaryText, query: searchQuery)
         } else if primaryIsTranslated {
-            // Translated text doesn't have segment-level timing, show as plain styled text
             Text(buildPlainStyledText(primaryText))
         } else {
-            // Original text with segment highlighting
             Text(buildSegmentHighlightedAttributedString())
         }
     }
 
-    /// Builds a plain styled AttributedString for translated text (no segment-level highlighting)
+    /// Translated text doesn't have segment-level timing — render as one styled block.
     private func buildPlainStyledText(_ text: String) -> AttributedString {
         var attrText = AttributedString(text)
-        switch highlightState {
-        case .active:
+        if isActive {
             attrText.foregroundColor = .blue
             attrText.font = .system(size: 17, weight: .semibold)
-        case .played:
-            attrText.foregroundColor = .secondary
-            attrText.font = .system(size: 17, weight: .regular)
-        case .future:
+        } else {
             attrText.foregroundColor = .primary
             attrText.font = .system(size: 17, weight: .regular)
         }
         return attrText
     }
 
-    /// Builds an AttributedString with refined highlighting colors:
-    /// - Active segment: blue foreground, semibold
-    /// - Played segment: secondary foreground, regular
-    /// - Future segment: primary foreground, regular
+    /// Inline segment-level highlighting for the original text.
     private func buildSegmentHighlightedAttributedString() -> AttributedString {
         var result = AttributedString()
 
@@ -582,32 +413,24 @@ struct SentenceView: View, Equatable {
                 attrText.link = url
             }
 
-            switch highlightState {
-            case .active(let activeSegmentIndex):
-                if index == activeSegmentIndex {
-                    // Active segment: blue + semibold
+            if isActive, let activeIdx = activeSegmentIndex {
+                if index == activeIdx {
                     attrText.foregroundColor = .blue
                     attrText.font = .system(size: 17, weight: .semibold)
-                } else if index < activeSegmentIndex || (activeSegmentIndex == -1) {
-                    // Played segment within active sentence
+                } else if index < activeIdx {
                     attrText.foregroundColor = .secondary
                     attrText.font = .system(size: 17, weight: .regular)
                 } else {
-                    // Future segment within active sentence
                     attrText.foregroundColor = .primary
                     attrText.font = .system(size: 17, weight: .regular)
                 }
-            case .played:
-                attrText.foregroundColor = .secondary
-                attrText.font = .system(size: 17, weight: .regular)
-            case .future:
+            } else {
                 attrText.foregroundColor = .primary
                 attrText.font = .system(size: 17, weight: .regular)
             }
 
             result.append(attrText)
 
-            // Add space between segments using CJK-aware boundary check
             if index < sentence.segments.count - 1 {
                 let nextText = sentence.segments[index + 1].text.trimmingCharacters(in: .whitespaces)
                 let endIsCJK = segmentText.unicodeScalars.last.map { CJKTextUtils.isCJKScalar($0) } ?? false
@@ -624,7 +447,6 @@ struct SentenceView: View, Equatable {
 
 // MARK: - Search Navigation Bar
 
-/// Floating search navigation overlay showing match count and prev/next buttons
 struct TranscriptSearchNavigationBar: View {
     let matchCount: Int
     let currentIndex: Int
@@ -659,162 +481,11 @@ struct TranscriptSearchNavigationBar: View {
     }
 }
 
-// MARK: - Compact Transcript Preview (for ExpandedPlayerView)
-
-/// A compact preview showing current sentence and nearby segments
-struct TranscriptPreviewView: View {
-    let segments: [TranscriptSegment]
-    let currentSegmentId: Int?
-    let currentTime: TimeInterval?
-    let onSegmentTap: (TranscriptSegment) -> Void
-    let onExpandTap: () -> Void
-
-    var previewCount: Int = 3
-
-    /// Sentences for display
-    private var sentences: [TranscriptSentence] {
-        TranscriptGrouping.groupIntoSentences(segments)
-    }
-
-    /// Current sentence based on playback time
-    private var currentSentence: TranscriptSentence? {
-        guard let time = currentTime else { return sentences.first }
-        return sentences.first { $0.containsTime(time) } ?? sentences.first
-    }
-
-    /// Active segment within current sentence
-    private var activeSegmentInSentence: TranscriptSegment? {
-        guard let time = currentTime else { return nil }
-        return currentSentence?.activeSegment(at: time)
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            // Header
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "captions.bubble.fill")
-                        .foregroundStyle(.purple)
-                    Text("Transcript")
-                        .font(.headline)
-                }
-
-                Spacer()
-
-                Button(action: onExpandTap) {
-                    HStack(spacing: 4) {
-                        Text("Expand")
-                            .font(.subheadline)
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.caption)
-                    }
-                    .foregroundStyle(.blue)
-                }
-            }
-            .padding(.horizontal, 20)
-
-            // Current sentence with segment highlighting
-            if let sentence = currentSentence {
-                Text(buildPreviewAttributedString(for: sentence))
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity)
-                    .glassEffect(.regular.tint(.blue), in: .rect(cornerRadius: 12))
-                    .padding(.horizontal, 16)
-            }
-
-            // Preview of nearby sentences
-            VStack(spacing: 0) {
-                ForEach(previewSentences) { sentence in
-                    Button(action: {
-                        if let firstSegment = sentence.segments.first {
-                            onSegmentTap(firstSegment)
-                        }
-                    }) {
-                        HStack(alignment: .top, spacing: 10) {
-                            Text(sentence.formattedStartTime)
-                                .font(.caption)
-                                .foregroundStyle(.blue)
-                                .frame(width: 50, alignment: .leading)
-
-                            Text(sentence.text)
-                                .font(.subheadline)
-                                .foregroundStyle(sentence.id == currentSentence?.id ? .primary : .secondary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            sentence.id == currentSentence?.id
-                            ? Color.blue.opacity(0.15)
-                            : Color.clear
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .glassEffect(.regular, in: .rect(cornerRadius: 12))
-            .padding(.horizontal, 16)
-        }
-    }
-
-    private var previewSentences: [TranscriptSentence] {
-        guard !sentences.isEmpty else { return [] }
-
-        let currentIdx = sentences.firstIndex { $0.id == currentSentence?.id } ?? 0
-        let startIndex = max(0, currentIdx - 1)
-        let endIndex = min(sentences.count, startIndex + previewCount)
-
-        return Array(sentences[startIndex..<endIndex])
-    }
-
-    /// Build attributed string for preview with segment highlighting
-    private func buildPreviewAttributedString(for sentence: TranscriptSentence) -> AttributedString {
-        var result = AttributedString()
-
-        for (index, segment) in sentence.segments.enumerated() {
-            let segmentText = segment.text.trimmingCharacters(in: .whitespaces)
-            var attrText = AttributedString(segmentText)
-
-            let isActive = activeSegmentInSentence?.id == segment.id
-
-            if isActive {
-                attrText.foregroundColor = .blue
-                attrText.font = .system(size: 17, weight: .bold)
-            } else if let time = currentTime, time > segment.endTime {
-                attrText.foregroundColor = .secondary
-                attrText.font = .system(size: 17, weight: .regular)
-            } else {
-                attrText.foregroundColor = .primary.opacity(0.6)
-                attrText.font = .system(size: 17, weight: .regular)
-            }
-
-            result.append(attrText)
-
-            if index < sentence.segments.count - 1 {
-                let nextText = sentence.segments[index + 1].text.trimmingCharacters(in: .whitespaces)
-                let endIsCJK = segmentText.unicodeScalars.last.map { CJKTextUtils.isCJKScalar($0) } ?? false
-                let startIsCJK = nextText.unicodeScalars.first.map { CJKTextUtils.isCJKScalar($0) } ?? false
-                if !endIsCJK && !startIsCJK {
-                    result.append(AttributedString(" "))
-                }
-            }
-        }
-
-        return result
-    }
-}
-
 // MARK: - Full Transcript Sheet Content
 
-/// Full-screen transcript view content (for use in sheets)
+/// Full-screen transcript sheet. Used by ExpandedPlayerView.
 struct FullTranscriptContent: View {
     let segments: [TranscriptSegment]
-    let currentSegmentId: Int?
     let currentTime: TimeInterval?
     @Binding var searchQuery: String
     let filteredSegments: [TranscriptSegment]
@@ -822,23 +493,13 @@ struct FullTranscriptContent: View {
 
     private var settings: SubtitleSettingsManager { .shared }
 
-    /// Sentences for display (from filtered segments)
     private var sentences: [TranscriptSentence] {
         TranscriptGrouping.groupIntoSentences(filteredSegments)
     }
 
-    /// Current sentence ID based on time
-    private var currentSentenceId: Int? {
-        guard let time = currentTime else { return nil }
-        return sentences.first { $0.containsTime(time) }?.id
-    }
-
-    /// Search match IDs
-    private var searchMatchIds: Set<Int> {
-        guard !searchQuery.isEmpty else { return [] }
-        return Set(sentences.compactMap { sentence in
-            sentence.text.localizedStandardContains(searchQuery) ? sentence.id : nil
-        })
+    private var activeSentenceID: Int? {
+        guard let t = currentTime else { return nil }
+        return sentences.last { $0.startTime <= t }?.id
     }
 
     @State private var currentSearchIndex: Int = 0
@@ -871,7 +532,6 @@ struct FullTranscriptContent: View {
 
             Divider()
 
-            // Transcript with sentence grouping
             ScrollViewReader { proxy in
                 ZStack(alignment: .bottom) {
                     ScrollView {
@@ -882,15 +542,14 @@ struct FullTranscriptContent: View {
                             onSegmentTap: onSegmentTap,
                             showTimestamps: false,
                             subtitleMode: settings.displayMode,
-                            sentenceHighlightEnabled: settings.sentenceHighlightEnabled,
-                            searchMatchIds: searchMatchIds,
+                            searchMatchIds: Set(searchMatchIdsList),
                             currentSearchMatchId: searchMatchIdsList.isEmpty ? nil : searchMatchIdsList[currentSearchIndex]
                         )
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
                         .padding(.bottom, !searchQuery.isEmpty && !searchMatchIdsList.isEmpty ? 60 : 0)
                     }
-                    .onChange(of: currentSentenceId) { _, newId in
+                    .onChange(of: activeSentenceID) { _, newId in
                         if let id = newId, searchQuery.isEmpty {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 proxy.scrollTo(id, anchor: .center)
@@ -898,25 +557,20 @@ struct FullTranscriptContent: View {
                         }
                     }
 
-                    // Search navigation bar
                     if !searchQuery.isEmpty && !searchMatchIdsList.isEmpty {
                         TranscriptSearchNavigationBar(
                             matchCount: searchMatchIdsList.count,
                             currentIndex: currentSearchIndex,
                             onPrevious: {
-                                if !searchMatchIdsList.isEmpty {
-                                    currentSearchIndex = (currentSearchIndex - 1 + searchMatchIdsList.count) % searchMatchIdsList.count
-                                    withAnimation {
-                                        proxy.scrollTo(searchMatchIdsList[currentSearchIndex], anchor: .center)
-                                    }
+                                currentSearchIndex = (currentSearchIndex - 1 + searchMatchIdsList.count) % searchMatchIdsList.count
+                                withAnimation {
+                                    proxy.scrollTo(searchMatchIdsList[currentSearchIndex], anchor: .center)
                                 }
                             },
                             onNext: {
-                                if !searchMatchIdsList.isEmpty {
-                                    currentSearchIndex = (currentSearchIndex + 1) % searchMatchIdsList.count
-                                    withAnimation {
-                                        proxy.scrollTo(searchMatchIdsList[currentSearchIndex], anchor: .center)
-                                    }
+                                currentSearchIndex = (currentSearchIndex + 1) % searchMatchIdsList.count
+                                withAnimation {
+                                    proxy.scrollTo(searchMatchIdsList[currentSearchIndex], anchor: .center)
                                 }
                             }
                         )
@@ -926,7 +580,6 @@ struct FullTranscriptContent: View {
             }
         }
         .onChange(of: searchQuery) { _, newQuery in
-            // Recompute search matches
             if newQuery.isEmpty {
                 searchMatchIdsList = []
                 currentSearchIndex = 0

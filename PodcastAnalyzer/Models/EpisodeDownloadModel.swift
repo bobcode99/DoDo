@@ -47,6 +47,10 @@ class EpisodeDownloadModel {
   var imageURL: String?
   var pubDate: Date?
 
+  /// AntennaPod pattern: set to false after auto-download succeeds so the
+  /// episode is never auto-downloaded again. Manual download always works.
+  var autoDownloadEnabled: Bool = true
+
   init(
     episodeTitle: String,
     podcastTitle: String,
@@ -63,7 +67,8 @@ class EpisodeDownloadModel {
     downloadedDate: Date? = nil,
     fileSize: Int64 = 0,
     imageURL: String? = nil,
-    pubDate: Date? = nil
+    pubDate: Date? = nil,
+    autoDownloadEnabled: Bool = true
   ) {
     // Use Unit Separator (U+001F) as delimiter - same as DownloadManager
     // Fall back to | for backward compatibility with existing data
@@ -85,6 +90,7 @@ class EpisodeDownloadModel {
     self.fileSize = fileSize
     self.imageURL = imageURL
     self.pubDate = pubDate
+    self.autoDownloadEnabled = autoDownloadEnabled
   }
 
   /// Progress percentage (0.0 to 1.0)

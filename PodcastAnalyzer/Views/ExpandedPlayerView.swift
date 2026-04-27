@@ -560,7 +560,6 @@ struct TranscriptFullScreenView: View {
 
         FullTranscriptContent(
           segments: viewModel.transcriptSegments,
-          currentSegmentId: viewModel.currentSegmentId,
           currentTime: viewModel.isPlaying ? viewModel.currentTime : nil,
           searchQuery: $viewModel.transcriptSearchQuery,
           filteredSegments: viewModel.filteredTranscriptSegments,

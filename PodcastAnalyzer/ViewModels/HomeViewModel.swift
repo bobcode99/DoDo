@@ -25,6 +25,8 @@ final class HomeViewModel {
   var upNextEpisodes: [LibraryEpisode] = []
   // Scored version — used by HomeView cards to show reason badges
   var scoredUpNextEpisodes: [ScoredEpisode] = []
+  /// Stable ID list for `.animation(value:)` — avoids allocating a new array in view body.
+  var scoredUpNextIDs: [String] { scoredUpNextEpisodes.map(\.id) }
 
   // Top podcasts from Apple RSS - observable instance properties that sync with static cache
   var topPodcasts: [AppleRSSPodcast] = []

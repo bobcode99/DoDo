@@ -15,6 +15,7 @@ struct PodcastContextMenu: ViewModifier {
   var onUnsubscribed: (() -> Void)?
 
   @State private var showUnsubscribeConfirmation = false
+  @State private var showEpisodeFilterSheet = false
 
   func body(content: Content) -> some View {
     content
@@ -41,11 +42,55 @@ struct PodcastContextMenu: ViewModifier {
 
         Divider()
 
+        // Auto-transcript via Yap server (only shown when a server URL is configured)
+        if !YapServerSettings.shared.serverURL.isEmpty {
+          Toggle(isOn: Binding(
+            get: { podcast.autoTranscribeWithYap },
+            set: { newValue in
+              podcast.autoTranscribeWithYap = newValue
+              try? modelContext.save()
+            }
+          )) {
+            Label("Auto Transcript (Yap)", systemImage: "waveform.badge.plus")
+          }
+        }
+
+        // Three-state auto-download setting (AntennaPod pattern)
+        Menu {
+          ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
+            Button {
+              podcast.autoDownloadSetting = setting.rawValue
+              try? modelContext.save()
+            } label: {
+              Label(
+                setting.displayName,
+                systemImage: podcast.autoDownloadSetting == setting.rawValue ? "checkmark" : ""
+              )
+            }
+          }
+        } label: {
+          Label(
+            "Auto Download: \(AutoDownloadSetting(rawValue: podcast.autoDownloadSetting)?.displayName ?? "—")",
+            systemImage: "arrow.down.circle"
+          )
+        }
+
+        Button {
+          showEpisodeFilterSheet = true
+        } label: {
+          Label("Episode Filter…", systemImage: "line.3.horizontal.decrease.circle")
+        }
+
+        Divider()
+
         Button(role: .destructive) {
           showUnsubscribeConfirmation = true
         } label: {
           Label("Unsubscribe", systemImage: "minus.circle")
         }
+      }
+      .sheet(isPresented: $showEpisodeFilterSheet) {
+        PodcastEpisodeFilterView(podcast: podcast, modelContext: modelContext)
       }
       .confirmationDialog(
         "Unsubscribe from Podcast",

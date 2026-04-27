@@ -474,21 +474,28 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func seek(to time: TimeInterval) {
+    let beforeTime = currentTime
+    logger.info("seek(to:) requested target=\(String(format: "%.3f", time))s currentBefore=\(String(format: "%.3f", beforeTime))s")
     let cmTime = CMTime(seconds: time, preferredTimescale: 600)
     // Use zero tolerance so the playhead lands exactly at the requested time.
     // Without this, AVPlayer defaults to kCMTimePositiveInfinity tolerances and
     // may snap to a nearby keyframe — causing transcript taps to jump to the
     // wrong timestamp.
-    player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+    player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
       // Dispatch to main actor since completion handler runs on arbitrary queue
       Task { @MainActor in
+        guard let self else { return }
+        let landed = self.player?.currentTime().seconds ?? .nan
+        self.logger.info(
+          "seek(to:) completion target=\(String(format: "%.3f", time))s landed=\(String(format: "%.3f", landed))s drift=\(String(format: "%.3f", landed - time))s finished=\(finished)"
+        )
         // Update currentTime immediately so observers (e.g. TranscriptContentView
         // polling timer) see the seeked position rather than the stale value that
         // the periodic time observer hasn't flushed yet.
-        self?.currentTime = time
-        self?.updateNowPlayingCurrentTime()
-        self?.savePlaybackState()
-        self?.postPlaybackPositionUpdate()
+        self.currentTime = time
+        self.updateNowPlayingCurrentTime()
+        self.savePlaybackState()
+        self.postPlaybackPositionUpdate()
       }
     }
   }

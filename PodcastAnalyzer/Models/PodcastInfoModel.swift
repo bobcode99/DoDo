@@ -1,6 +1,22 @@
 import Foundation
 import SwiftData
 
+// MARK: - AutoDownloadSetting
+
+enum AutoDownloadSetting: String, CaseIterable {
+  case enabled       = "enabled"
+  case disabled      = "disabled"
+  case inheritGlobal = "inheritGlobal"
+
+  var displayName: String {
+    switch self {
+    case .enabled:       "Always"
+    case .disabled:      "Never"
+    case .inheritGlobal: "Use Global Setting"
+    }
+  }
+}
+
 @Model
 class PodcastInfoModel {
   var id: UUID = UUID()
@@ -34,6 +50,26 @@ class PodcastInfoModel {
 
   /// Human-readable cadence detected by ReleaseScheduleGuesser (e.g. "weekly").
   var detectedCadence: String?
+
+  // MARK: - Per-Podcast Automation
+
+  /// When `true`, a Yap server transcript job is queued automatically after each
+  /// episode download completes. Requires the Yap server URL to be configured.
+  /// Only triggers when Low Power Mode is off. Respects the session-level
+  /// failure cap in `TranscriptManager`.
+  var autoTranscribeWithYap: Bool = false
+
+  /// Three-state auto-download setting (AntennaPod pattern).
+  /// "enabled" | "disabled" | "inheritGlobal". Defaults to "disabled" so
+  /// auto-download is opt-in per podcast — the user must explicitly enable it.
+  var autoDownloadSetting: String = AutoDownloadSetting.disabled.rawValue
+
+  /// Comma-separated include terms (case-insensitive). Empty = no filter.
+  var episodeFilterInclude: String = ""
+  /// Comma-separated exclude terms (case-insensitive). Empty = no filter.
+  var episodeFilterExclude: String = ""
+  /// Minimum episode duration in seconds; 0 = no minimum.
+  var episodeFilterMinDuration: Int = 0
 
   init(podcastInfo: PodcastInfo, lastUpdated: Date, isSubscribed: Bool = true) {
     self.id = UUID()

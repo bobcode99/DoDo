@@ -26,6 +26,21 @@ struct EpisodeDetailRoute: Hashable, Identifiable {
   }
 }
 
+// MARK: - Up Next List Route
+
+/// Carries episodes to UpNextListView lazily — construction is deferred until navigation.
+struct UpNextListRoute: Hashable {
+  let episodes: [LibraryEpisode]
+
+  static func == (lhs: UpNextListRoute, rhs: UpNextListRoute) -> Bool {
+    lhs.episodes.map(\.id) == rhs.episodes.map(\.id)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(episodes.map(\.id))
+  }
+}
+
 // MARK: - Library Sub-page Routes
 
 /// Identifies which library sub-page to navigate to.

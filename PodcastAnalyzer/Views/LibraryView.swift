@@ -21,23 +21,32 @@ struct LibraryView: View {
   ) private var subscribedPodcasts: [PodcastInfoModel]
 
   @State private var sortedPodcasts: [PodcastGridItem] = []
-
-  private let columns = [
-    GridItem(.flexible(), spacing: 12),
-    GridItem(.flexible(), spacing: 12)
-  ]
-
   @State private var errorMessage: String?
+  @State private var showError = false
+
+  private var podcastModelByID: [PodcastInfoModel.ID: PodcastInfoModel] {
+    Dictionary(uniqueKeysWithValues: subscribedPodcasts.map { ($0.id, $0) })
+  }
 
   var body: some View {
     ZStack {
       ScrollView {
         VStack(spacing: 24) {
-          quickAccessSection
-            .padding(.horizontal, 16)
+          LibraryQuickAccessSection(
+            savedCount: viewModel.savedEpisodes.count,
+            downloadedCount: viewModel.downloadedEpisodes.count + viewModel.downloadingEpisodes.count,
+            latestCount: viewModel.latestEpisodes.count
+          )
+          .padding(.horizontal, 16)
 
-          podcastsGridSection
-            .padding(.horizontal, 16)
+          LibraryPodcastsGrid(
+            sortedPodcasts: sortedPodcasts,
+            podcastModelByID: podcastModelByID,
+            modelContext: modelContext,
+            onError: { errorMessage = $0 },
+            onUnsubscribed: { viewModel.setModelContext(modelContext) }
+          )
+          .padding(.horizontal, 16)
         }
         .padding(.top, 8)
         .padding(.bottom, 40)
@@ -86,8 +95,11 @@ struct LibraryView: View {
         viewModel.refreshData()
       }
     }
+    .onChange(of: errorMessage) { _, newValue in
+      showError = newValue != nil
+    }
     .onChange(of: subscribedPodcasts) { _, newPodcasts in
-      if newPodcasts.map(\.id) != sortedPodcasts.map(\.id) {
+      if Set(newPodcasts.map(\.id)) != Set(sortedPodcasts.map(\.id)) {
         viewModel.setPodcasts(newPodcasts)
         withAnimation(.easeInOut(duration: 0.3)) {
           updateSortedPodcasts()
@@ -98,112 +110,10 @@ struct LibraryView: View {
     // Note: Do NOT call viewModel.cleanup() here — LibraryView is a tab root,
     // and pushing a NavigationLink fires onDisappear.  Cleaning up would cancel
     // the download-completion observer while the user is in a sub-page.
-    .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+    .alert("Error", isPresented: $showError) {
       Button("OK", role: .cancel) { errorMessage = nil }
     } message: {
       Text(errorMessage ?? "")
-    }
-  }
-
-  // MARK: - Quick Access Section
-
-  @ViewBuilder
-  private var quickAccessSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(spacing: 12) {
-        NavigationLink(value: LibrarySubpageRoute.saved) {
-          QuickAccessCard(
-            icon: "star.fill",
-            iconColor: .yellow,
-            title: "Saved",
-            count: viewModel.savedEpisodes.count,
-            isLoading: false
-          )
-        }
-        .buttonStyle(.plain)
-
-        NavigationLink(value: LibrarySubpageRoute.downloaded) {
-          QuickAccessCard(
-            icon: "arrow.down.circle.fill",
-            iconColor: .green,
-            title: "Downloaded",
-            count: viewModel.downloadedEpisodes.count + viewModel.downloadingEpisodes.count,
-            isLoading: false
-          )
-        }
-        .buttonStyle(.plain)
-      }
-
-      NavigationLink(value: LibrarySubpageRoute.latest) {
-        HStack {
-          HStack(spacing: 8) {
-            Image(systemName: "clock.fill")
-              .font(.system(size: 16))
-              .foregroundStyle(.blue)
-            Text("Latest Episodes")
-              .font(.subheadline)
-              .fontWeight(.medium)
-              .foregroundStyle(.primary)
-          }
-
-          Spacer()
-
-          HStack(spacing: 4) {
-             Text("\(viewModel.latestEpisodes.count)")
-               .font(.caption)
-               .foregroundStyle(.secondary)
-             Image(systemName: "chevron.right")
-               .font(.caption)
-               .foregroundStyle(.secondary)
-          }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(.regularMaterial, in: .rect(cornerRadius: 12))
-      }
-      .buttonStyle(.plain)
-    }
-  }
-
-  // MARK: - Podcasts Grid Section
-
-  @ViewBuilder
-  private var podcastsGridSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("Your Podcasts")
-          .font(.headline)
-
-        Spacer()
-
-          Text("\(sortedPodcasts.count)")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-      }
-
-      if sortedPodcasts.isEmpty {
-        emptyPodcastsView
-      } else {
-        LazyVGrid(columns: columns, spacing: 16) {
-          ForEach(sortedPodcasts) { item in
-            if let model = subscribedPodcasts.first(where: { $0.id == item.id }) {
-              NavigationLink(value: PodcastBrowseRoute(podcastModel: model)) {
-                PodcastGridCell(item: item)
-              }
-              .buttonStyle(.plain)
-              .contentShape(Rectangle())
-              .podcastContextMenu(
-                podcast: model,
-                modelContext: modelContext,
-                onError: { errorMessage = $0 },
-                onUnsubscribed: {
-                  viewModel.setModelContext(modelContext)
-                }
-              )
-            }
-          }
-        }
-      }
     }
   }
 
@@ -222,22 +132,6 @@ struct LibraryView: View {
       }
   }
 
-  @ViewBuilder
-  private var emptyPodcastsView: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "square.stack.3d.up")
-        .font(.system(size: 40))
-        .foregroundStyle(.secondary)
-      Text("No Subscriptions")
-        .font(.headline)
-      Text("Search and subscribe to podcasts to build your library")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(.vertical, 40)
-  }
 }
 
 #Preview {
