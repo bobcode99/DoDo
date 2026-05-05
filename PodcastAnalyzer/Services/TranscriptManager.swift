@@ -29,6 +29,7 @@ struct TranscriptJob: Identifiable {
   let language: String?
   let engine: TranscriptEngine?  // nil = use global Settings default
   var status: TranscriptJobStatus = .queued
+  var yapServerJobID: String?    // Set once the yap HTTP job is accepted; used to cancel server-side
 }
 
 /// Manages background transcript generation with parallel processing.
@@ -143,7 +144,10 @@ class TranscriptManager {
 
   /// Cancels all pending and running transcript jobs.
   func cancelAll() {
-    for task in processingTasks.values {
+    for (jobId, task) in processingTasks {
+      if let yapServerJobID = activeJobs[jobId]?.yapServerJobID {
+        cancelYapServerJob(serverJobID: yapServerJobID)
+      }
       task.cancel()
     }
     processingTasks.removeAll()
@@ -159,6 +163,12 @@ class TranscriptManager {
     let jobId = makeJobId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
 
     pendingJobs.removeAll { $0.id == jobId }
+
+    // Cancel server-side yap job if one was submitted
+    if let yapServerJobID = activeJobs[jobId]?.yapServerJobID {
+      cancelYapServerJob(serverJobID: yapServerJobID)
+    }
+
     activeJobs.removeValue(forKey: jobId)
 
     if runningJobIds.contains(jobId) {
@@ -396,7 +406,10 @@ class TranscriptManager {
             locale: job.language,
             serverURL: serverURL,
             apiKey: key,
-            onProgress: onProgress
+            onProgress: onProgress,
+            onJobSubmitted: { [self] yapJobID in
+              Task { await self.storeYapServerJobID(yapJobID, forJobID: job.id) }
+            }
           )
         } else if let remoteURLString = job.audioRemoteURL, !remoteURLString.isEmpty {
           // Episode not downloaded — pass the RSS audio URL to yap directly
@@ -405,7 +418,10 @@ class TranscriptManager {
             locale: job.language,
             serverURL: serverURL,
             apiKey: key,
-            onProgress: onProgress
+            onProgress: onProgress,
+            onJobSubmitted: { [self] yapJobID in
+              Task { await self.storeYapServerJobID(yapJobID, forJobID: job.id) }
+            }
           )
         } else {
           throw NSError(
@@ -467,5 +483,22 @@ class TranscriptManager {
     guard case .transcribing(let current) = activeJobs[jobID]?.status,
           progress > current else { return }
     activeJobs[jobID]?.status = .transcribing(progress: progress)
+  }
+
+  /// Stores the yap HTTP server job ID so it can be cancelled later.
+  private func storeYapServerJobID(_ yapJobID: String, forJobID jobID: String) {
+    activeJobs[jobID]?.yapServerJobID = yapJobID
+    logger.info("[YapServer] tracked server job id=\(yapJobID) for episode job=\(jobID)")
+  }
+
+  /// Sends DELETE /transcriptions/{id} to the yap server for a given server job ID.
+  private func cancelYapServerJob(serverJobID: String) {
+    let serverURL = YapServerSettings.shared.serverURL
+    let apiKey = YapServerSettings.shared.apiKey
+    guard !serverURL.isEmpty, let base = URL(string: serverURL) else { return }
+    Task {
+      let service = YapTranscriptService()
+      await service.cancelJob(serverJobID: serverJobID, baseURL: base, apiKey: apiKey.isEmpty ? nil : apiKey)
+    }
   }
 }

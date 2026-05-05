@@ -47,7 +47,8 @@ actor YapTranscriptService {
         locale: String?,
         serverURL: String,
         apiKey: String?,
-        onProgress: (@Sendable (Double) -> Void)? = nil
+        onProgress: (@Sendable (Double) -> Void)? = nil,
+        onJobSubmitted: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
         guard let base = URL(string: serverURL) else {
             throw YapError.invalidServerURL
@@ -61,6 +62,7 @@ actor YapTranscriptService {
         )
 
         logger.info("Yap job submitted, id=\(jobID)")
+        onJobSubmitted?(jobID)
 
         return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
     }
@@ -75,7 +77,8 @@ actor YapTranscriptService {
         locale: String?,
         serverURL: String,
         apiKey: String?,
-        onProgress: (@Sendable (Double) -> Void)? = nil
+        onProgress: (@Sendable (Double) -> Void)? = nil,
+        onJobSubmitted: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
         guard let base = URL(string: serverURL) else {
             throw YapError.invalidServerURL
@@ -87,7 +90,32 @@ actor YapTranscriptService {
             apiKey: apiKey
         )
         logger.info("Yap remote-URL job submitted, id=\(jobID)")
+        onJobSubmitted?(jobID)
         return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
+    }
+
+    /// Sends DELETE /transcriptions/{id} to cancel a queued or running yap server job.
+    /// 204 = cancelled, 409 = already done — both are acceptable, all others are logged.
+    func cancelJob(serverJobID: String, baseURL: URL, apiKey: String?) async {
+        let url = baseURL.appending(path: "transcriptions/\(serverJobID)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        if let key = apiKey, !key.isEmpty {
+            request.setValue(key, forHTTPHeaderField: "X-API-Key")
+        }
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if status == 204 {
+                logger.info("[YapServer] cancelled server job id=\(serverJobID)")
+            } else if status == 409 {
+                logger.info("[YapServer] job id=\(serverJobID) already finished, cancel ignored")
+            } else {
+                logger.warning("[YapServer] DELETE /transcriptions/\(serverJobID) returned HTTP \(status)")
+            }
+        } catch {
+            logger.warning("[YapServer] cancel request failed for id=\(serverJobID): \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private helpers
