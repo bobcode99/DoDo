@@ -1256,9 +1256,9 @@ final class EpisodeDetailViewModel {
     case .whisper:
       selectedTranscriptLanguage.flatMap { $0 == "auto" ? nil : $0 }
     case .appleSpeech:
-      selectedTranscriptLanguage ?? getPodcastLanguage()
+      selectedTranscriptLanguage ?? (podcastLanguage.isEmpty ? nil : podcastLanguage)
     case .yapServer:
-      selectedTranscriptLanguage ?? getPodcastLanguage()
+      selectedTranscriptLanguage ?? (podcastLanguage.isEmpty ? nil : podcastLanguage)
     }
 
     logger.info("[generateTranscript] engine=\(effectiveEngine.rawValue) selectedLang=\(self.selectedTranscriptLanguage ?? "<nil>") resolvedLang=\(language ?? "<nil>") podcastLang=\(self.podcastLanguage)")

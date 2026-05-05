@@ -386,49 +386,45 @@ class TranscriptManager {
         let apiKey = await MainActor.run { YapServerSettings.shared.apiKey }
         let key = apiKey.isEmpty ? nil : apiKey
 
+        guard let base = URL(string: serverURL) else {
+          throw YapError.invalidServerURL
+        }
+
         let yapService = YapTranscriptService()
         let jobID = job.id
 
-        // Fire-and-forget progress updates back onto the TranscriptManager actor.
-        // Polls arrive every 1–5 s so no throttling is needed.
-        // TranscriptManager is a singleton — no weak reference needed.
-        let onProgress: @Sendable (Double) -> Void = { [self] progress in
-          Task { [self] in
-            await self.setYapProgress(jobID: jobID, progress: progress)
-          }
-        }
-
-        let srtContent: String
+        // Submit first, then store the server job ID synchronously on the @MainActor
+        // before polling begins — this eliminates the race where cancel() fires
+        // while yapServerJobID is still nil.
+        let yapJobID: String
         if fileExists {
-          // Episode is downloaded — stream the local file
-          srtContent = try await yapService.transcribeToSRT(
-            audioURL: audioURL,
-            locale: job.language,
-            serverURL: serverURL,
-            apiKey: key,
-            onProgress: onProgress,
-            onJobSubmitted: { [self] yapJobID in
-              Task { await self.storeYapServerJobID(yapJobID, forJobID: job.id) }
-            }
-          )
+          yapJobID = try await yapService.submitJob(
+            audioURL: audioURL, locale: job.language, baseURL: base, apiKey: key)
         } else if let remoteURLString = job.audioRemoteURL, !remoteURLString.isEmpty {
-          // Episode not downloaded — pass the RSS audio URL to yap directly
-          srtContent = try await yapService.transcribeRemoteURL(
-            remoteURL: remoteURLString,
-            locale: job.language,
-            serverURL: serverURL,
-            apiKey: key,
-            onProgress: onProgress,
-            onJobSubmitted: { [self] yapJobID in
-              Task { await self.storeYapServerJobID(yapJobID, forJobID: job.id) }
-            }
-          )
+          yapJobID = try await yapService.submitRemoteURLJob(
+            remoteURL: remoteURLString, locale: job.language, baseURL: base, apiKey: key)
         } else {
           throw NSError(
             domain: "TranscriptManager", code: 3,
             userInfo: [NSLocalizedDescriptionKey: "No local file or remote URL available for yap transcription"]
           )
         }
+
+        // Back on @MainActor — store before polling so cancelJob() can reach the server
+        activeJobs[job.id]?.yapServerJobID = yapJobID
+        logger.info("[YapServer] server job id=\(yapJobID) stored for \(job.episodeTitle)")
+
+        try Task.checkCancellation()
+
+        let onProgress: @Sendable (Double) -> Void = { [self] progress in
+          Task { [self] in
+            await self.setYapProgress(jobID: jobID, progress: progress)
+          }
+        }
+
+        let srtContent = try await yapService.pollForResult(
+          jobID: yapJobID, baseURL: base, apiKey: key, onProgress: onProgress
+        )
 
         activeJobs[job.id]?.status = .transcribing(progress: 1.0)
         yapConsecutiveFailures[job.podcastTitle] = 0

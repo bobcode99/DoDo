@@ -120,7 +120,7 @@ actor YapTranscriptService {
 
     // MARK: - Private helpers
 
-    private func submitJob(
+    func submitJob(
         audioURL: URL,
         locale: String?,
         baseURL: URL,
@@ -168,7 +168,7 @@ actor YapTranscriptService {
         return decoded.id
     }
 
-    private func submitRemoteURLJob(
+    func submitRemoteURLJob(
         remoteURL: String,
         locale: String?,
         baseURL: URL,
@@ -210,7 +210,7 @@ actor YapTranscriptService {
         return try JSONDecoder().decode(SubmitResponse.self, from: data).id
     }
 
-    private func pollForResult(
+    func pollForResult(
         jobID: String,
         baseURL: URL,
         apiKey: String?,
