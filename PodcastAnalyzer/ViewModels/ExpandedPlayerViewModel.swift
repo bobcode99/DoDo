@@ -35,6 +35,11 @@ final class ExpandedPlayerViewModel {
   var transcriptSegments: [TranscriptSegment] = []
   var transcriptSearchQuery: String = ""
 
+  /// Sentence grouping cached at load time so `FullTranscriptContent` doesn't
+  /// regroup on every body render. Recomputed in `loadTranscript` whenever
+  /// `transcriptSegments` is reassigned.
+  var groupedSentences: [TranscriptSentence] = []
+
   // Observable singletons — NOT @ObservationIgnored so SwiftUI can observe through them
   private let audioManager = EnhancedAudioManager.shared
   private let downloadManager = DownloadManager.shared
@@ -419,6 +424,7 @@ final class ExpandedPlayerViewModel {
     guard let episode = audioManager.currentEpisode else {
       hasTranscript = false
       transcriptSegments = []
+      groupedSentences = []
       return
     }
 
@@ -445,14 +451,17 @@ final class ExpandedPlayerViewModel {
 
           self.hasTranscript = true
           self.transcriptSegments = segments
+          self.groupedSentences = TranscriptGrouping.groupIntoSentences(segments)
           self.lastLoadedEpisodeId = episodeId
         } catch {
           self.hasTranscript = false
           self.transcriptSegments = []
+          self.groupedSentences = []
         }
       } else {
         self.hasTranscript = false
         self.transcriptSegments = []
+        self.groupedSentences = []
       }
     }
   }

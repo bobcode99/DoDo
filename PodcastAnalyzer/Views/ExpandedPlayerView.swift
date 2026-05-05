@@ -559,10 +559,9 @@ struct TranscriptFullScreenView: View {
         Divider()
 
         FullTranscriptContent(
-          segments: viewModel.transcriptSegments,
+          sentences: viewModel.groupedSentences,
           currentTime: viewModel.isPlaying ? viewModel.currentTime : nil,
           searchQuery: $viewModel.transcriptSearchQuery,
-          filteredSegments: viewModel.filteredTranscriptSegments,
           onSegmentTap: { segment in
             viewModel.seekToSegment(segment)
           }

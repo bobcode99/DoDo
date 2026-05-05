@@ -52,6 +52,14 @@ enum TranscriptGrouping {
     /// Sentence terminators (Latin + CJK).
     private static let sentenceEndings: Set<Character> = [".", "!", "?", "\u{3002}", "\u{FF01}", "\u{FF1F}"]
 
+    /// CJK clause-level punctuation. When a sentence is over the soft cap but
+    /// the next segment opens with one of these, defer the flush — the next cue
+    /// is mid-clause and breaking here would split a phrase.
+    private static let cjkClauseContinuations: Set<Character> = [
+        "\u{FF0C}", "\u{3001}", "\u{FF1B}", "\u{FF1A}",  // ， 、 ； ：
+        ",", ";", ":",
+    ]
+
     /// Force a sentence break when consecutive segments are separated by more
     /// than this many seconds (music interludes, long pauses).
     static let gapThreshold: TimeInterval = 2.0
@@ -63,9 +71,14 @@ enum TranscriptGrouping {
     /// Soft character cap for Latin content. Roughly one phone-screen line.
     static let latinSoftCap = 80
 
+    /// Hard ceiling — never let a sentence run past this even if look-ahead
+    /// would otherwise extend it.
+    static let cjkHardCap = 60
+    static let latinHardCap = 160
+
     /// Group raw SRT segments into sentence blocks.
     /// Splits at: sentence-ending punctuation, time gap > `gapThreshold`,
-    /// or once the accumulated trimmed character count reaches the soft cap.
+    /// or the soft cap (with look-ahead deferral up to the hard cap).
     static func groupIntoSentences(_ segments: [TranscriptSegment]) -> [TranscriptSentence] {
         var sentences: [TranscriptSentence] = []
         var group: [TranscriptSegment] = []
@@ -80,7 +93,21 @@ enum TranscriptGrouping {
             groupIsCJK = false
         }
 
-        for segment in segments {
+        /// True when the next segment opens mid-clause — i.e. with whitespace,
+        /// a continuation comma, or (for Latin) a non-alphanumeric. Splitting
+        /// just before that produces an awkward "...end" / ", continuation" pair.
+        func nextIsMidClause(_ index: Int) -> Bool {
+            guard index + 1 < segments.count else { return false }
+            let next = segments[index + 1].text.trimmingCharacters(in: .whitespaces)
+            guard let first = next.first else { return false }
+            if cjkClauseContinuations.contains(first) { return true }
+            if groupIsCJK { return false }
+            // Latin: continuation if the next cue starts with a lowercase letter
+            // or non-alphanumeric (matches AntennaPod's heuristic).
+            return !first.isUppercase && !first.isNumber
+        }
+
+        for (i, segment) in segments.enumerated() {
             if let last = group.last,
                segment.startTime - last.endTime > gapThreshold {
                 flush()
@@ -91,16 +118,44 @@ enum TranscriptGrouping {
             charCount += trimmed.count
             if !groupIsCJK { groupIsCJK = CJKTextUtils.containsCJK(trimmed) }
 
-            let cap = groupIsCJK ? cjkSoftCap : latinSoftCap
+            let softCap = groupIsCJK ? cjkSoftCap : latinSoftCap
+            let hardCap = groupIsCJK ? cjkHardCap : latinHardCap
             let endsSentence = trimmed.last.map { sentenceEndings.contains($0) } ?? false
-            let hitCap = charCount >= cap
 
-            if endsSentence || hitCap {
+            if endsSentence || charCount >= hardCap {
+                flush()
+            } else if charCount >= softCap && !nextIsMidClause(i) {
                 flush()
             }
         }
         flush()
         return sentences
+    }
+}
+
+// MARK: - Binary-Search Helpers
+
+extension Array where Element == TranscriptSentence {
+    /// Last sentence whose `startTime ≤ time`, found via binary search. O(log n).
+    /// Mirrors AntennaPod's `Transcript.findSegmentIndexBefore`.
+    func index(at time: TimeInterval) -> Int? {
+        guard !isEmpty, self[0].startTime <= time else { return nil }
+        var lo = 0
+        var hi = count - 1
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            if self[mid].startTime > time {
+                hi = mid - 1
+            } else {
+                lo = mid
+            }
+        }
+        return lo
+    }
+
+    /// Convenience: id of the active sentence at `time`, or nil.
+    func activeID(at time: TimeInterval) -> Int? {
+        index(at: time).map { self[$0].id }
     }
 }
 
@@ -199,7 +254,7 @@ struct SearchHighlightedText: View {
                 result.append(AttributedString(String(text[beforeRange])))
             }
             var highlighted = AttributedString(String(text[range]))
-            highlighted.backgroundColor = .yellow.opacity(0.3)
+            highlighted.backgroundColor = .orange.opacity(0.35)
             highlighted.font = .system(size: 17, weight: .semibold)
             result.append(highlighted)
             currentIndex = range.upperBound
@@ -229,7 +284,7 @@ struct SentenceBasedTranscriptView: View {
     /// The single active sentence — the last one whose `startTime ≤ currentTime`.
     private var activeSentenceID: Int? {
         guard let t = currentTime else { return nil }
-        return sentences.last { $0.startTime <= t }?.id
+        return sentences.activeID(at: t)
     }
 
     var body: some View {
@@ -484,26 +539,67 @@ struct TranscriptSearchNavigationBar: View {
 // MARK: - Full Transcript Sheet Content
 
 /// Full-screen transcript sheet. Used by ExpandedPlayerView.
+///
+/// Sentences are passed in pre-grouped (cached on the VM) — we don't regroup
+/// per body render. Search runs against the full sentence list and, to catch
+/// queries that straddle a sentence boundary (common in CJK where there are
+/// no word spaces), we also test each adjacent sentence pair as one joined string.
 struct FullTranscriptContent: View {
-    let segments: [TranscriptSegment]
+    let sentences: [TranscriptSentence]
     let currentTime: TimeInterval?
     @Binding var searchQuery: String
-    let filteredSegments: [TranscriptSegment]
     let onSegmentTap: (TranscriptSegment) -> Void
 
     private var settings: SubtitleSettingsManager { .shared }
 
-    private var sentences: [TranscriptSentence] {
-        TranscriptGrouping.groupIntoSentences(filteredSegments)
-    }
-
     private var activeSentenceID: Int? {
         guard let t = currentTime else { return nil }
-        return sentences.last { $0.startTime <= t }?.id
+        return sentences.activeID(at: t)
     }
 
     @State private var currentSearchIndex: Int = 0
     @State private var searchMatchIdsList: [Int] = []
+
+    private func recomputeMatches(for query: String) {
+        guard !query.isEmpty else {
+            searchMatchIdsList = []
+            currentSearchIndex = 0
+            return
+        }
+
+        // Sentence-level matches.
+        var matched = Set<Int>()
+        var ordered: [Int] = []
+        for sentence in sentences where sentence.text.localizedStandardContains(query) {
+            if matched.insert(sentence.id).inserted {
+                ordered.append(sentence.id)
+            }
+        }
+
+        // Boundary-spanning matches: join each adjacent pair and test the joined
+        // text. CJK-aware joining ensures e.g. "海峽過路" + "費用高達" matches "過路費".
+        if sentences.count >= 2 {
+            for i in 0..<(sentences.count - 1) {
+                let a = sentences[i]
+                let b = sentences[i + 1]
+                if matched.contains(a.id) && matched.contains(b.id) { continue }
+                let joined = CJKTextUtils.joinTexts([a.text, b.text])
+                guard joined.localizedStandardContains(query) else { continue }
+                // Confirm the match actually crosses the boundary — if it lives
+                // entirely in `a` or `b` we already caught it above.
+                if !a.text.localizedStandardContains(query) || !b.text.localizedStandardContains(query) {
+                    if matched.insert(a.id).inserted { ordered.append(a.id) }
+                    if matched.insert(b.id).inserted { ordered.append(b.id) }
+                }
+            }
+            // Re-sort by appearance order in the transcript.
+            let position = Dictionary(uniqueKeysWithValues: sentences.enumerated().map { ($1.id, $0) })
+            ordered.sort { (position[$0] ?? 0) < (position[$1] ?? 0) }
+        }
+
+        searchMatchIdsList = ordered
+        currentSearchIndex = 0
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -579,16 +675,9 @@ struct FullTranscriptContent: View {
                 }
             }
         }
+        .onAppear { recomputeMatches(for: searchQuery) }
         .onChange(of: searchQuery) { _, newQuery in
-            if newQuery.isEmpty {
-                searchMatchIdsList = []
-                currentSearchIndex = 0
-            } else {
-                searchMatchIdsList = sentences.compactMap { sentence in
-                    sentence.text.localizedStandardContains(newQuery) ? sentence.id : nil
-                }
-                currentSearchIndex = 0
-            }
+            recomputeMatches(for: newQuery)
         }
     }
 }

@@ -10,9 +10,9 @@ import SwiftUI
 
 struct TranscriptToolbar: View {
     @Bindable var viewModel: EpisodeDetailViewModel
-    @FocusState.Binding var searchFocused: Bool
     @Binding var autoScrollEnabled: Bool
 
+    var onShowSearch: () -> Void
     var onShowTranslationPicker: () -> Void
     var onShowSubtitleSettings: () -> Void
     var onShowRegenerateOptions: () -> Void
@@ -22,48 +22,31 @@ struct TranscriptToolbar: View {
     @State private var showCopySuccess = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Search bar
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 14))
-                TextField(
-                    "Search transcript...",
-                    text: $viewModel.transcriptSearchQuery
-                )
-                .textFieldStyle(.plain)
-                .font(.subheadline)
-                .focused($searchFocused)
-                .submitLabel(.search)
-                if !viewModel.transcriptSearchQuery.isEmpty {
-                    Button {
-                        viewModel.transcriptSearchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 14))
+        HStack(spacing: 16) {
+            Spacer(minLength: 0)
+
+            // Search button — opens dedicated search sheet
+            Button {
+                onShowSearch()
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 20))
+                        .foregroundStyle(viewModel.transcriptSearchQuery.isEmpty ? Color.secondary : Color.blue)
+                    if !viewModel.transcriptSearchQuery.isEmpty {
+                        Circle()
+                            .fill(Color.blue)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 4, y: -4)
                     }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .glassEffect(.regular, in: .rect(cornerRadius: 10))
+            .accessibilityLabel("Search transcript")
 
-            if searchFocused || !viewModel.transcriptSearchQuery.isEmpty {
-                // Cancel search — clears query and dismisses keyboard
-                Button("Cancel") {
-                    viewModel.transcriptSearchQuery = ""
-                    searchFocused = false
-                }
-                .font(.subheadline)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else {
-                // Translate button with circular progress — shows language picker
-                Button {
-                    onShowTranslationPicker()
-                } label: {
+            // Translate button with circular progress — shows language picker
+            Button {
+                onShowTranslationPicker()
+            } label: {
                     if viewModel.translationStatus.isTranslating {
                         TranslationProgressCircle(status: viewModel.translationStatus)
                             .frame(width: 28, height: 28)
@@ -152,7 +135,7 @@ struct TranscriptToolbar: View {
                             )
                         }
                         Label(
-                            "\(viewModel.filteredTranscriptSegments.count) segments",
+                            "\(viewModel.transcriptSegments.count) segments",
                             systemImage: "text.alignleft"
                         )
                     }
@@ -189,9 +172,7 @@ struct TranscriptToolbar: View {
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityLabel("Transcript options")
-            } // end else (not searching)
         }
-        .animation(.easeInOut(duration: 0.2), value: searchFocused)
         .animation(.easeInOut(duration: 0.2), value: viewModel.transcriptSearchQuery.isEmpty)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

@@ -1642,27 +1642,6 @@ final class EpisodeDetailViewModel {
     return result
   }
 
-  /// Returns filtered segments based on search query (searches both original and translated text)
-  var filteredTranscriptSegments: [TranscriptSegment] {
-    guard !transcriptSearchQuery.isEmpty else {
-      return transcriptSegments
-    }
-
-    let query = transcriptSearchQuery
-    return transcriptSegments.filter { segment in
-      // Search in original text
-      if segment.text.localizedStandardContains(query) {
-        return true
-      }
-      // Also search in translated text if available
-      if let translatedText = segment.translatedText,
-         translatedText.localizedStandardContains(query) {
-        return true
-      }
-      return false
-    }
-  }
-
   /// Returns the currently playing segment based on playback time
   var currentSegmentId: Int? {
     guard isPlayingThisEpisode else { return nil }
@@ -1713,28 +1692,53 @@ final class EpisodeDetailViewModel {
     }
   }
 
-  /// Sentences to display: search-filtered when a query is active, otherwise
-  /// the precomputed `groupedSentences`.
+  /// Sentences to display. The transcript itself is never filtered by the
+  /// search query — search lives in a dedicated sheet that surfaces matches
+  /// as a result list. The active query still drives in-place highlighting
+  /// inside the rendered rows.
   var transcriptSentences: [TranscriptSentence] {
-    transcriptSearchQuery.isEmpty ? groupedSentences : filteredGroupedSentences
+    groupedSentences
   }
 
-  /// Search-filtered sentences (regrouped from the filtered raw segments).
-  var filteredGroupedSentences: [TranscriptSentence] {
-    guard !transcriptSearchQuery.isEmpty else { return groupedSentences }
-    return TranscriptGrouping.groupIntoSentences(filteredTranscriptSegments)
-  }
-
-  /// Update search match IDs based on current query
+  /// Update search match IDs based on current query.
+  ///
+  /// Matches single sentences, plus adjacent sentence pairs joined with
+  /// CJK-aware spacing — so a phrase that straddles a sentence boundary
+  /// (common in CJK content with no word spaces) still surfaces both rows.
   func updateSearchMatches(query: String) {
-    guard !query.isEmpty else {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else {
       searchMatchIds = []
       currentMatchIndex = 0
       return
     }
-    searchMatchIds = groupedSentences.compactMap { sentence in
-      sentence.text.localizedStandardContains(query) ? sentence.id : nil
+
+    var matched = Set<TranscriptSentence.ID>()
+    var ordered: [TranscriptSentence.ID] = []
+
+    for sentence in groupedSentences where sentence.text.localizedStandardContains(trimmed) {
+      if matched.insert(sentence.id).inserted {
+        ordered.append(sentence.id)
+      }
     }
+
+    if groupedSentences.count >= 2 {
+      for i in 0..<(groupedSentences.count - 1) {
+        let a = groupedSentences[i]
+        let b = groupedSentences[i + 1]
+        if matched.contains(a.id) && matched.contains(b.id) { continue }
+        let joined = CJKTextUtils.joinTexts([a.text, b.text])
+        guard joined.localizedStandardContains(trimmed) else { continue }
+        if !a.text.localizedStandardContains(trimmed) || !b.text.localizedStandardContains(trimmed) {
+          if matched.insert(a.id).inserted { ordered.append(a.id) }
+          if matched.insert(b.id).inserted { ordered.append(b.id) }
+        }
+      }
+      let position = Dictionary(uniqueKeysWithValues: groupedSentences.enumerated().map { ($1.id, $0) })
+      ordered.sort { (position[$0] ?? 0) < (position[$1] ?? 0) }
+    }
+
+    searchMatchIds = ordered
     currentMatchIndex = 0
   }
 

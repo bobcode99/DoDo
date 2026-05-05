@@ -25,7 +25,8 @@ struct TranscriptContentView: View {
     /// Local binding for RSSTranscriptWarningBanner — onChange bridges to callback.
     @State private var showRegenerateConfirmation = false
 
-    @FocusState private var searchFocused: Bool
+    /// Drives the dedicated search sheet.
+    @State private var showSearchSheet = false
 
     /// Current audio time when this episode is loaded; nil when it isn't.
     /// Reading audioManager.currentTime here registers @Observable observation,
@@ -44,8 +45,8 @@ struct TranscriptContentView: View {
         VStack(spacing: 0) {
             TranscriptToolbar(
                 viewModel: viewModel,
-                searchFocused: $searchFocused,
                 autoScrollEnabled: $autoScrollEnabled,
+                onShowSearch: { showSearchSheet = true },
                 onShowTranslationPicker: onShowTranslationPicker,
                 onShowSubtitleSettings: onShowSubtitleSettings,
                 onShowRegenerateOptions: onShowRegenerateConfirmation
@@ -76,6 +77,9 @@ struct TranscriptContentView: View {
         .onChange(of: viewModel.transcriptSearchQuery) { _, newQuery in
             viewModel.updateSearchMatches(query: newQuery)
         }
+        .sheet(isPresented: $showSearchSheet) {
+            TranscriptSearchSheet(viewModel: viewModel) { _ in }
+        }
     }
 
     // MARK: - Scroll Content
@@ -85,17 +89,6 @@ struct TranscriptContentView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     Color.clear.frame(height: 0).id("transcriptTop")
-
-                    if !viewModel.transcriptSearchQuery.isEmpty,
-                       !viewModel.searchMatchIds.isEmpty {
-                        TranscriptSearchNavigationBar(
-                            matchCount: viewModel.searchMatchIds.count,
-                            currentIndex: viewModel.currentMatchIndex,
-                            onPrevious: { _ = viewModel.previousMatch() },
-                            onNext: { _ = viewModel.nextMatch() }
-                        )
-                        .padding(.vertical, 4)
-                    }
 
                     SentenceBasedTranscriptView(
                         sentences: viewModel.transcriptSentences,
