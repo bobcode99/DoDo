@@ -1286,10 +1286,12 @@ final class EpisodeDetailViewModel {
 
   /// Regenerate transcript from downloaded audio, replacing any RSS transcript
   func regenerateTranscript() {
-    // Clear current transcript
+    // Clear current transcript and immediately show progress so the UI
+    // doesn't flash the completed/idle state while the job is queuing.
     transcriptSegments = []
     groupedSentences = []
     transcriptText = ""
+    transcriptState = .transcribing(progress: 0)
 
     // Mark as locally generated
     if let model = episodeModel {
