@@ -100,18 +100,21 @@ actor YapTranscriptService {
     ) async throws -> String {
         let maxLen = maxLength(for: locale)
         var components = URLComponents(url: baseURL.appending(path: "transcriptions"), resolvingAgainstBaseURL: false)!
+        let resolvedLocale = locale.map { normalizeLocale($0) }
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "format", value: "srt"),
             URLQueryItem(name: "max_length", value: "\(maxLen)")
         ]
-        if let locale {
-            queryItems.append(URLQueryItem(name: "locale", value: normalizeLocale(locale)))
+        if let loc = resolvedLocale {
+            queryItems.append(URLQueryItem(name: "locale", value: loc))
         }
         components.queryItems = queryItems
 
         guard let url = components.url else {
             throw YapError.invalidServerURL
         }
+
+        logger.info("[YapServer] submitJob locale_in=\(locale ?? "<nil>") locale_out=\(resolvedLocale ?? "<omitted>") url=\(url.absoluteString)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -145,14 +148,17 @@ actor YapTranscriptService {
     ) async throws -> String {
         let url = baseURL.appending(path: "transcriptions")
 
+        let resolvedLocale = locale.map { normalizeLocale($0) }
         var body: [String: Any] = [
             "url": remoteURL,
             "format": "srt",
             "max_length": maxLength(for: locale)
         ]
-        if let locale {
-            body["locale"] = normalizeLocale(locale)
+        if let loc = resolvedLocale {
+            body["locale"] = loc
         }
+
+        logger.info("[YapServer] submitRemoteURLJob locale_in=\(locale ?? "<nil>") locale_out=\(resolvedLocale ?? "<omitted>") body=\(body)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

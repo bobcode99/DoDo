@@ -1261,6 +1261,8 @@ final class EpisodeDetailViewModel {
       selectedTranscriptLanguage ?? getPodcastLanguage()
     }
 
+    logger.info("[generateTranscript] engine=\(effectiveEngine.rawValue) selectedLang=\(self.selectedTranscriptLanguage ?? "<nil>") resolvedLang=\(language ?? "<nil>") podcastLang=\(self.podcastLanguage)")
+
     TranscriptManager.shared.queueTranscript(
       episodeTitle: episode.title,
       podcastTitle: podcastTitle,

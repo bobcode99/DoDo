@@ -370,6 +370,8 @@ class TranscriptManager {
         // No model download needed — jump straight to transcribing
         activeJobs[job.id]?.status = .transcribing(progress: 0)
 
+        logger.info("[YapServer] job.language=\(job.language ?? "<nil>") for \(job.episodeTitle)")
+
         let serverURL = await MainActor.run { YapServerSettings.shared.serverURL }
         let apiKey = await MainActor.run { YapServerSettings.shared.apiKey }
         let key = apiKey.isEmpty ? nil : apiKey
