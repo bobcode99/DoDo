@@ -99,11 +99,9 @@ struct LibraryView: View {
       showError = newValue != nil
     }
     .onChange(of: subscribedPodcasts) { _, newPodcasts in
-      if Set(newPodcasts.map(\.id)) != Set(sortedPodcasts.map(\.id)) {
-        viewModel.setPodcasts(newPodcasts)
-        withAnimation(.easeInOut(duration: 0.3)) {
-          updateSortedPodcasts()
-        }
+      viewModel.setPodcasts(newPodcasts)
+      withAnimation(.easeInOut(duration: 0.3)) {
+        updateSortedPodcasts()
       }
     }
 

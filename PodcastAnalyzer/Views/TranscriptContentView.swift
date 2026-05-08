@@ -51,7 +51,6 @@ struct TranscriptContentView: View {
                 onShowSubtitleSettings: onShowSubtitleSettings,
                 onShowRegenerateOptions: onShowRegenerateConfirmation
             )
-            .background(.ultraThinMaterial)
             Divider()
 
             if viewModel.transcriptSource == "rss" && viewModel.hasTranscript {

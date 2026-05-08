@@ -176,6 +176,7 @@ struct TranscriptToolbar: View {
         .animation(.easeInOut(duration: 0.2), value: viewModel.transcriptSearchQuery.isEmpty)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
         .alert("Copied", isPresented: $showCopySuccess) {
             Button("OK", role: .cancel) {}
         } message: {

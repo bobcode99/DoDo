@@ -95,6 +95,21 @@ struct UpNextSuggestionEngine {
     /// Episodes older than this with no plays receive a small penalty.
     static let stalePenaltyThresholdDays: Double = 60
 
+    /// Floor multiplier for freshness when podcast engagement is zero.
+    static let freshnessEngagementFloor: Double = 0.3
+
+    /// Bonus for new episodes (within newEpisodeThresholdDays) from an engaged podcast.
+    static let bonusNewEpisodeEngaged: Double = 20
+
+    /// Age threshold (days) for "new episode" engaged-podcast bonus.
+    static let newEpisodeThresholdDays: Double = 3
+
+    /// Bonus for in-progress episodes that were recently played.
+    static let bonusInProgressRecency: Double = 15
+
+    /// Window (days) over which in-progress recency bonus decays to zero.
+    static let inProgressRecencyWindowDays: Double = 7
+
     // MARK: Score weights
 
     static let bonusInProgressBase: Double = 80    // always beats non-in-progress
@@ -161,20 +176,36 @@ struct UpNextSuggestionEngine {
             s += progressRatio * Self.bonusInProgressProgress
         }
 
-        // ── Freshness ─────────────────────────────────────────────────────
-        if let pubDate = episodeInfo.pubDate {
-            let ageInDays = now.timeIntervalSince(pubDate) / 86_400
-            let clamped = min(max(ageInDays, 0), 90)
-            let freshness = max(0, 1.0 - clamped / Self.freshnessHalfLifeDays)
-            s += freshness * Self.weightFreshness
+        // ── In-progress recency bonus (recently-played episodes rank higher) ──
+        if isInProgress, let lastPlay = model?.lastPlayedDate {
+            let daysSince = now.timeIntervalSince(lastPlay) / 86_400
+            let recencyFactor = max(0, 1.0 - daysSince / Self.inProgressRecencyWindowDays)
+            s += recencyFactor * Self.bonusInProgressRecency
         }
 
-        // ── Podcast engagement ────────────────────────────────────────────
+        // ── Podcast engagement (compute early — used by freshness below) ──────
         let engagementFactor = min(
             Double(input.podcastTotalPlayCount) / Double(Self.engagementSaturationPlays),
             1.0
         )
         s += engagementFactor * Self.weightEngagement
+
+        // ── Freshness (gated by engagement to reduce noise from cold podcasts) ─
+        if let pubDate = episodeInfo.pubDate {
+            let ageInDays = now.timeIntervalSince(pubDate) / 86_400
+            let clamped = min(max(ageInDays, 0), 90)
+            let rawFreshness = max(0, 1.0 - clamped / Self.freshnessHalfLifeDays)
+            let scaledFreshness = rawFreshness * (Self.freshnessEngagementFloor + (1 - Self.freshnessEngagementFloor) * engagementFactor)
+            s += scaledFreshness * Self.weightFreshness
+        }
+
+        // ── New episode bonus for engaged podcasts ────────────────────────────
+        if let pubDate = episodeInfo.pubDate {
+            let ageInDays = now.timeIntervalSince(pubDate) / 86_400
+            if ageInDays <= Self.newEpisodeThresholdDays {
+                s += engagementFactor * Self.bonusNewEpisodeEngaged
+            }
+        }
 
         // ── Downloaded ───────────────────────────────────────────────────
         if input.episode.isDownloaded {

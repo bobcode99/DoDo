@@ -623,16 +623,18 @@ final class DownloadManager {
       }
     }
 
-    // Check non-observable in-flight progress first (avoids @Observable subscription
-    // for the common hot path of active downloads updating progress).
+    // Always read downloadStates first to establish the @Observable subscription.
+    // This ensures any view calling this method re-renders on state transitions
+    // (start / finish / fail) even when inFlightProgress is non-nil.
+    let persistedState = downloadStates[episodeKey]
+
+    // Return in-flight progress from the non-observable store so progress ticks
+    // don't trigger cascading view re-renders (see inFlightProgress comments above).
     if let progress = inFlightProgress[episodeKey] {
       return .downloading(progress: progress)
     }
 
-    // Fall through to @Observable dictionary for state transitions.
-    // This creates an observation dependency, but only fires on actual
-    // state transitions (start/finish/fail), not on every progress tick.
-    guard let state = downloadStates[episodeKey] else {
+    guard let state = persistedState else {
       return .notDownloaded
     }
 

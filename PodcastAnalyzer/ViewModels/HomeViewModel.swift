@@ -119,6 +119,16 @@ final class HomeViewModel {
     return FileManager.default.fileExists(atPath: path)
   }
 
+  private static func isEpisodeInProgress(model: EpisodeDownloadModel?) -> Bool {
+    guard let model else { return false }
+    let position = model.lastPlaybackPosition
+    let duration = model.duration
+    if duration > 0 {
+      return position / duration > UpNextSuggestionEngine.inProgressMinRatio
+    }
+    return position > UpNextSuggestionEngine.inProgressMinSeconds
+  }
+
   /// Whether the "For You" section should be shown (cached from UserDefaults)
   var showForYouRecommendations: Bool {
     UserDefaults.standard.object(forKey: "showForYouRecommendations") == nil ||
@@ -327,13 +337,20 @@ final class HomeViewModel {
 
     for podcastModel in podcastInfoModelList {
       let podcastTitle = podcastModel.podcastInfo.title
+      var unstartedCount = 0
+      let maxUnstarted = 10
 
-      for episode in podcastModel.podcastInfo.episodes.prefix(10) {
+      for episode in podcastModel.podcastInfo.episodes {
         let key = Self.makeEpisodeKey(podcastTitle: podcastTitle, episodeTitle: episode.title)
         let model = modelsByKey[key]
 
-        // Skip completed episodes
         guard model?.isCompleted != true else { continue }
+
+        let inProgress = Self.isEpisodeInProgress(model: model)
+        if !inProgress {
+          guard unstartedCount < maxUnstarted else { continue }
+          unstartedCount += 1
+        }
 
         let libraryEpisode = LibraryEpisode(
           id: key,
@@ -411,8 +428,10 @@ final class HomeViewModel {
     }
     logger.info("Loaded \(self.upNextEpisodes.count) up next episodes (scored)")
 
-    // Populate auto-play candidates from up next episodes
+    // Populate auto-play candidates from up next episodes, excluding the currently playing episode
+    let currentPlayingId = EnhancedAudioManager.shared.currentEpisode?.id
     let autoPlayEpisodes = upNextEpisodes.compactMap { episode -> PlaybackEpisode? in
+      guard episode.id != currentPlayingId else { return nil }
       guard let audioURL = episode.episodeInfo.audioURL else { return nil }
       return PlaybackEpisode(
         id: episode.id,
