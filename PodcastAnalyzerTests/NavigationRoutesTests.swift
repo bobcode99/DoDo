@@ -260,7 +260,7 @@ struct ExpandedPlayerToEpisodeDetailRouteTests {
     /// Mirrors the .episodeDetail branch inside handleExpandedPlayerNavigation in ContentView.
     private func makeRouteFrom(navigation: ExpandedPlayerNavigation) -> EpisodeDetailRoute? {
         switch navigation {
-        case let .episodeDetail(episode, podcastTitle, imageURL):
+        case let .episodeDetail(episode, podcastTitle, imageURL, _):
             return EpisodeDetailRoute(
                 episode: episode,
                 podcastTitle: podcastTitle,
@@ -277,7 +277,8 @@ struct ExpandedPlayerToEpisodeDetailRouteTests {
         let navigation = ExpandedPlayerNavigation.episodeDetail(
             episode,
             podcastTitle: "Player Podcast",
-            imageURL: "https://example.com/player-art.jpg"
+            imageURL: "https://example.com/player-art.jpg",
+            language: nil
         )
 
         let route = makeRouteFrom(navigation: navigation)
@@ -309,7 +310,8 @@ struct ExpandedPlayerToEpisodeDetailRouteTests {
         let navigation = ExpandedPlayerNavigation.episodeDetail(
             episode,
             podcastTitle: "Podcast",
-            imageURL: nil
+            imageURL: nil,
+            language: nil
         )
 
         let route = makeRouteFrom(navigation: navigation)
@@ -355,7 +357,8 @@ struct ExpandedPlayerToPodcastBrowseRouteTests {
         let navigation = ExpandedPlayerNavigation.episodeDetail(
             makeEpisode(),
             podcastTitle: "Podcast",
-            imageURL: nil
+            imageURL: nil,
+            language: nil
         )
         let route = makeRouteFrom(navigation: navigation)
         #expect(route == nil)
@@ -543,12 +546,13 @@ struct NavigationPathProgrammaticPushTests {
         let navigation = ExpandedPlayerNavigation.episodeDetail(
             episode,
             podcastTitle: "Player Podcast",
-            imageURL: "https://example.com/art.jpg"
+            imageURL: "https://example.com/art.jpg",
+            language: nil
         )
 
         // Mirrors handleExpandedPlayerNavigation in ContentView
         switch navigation {
-        case let .episodeDetail(ep, podcastTitle, imageURL):
+        case let .episodeDetail(ep, podcastTitle, imageURL, _):
             path.append(EpisodeDetailRoute(
                 episode: ep,
                 podcastTitle: podcastTitle,

@@ -16,6 +16,7 @@ struct UpNextListView: View {
   let onTogglePlayed: (LibraryEpisode) -> Void
   let onDownload: (LibraryEpisode) -> Void
   let onDeleteDownload: (LibraryEpisode) -> Void
+  let onDismiss: (LibraryEpisode) -> Void
 
   @Environment(\.modelContext) private var modelContext
   @State private var episodeToDelete: LibraryEpisode?
@@ -25,46 +26,15 @@ struct UpNextListView: View {
   // Access singleton directly to determine now-playing without creating a timer
   private var audioManager: EnhancedAudioManager { .shared }
 
-  // MARK: Tier partitioning
-  // Episodes arrive pre-ordered by HomeViewModel:
-  //   [now-playing] → [continue-listening (in-progress)] → [suggestions (unstarted)]
-  // We re-derive the tiers here so the list can show section headers.
-
+  // Episodes arrive pre-ordered by HomeViewModel as a single composite-scored list:
+  // now-playing pinned at position 0, then everything else by score (which already
+  // privileges fresh-from-engaged > in-progress > suggestions).
   private var nowPlayingId: String? { audioManager.currentEpisode?.id }
-
-  private var nowPlayingEpisode: LibraryEpisode? {
-    guard let id = nowPlayingId else { return nil }
-    return episodes.first { $0.id == id }
-  }
-
-  private var continueListeningEpisodes: [LibraryEpisode] {
-    episodes.filter { $0.id != nowPlayingId && $0.hasProgress }
-  }
-
-  private var suggestionEpisodes: [LibraryEpisode] {
-    episodes.filter { $0.id != nowPlayingId && !$0.hasProgress }
-  }
 
   var body: some View {
     List {
-      if let playing = nowPlayingEpisode {
-        Section("Now Playing") {
-          episodeRow(playing)
-        }
-      }
-      if !continueListeningEpisodes.isEmpty {
-        Section("Continue Listening") {
-          ForEach(continueListeningEpisodes) { episode in
-            episodeRow(episode)
-          }
-        }
-      }
-      if !suggestionEpisodes.isEmpty {
-        Section("Up Next") {
-          ForEach(suggestionEpisodes) { episode in
-            episodeRow(episode)
-          }
-        }
+      ForEach(episodes) { episode in
+        episodeRow(episode)
       }
     }
     .listStyle(.plain)
@@ -107,7 +77,8 @@ struct UpNextListView: View {
         episodeToDelete = episode
         showDeleteConfirmation = true
       },
-      onTogglePlayed: { onTogglePlayed(episode) }
+      onTogglePlayed: { onTogglePlayed(episode) },
+      onRemoveFromUpNext: episode.id == nowPlayingId ? nil : { onDismiss(episode) }
     )
     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
   }
@@ -173,7 +144,8 @@ struct UpNextListView: View {
       onToggleStar: { _ in },
       onTogglePlayed: { _ in },
       onDownload: { _ in },
-      onDeleteDownload: { _ in }
+      onDeleteDownload: { _ in },
+      onDismiss: { _ in }
     )
   }
   .modelContainer(for: PodcastInfoModel.self, inMemory: true)

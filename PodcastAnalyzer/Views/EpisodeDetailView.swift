@@ -42,6 +42,8 @@ struct EpisodeDetailView: View {
 
     // Inline timestamp tap handling
     @State private var tappedTimestampSeconds: TimeInterval?
+    @State private var timestampTapX: CGFloat = 0
+    @State private var timestampTapY: CGFloat = 200
 
     // Header collapse state
     @State private var isHeaderVisible: Bool = true
@@ -104,6 +106,45 @@ struct EpisodeDetailView: View {
                         .padding(.trailing, 12)
                         .padding(.top, 8)
                         .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .overlay {
+                    if let seconds = tappedTimestampSeconds {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { tappedTimestampSeconds = nil }
+                            .overlay {
+                                GeometryReader { geo in
+                                    let popupWidth: CGFloat = 240
+                                    let popupHeight: CGFloat = 110
+                                    let x = min(
+                                        max(timestampTapX, popupWidth / 2 + 16),
+                                        geo.size.width - popupWidth / 2 - 16
+                                    )
+                                    let showAbove = timestampTapY > geo.size.height - popupHeight - 60
+                                    let y = showAbove
+                                        ? timestampTapY - popupHeight / 2 - 10
+                                        : timestampTapY + popupHeight / 2 + 10
+
+                                    TimestampPopup(
+                                        seconds: seconds,
+                                        onPlay: {
+                                            viewModel.seekToTime(seconds)
+                                            tappedTimestampSeconds = nil
+                                        },
+                                        onShare: {
+                                            viewModel.shareTimestampedLink(seconds: seconds)
+                                            tappedTimestampSeconds = nil
+                                        }
+                                    )
+                                    .position(x: x, y: y)
+                                    .transition(
+                                        .scale(scale: 0.88, anchor: showAbove ? .bottom : .top)
+                                        .combined(with: .opacity)
+                                    )
+                                }
+                            }
+                            .animation(.spring(response: 0.22, dampingFraction: 0.75), value: tappedTimestampSeconds != nil)
                     }
                 }
                 .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
@@ -327,6 +368,13 @@ struct EpisodeDetailView: View {
                 Color.clear.frame(height: 0).id("summaryTop")
                 summaryContent
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onEnded {
+                        timestampTapX = $0.location.x
+                        timestampTapY = $0.location.y
+                    }
+            )
             .trackScrollForHeaderCollapse(
                 isHeaderVisible: $isHeaderVisible,
                 lastOffset: $lastScrollOffset,
@@ -383,25 +431,37 @@ struct EpisodeDetailView: View {
             }
             return .systemAction
         })
-        .confirmationDialog(
-            "Timestamp",
-            isPresented: Binding(
-                get: { tappedTimestampSeconds != nil },
-                set: { if !$0 { tappedTimestampSeconds = nil } }
-            )
-        ) {
-            if let seconds = tappedTimestampSeconds {
-                Button("Play from \(TimestampUtils.formatSeconds(seconds))") {
-                    viewModel.seekToTime(seconds)
-                }
-                Button("Share") {
-                    viewModel.shareTimestampedLink(seconds: seconds)
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-        }
     }
 
+}
+
+private struct TimestampPopup: View {
+    let seconds: TimeInterval
+    let onPlay: () -> Void
+    let onShare: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onPlay) {
+                Label("Play from \(TimestampUtils.formatSeconds(seconds))", systemImage: "play.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 13)
+            }
+            Divider().padding(.leading, 16)
+            Button(action: onShare) {
+                Label("Share...", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 13)
+            }
+        }
+        .font(.body)
+        .foregroundStyle(.primary)
+        .frame(width: 240)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.2), radius: 16, y: 6)
+    }
 }
 
 private struct TranscriptRegenerateSheet: View {

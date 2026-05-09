@@ -40,6 +40,11 @@ class EpisodeDownloadModel {
   var downloadedDate: Date?
   var fileSize: Int64 = 0
 
+  /// When non-nil, the user dismissed this episode from Up Next via swipe-to-Remove.
+  /// The list filter resurfaces it if `lastPlayedDate` later moves past this timestamp,
+  /// matching Apple Podcasts' behavior where replaying a removed item brings it back.
+  var upNextDismissedAt: Date?
+
   // Transcript metadata
   var transcriptSource: String = ""     // "" = unknown, "rss" = from RSS, "local" = generated locally
 
@@ -68,7 +73,8 @@ class EpisodeDownloadModel {
     fileSize: Int64 = 0,
     imageURL: String? = nil,
     pubDate: Date? = nil,
-    autoDownloadEnabled: Bool = true
+    autoDownloadEnabled: Bool = true,
+    upNextDismissedAt: Date? = nil
   ) {
     // Use Unit Separator (U+001F) as delimiter - same as DownloadManager
     // Fall back to | for backward compatibility with existing data
@@ -91,6 +97,7 @@ class EpisodeDownloadModel {
     self.imageURL = imageURL
     self.pubDate = pubDate
     self.autoDownloadEnabled = autoDownloadEnabled
+    self.upNextDismissedAt = upNextDismissedAt
   }
 
   /// Progress percentage (0.0 to 1.0)

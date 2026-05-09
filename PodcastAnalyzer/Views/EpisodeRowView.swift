@@ -25,6 +25,9 @@ struct EpisodeRowView: View {
   let onDownload: () -> Void
   let onDeleteRequested: () -> Void
   let onTogglePlayed: () -> Void
+  /// Optional Apple-Podcasts-style "Remove from Up Next" action.
+  /// Nil for rows outside Up Next; the swipe button is hidden when nil.
+  let onRemoveFromUpNext: (() -> Void)?
 
   /// When non-nil, this pre-computed download state is used instead of reading
   /// directly from DownloadManager. Pass this from a parent that already has the
@@ -45,7 +48,8 @@ struct EpisodeRowView: View {
     onToggleStar: @escaping () -> Void,
     onDownload: @escaping () -> Void,
     onDeleteRequested: @escaping () -> Void,
-    onTogglePlayed: @escaping () -> Void
+    onTogglePlayed: @escaping () -> Void,
+    onRemoveFromUpNext: (() -> Void)? = nil
   ) {
     self.episode = episode
     self.podcastTitle = podcastTitle
@@ -59,6 +63,7 @@ struct EpisodeRowView: View {
     self.onDownload = onDownload
     self.onDeleteRequested = onDeleteRequested
     self.onTogglePlayed = onTogglePlayed
+    self.onRemoveFromUpNext = onRemoveFromUpNext
   }
 
   /// Convenience initializer for LibraryEpisode (used in Library views)
@@ -70,7 +75,8 @@ struct EpisodeRowView: View {
     onToggleStar: @escaping () -> Void,
     onDownload: @escaping () -> Void,
     onDeleteRequested: @escaping () -> Void,
-    onTogglePlayed: @escaping () -> Void
+    onTogglePlayed: @escaping () -> Void,
+    onRemoveFromUpNext: (() -> Void)? = nil
   ) {
     self.episode = libraryEpisode.episodeInfo
     self.podcastTitle = libraryEpisode.podcastTitle
@@ -84,6 +90,7 @@ struct EpisodeRowView: View {
     self.onDownload = onDownload
     self.onDeleteRequested = onDeleteRequested
     self.onTogglePlayed = onTogglePlayed
+    self.onRemoveFromUpNext = onRemoveFromUpNext
   }
 
   @Environment(\.modelContext) private var modelContext
@@ -359,6 +366,14 @@ struct EpisodeRowView: View {
 
       // Status indicators
       HStack(spacing: 4) {
+        if let date = episode.pubDate,
+           Date().timeIntervalSince(date) < 3 * 86_400,
+           !isCompleted {
+          Image(systemName: "sparkle")
+            .font(.system(size: 10))
+            .foregroundStyle(.blue)
+        }
+
         if isStarred {
           Image(systemName: "star.fill")
             .font(.system(size: 10))
@@ -463,6 +478,13 @@ struct EpisodeRowView: View {
 
   @ViewBuilder
   private var trailingSwipeActions: some View {
+    if let onRemoveFromUpNext {
+      Button(role: .destructive, action: onRemoveFromUpNext) {
+        Label("Remove", systemImage: "minus.circle")
+      }
+      .tint(.gray)
+    }
+
     Button(action: onToggleStar) {
       Label(
         isStarred ? "Unstar" : "Star",

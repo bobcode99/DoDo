@@ -132,12 +132,7 @@ final class HomeViewModel {
 
   private static func isEpisodeInProgress(model: EpisodeDownloadModel?) -> Bool {
     guard let model else { return false }
-    let position = model.lastPlaybackPosition
-    let duration = model.duration
-    if duration > 0 {
-      return position / duration > UpNextSuggestionEngine.inProgressMinRatio
-    }
-    return position > UpNextSuggestionEngine.inProgressMinSeconds
+    return model.lastPlaybackPosition > UpNextSuggestionEngine.inProgressMinSeconds
   }
 
   /// Whether the "For You" section should be shown (cached from UserDefaults)
@@ -385,43 +380,31 @@ final class HomeViewModel {
       }
     }
 
-    // ── Score a large pool so all tiers have enough candidates ─────────────
+    // ── Score a large pool; the engine returns a single composite-ordered list ──
     let allScored = UpNextSuggestionEngine().score(inputs: inputs, limit: 50)
     var scoredByKey: [String: ScoredEpisode] = [:]
     for s in allScored { scoredByKey[s.id] = s }
 
-    // ── Tier 1: currently playing (pinned to position 0) ────────────────────
+    // Now-playing key (pinned to position 0 below).
     let currentEpisode = EnhancedAudioManager.shared.currentEpisode
     let currentKey: String? = currentEpisode.map {
       Self.makeEpisodeKey(podcastTitle: $0.podcastTitle, episodeTitle: $0.title)
     }
 
-    // ── Tier 2: Continue Listening — in-progress episodes, newest-played first ─
-    // Any episode whose scoring reason is .inProgress (position > threshold) and
-    // is NOT the currently playing one lands here.  Sorted by lastPlayedDate DESC
-    // so the episode you just switched away from always appears at position 1.
-    var continueListening: [ScoredEpisode] = []
-
-    // ── Tier 3: Suggestions — unstarted, highest score first ─────────────────
-    var suggestions: [ScoredEpisode] = []
-
-    for scored in allScored {
-      guard scored.episode.id != currentKey else { continue }
-      if case .inProgress = scored.reason {
-        continueListening.append(scored)
-      } else if suggestions.count < 15 {
-        suggestions.append(scored)
+    // Apple-Podcasts-style flat ordering: take the engine's composite-sorted output,
+    // exclude the current episode, and filter dismissed rows whose dismissal hasn't
+    // been superseded by a later play (replaying resurfaces a removed episode).
+    let flat = allScored.filter { scored in
+      guard scored.episode.id != currentKey else { return false }
+      guard let model = modelsByKey[scored.episode.id] else { return true }
+      if let dismissed = model.upNextDismissedAt {
+        let lastPlay = model.lastPlayedDate ?? .distantPast
+        return dismissed <= lastPlay
       }
+      return true
     }
 
-    continueListening.sort {
-      let aDate = modelsByKey[$0.episode.id]?.lastPlayedDate ?? .distantPast
-      let bDate = modelsByKey[$1.episode.id]?.lastPlayedDate ?? .distantPast
-      return aDate > bDate
-    }
-
-    // Build ordered list: Tier 2 → Tier 3 (Tier 1 prepended below)
-    var result: [LibraryEpisode] = (continueListening + suggestions).map(\.episode)
+    var result: [LibraryEpisode] = flat.map(\.episode)
 
     // ── Prepend Tier 1 ────────────────────────────────────────────────────────
     if let currentEpisode {
@@ -471,7 +454,10 @@ final class HomeViewModel {
       return ScoredEpisode(episode: episode, downloadModel: modelsByKey[episode.id],
                            score: .infinity, reason: .none, progressRatio: 0)
     }
-    logger.info("Loaded \(self.upNextEpisodes.count) up-next episodes (continueListening=\(continueListening.count), suggestions=\(suggestions.count))")
+    let inProgressCount = scoredUpNextEpisodes.reduce(into: 0) { count, scored in
+      if case .inProgress = scored.reason { count += 1 }
+    }
+    logger.info("Loaded \(self.upNextEpisodes.count) up-next episodes (inProgress=\(inProgressCount))")
 
     // Populate auto-play candidates from up next episodes, excluding the currently playing episode
     let currentPlayingId = EnhancedAudioManager.shared.currentEpisode?.id
@@ -548,6 +534,33 @@ final class HomeViewModel {
       try? context.save()
     }
     // Post notification — the completion observer will reload Up Next
+    NotificationCenter.default.post(name: .episodeCompletionChanged, object: nil)
+  }
+
+  /// Hide an episode from Up Next without marking it played (Apple Podcasts "Remove" semantics).
+  /// Replaying the episode resurfaces it because `lastPlayedDate` overtakes `upNextDismissedAt`.
+  func dismissFromUpNext(_ episode: LibraryEpisode) {
+    guard let context = modelContext else { return }
+
+    let key = Self.makeEpisodeKey(podcastTitle: episode.podcastTitle, episodeTitle: episode.episodeInfo.title)
+    let descriptor = FetchDescriptor<EpisodeDownloadModel>(
+      predicate: #Predicate { $0.id == key }
+    )
+
+    if let model = try? context.fetch(descriptor).first {
+      model.upNextDismissedAt = Date()
+    } else {
+      let model = EpisodeDownloadModel(
+        episodeTitle: episode.episodeInfo.title,
+        podcastTitle: episode.podcastTitle,
+        audioURL: episode.episodeInfo.audioURL ?? "",
+        imageURL: episode.imageURL,
+        pubDate: episode.episodeInfo.pubDate,
+        upNextDismissedAt: Date()
+      )
+      context.insert(model)
+    }
+    try? context.save()
     NotificationCenter.default.post(name: .episodeCompletionChanged, object: nil)
   }
 

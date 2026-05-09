@@ -113,7 +113,8 @@ struct HomeView: View {
             episodeTitle: $0.episodeInfo.title,
             podcastTitle: $0.podcastTitle
           )
-        }
+        },
+        onDismiss: { viewModel.dismissFromUpNext($0) }
       )
     }
     .navigationDestination(for: AppleRSSPodcast.self) { podcast in

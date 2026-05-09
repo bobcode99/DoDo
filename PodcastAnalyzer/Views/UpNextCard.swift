@@ -56,7 +56,7 @@ struct UpNextCard: View {
 
       // Suggestion reason badge
       switch reason {
-      case .inProgress, .starred, .downloaded, .listenOften, .newEpisode, .recentPodcast:
+      case .inProgress, .starred, .downloaded:
         HStack(spacing: 3) {
           Image(systemName: reason.systemImage)
             .font(.system(size: 9))
