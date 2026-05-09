@@ -94,7 +94,7 @@ struct TranscriptContentView: View {
                         currentTime: currentTime,
                         searchQuery: viewModel.transcriptSearchQuery,
                         onSegmentTap: viewModel.seekToSegment,
-                        subtitleMode: SubtitleSettingsManager.shared.displayMode,
+                        subtitleMode: viewModel.effectiveDisplayMode,
                         searchMatchIds: Set(viewModel.searchMatchIds),
                         currentSearchMatchId: viewModel.searchMatchIds.isEmpty
                             ? nil

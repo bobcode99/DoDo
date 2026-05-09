@@ -552,6 +552,16 @@ struct FullTranscriptContent: View {
 
     private var settings: SubtitleSettingsManager { .shared }
 
+    private var hasTranslation: Bool {
+        sentences.contains { $0.translatedText != nil }
+    }
+
+    private var effectiveDisplayMode: SubtitleDisplayMode {
+        let stored = settings.displayMode
+        guard stored.requiresTranslation else { return stored }
+        return hasTranslation ? stored : .originalOnly
+    }
+
     private var activeSentenceID: Int? {
         guard let t = currentTime else { return nil }
         return sentences.activeID(at: t)
@@ -637,7 +647,7 @@ struct FullTranscriptContent: View {
                             searchQuery: searchQuery,
                             onSegmentTap: onSegmentTap,
                             showTimestamps: false,
-                            subtitleMode: settings.displayMode,
+                            subtitleMode: effectiveDisplayMode,
                             searchMatchIds: Set(searchMatchIdsList),
                             currentSearchMatchId: searchMatchIdsList.isEmpty ? nil : searchMatchIdsList[currentSearchIndex]
                         )

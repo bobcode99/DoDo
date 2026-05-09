@@ -14,6 +14,14 @@ struct SubtitleSettingsSheet: View {
   /// Whether translation exists for the current episode
   var hasTranslation: Bool = false
 
+  /// Effective mode clamps to .originalOnly when translation is unavailable,
+  /// so a saved dual-subtitle preference doesn't look "selected" on untranslated episodes.
+  private var effectiveMode: SubtitleDisplayMode {
+    let stored = settings.displayMode
+    guard stored.requiresTranslation else { return stored }
+    return hasTranslation ? stored : .originalOnly
+  }
+
   var body: some View {
     NavigationStack {
       Form {
@@ -27,7 +35,7 @@ struct SubtitleSettingsSheet: View {
                 Label(mode.displayName, systemImage: mode.icon)
                   .foregroundStyle(mode.requiresTranslation && !hasTranslation ? .tertiary : .primary)
                 Spacer()
-                if settings.displayMode == mode {
+                if effectiveMode == mode {
                   Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
                 }
@@ -39,7 +47,7 @@ struct SubtitleSettingsSheet: View {
           Text("Display Mode")
         } footer: {
           if hasTranslation {
-            Text(settings.displayMode.description)
+            Text(effectiveMode.description)
           } else {
             Text("Translate the transcript to unlock additional display modes")
           }

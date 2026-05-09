@@ -899,21 +899,51 @@ final class EpisodeDetailViewModel {
 
     self.translationStatus = .translating(progress: 0, completed: 0, total: total)
 
-    var translatedSegments = segments
+    // Extract Sendable Strings before the task group to avoid capture issues
+    // with TranscriptSegment. Child tasks inherit @MainActor isolation so
+    // accessing `session` across tasks is safe — no cross-actor boundary.
+    let texts = segments.map(\.text)
+    var translatedTexts = [Int: String](minimumCapacity: total)
+    var completedCount = 0
+    let concurrencyLimit = min(8, total)
 
-    // Translate one by one to avoid Sendable issues with batch
-    for (index, segment) in segments.enumerated() {
-      do {
-        let response = try await session.translate(segment.text)
-        translatedSegments[index].translatedText = response.targetText
+    do {
+      try await withThrowingTaskGroup(of: (Int, String).self) { group in
+        var nextIndex = 0
 
-        let progress = Double(index + 1) / Double(total)
-        self.translationStatus = .translating(progress: progress, completed: index + 1, total: total)
-      } catch {
-        logger.error("Translation failed for segment \(index): \(error.localizedDescription)")
-        self.translationStatus = .failed(error.localizedDescription)
-        return
+        // Seed the initial batch
+        while nextIndex < concurrencyLimit {
+          let i = nextIndex
+          group.addTask { (i, try await session.translate(texts[i]).targetText) }
+          nextIndex += 1
+        }
+
+        // Collect results, updating progress and keeping the pipeline full
+        for try await (i, translated) in group {
+          try Task.checkCancellation()
+          translatedTexts[i] = translated
+          completedCount += 1
+          let progress = Double(completedCount) / Double(total)
+          self.translationStatus = .translating(progress: progress, completed: completedCount, total: total)
+
+          if nextIndex < total {
+            let i = nextIndex
+            group.addTask { (i, try await session.translate(texts[i]).targetText) }
+            nextIndex += 1
+          }
+        }
       }
+    } catch is CancellationError {
+      return
+    } catch {
+      logger.error("Translation failed: \(error.localizedDescription)")
+      self.translationStatus = .failed(error.localizedDescription)
+      return
+    }
+
+    var translatedSegments = segments
+    for (i, text) in translatedTexts {
+      translatedSegments[i].translatedText = text
     }
 
     // Save translated segments using selected language or settings default
@@ -1013,6 +1043,7 @@ final class EpisodeDetailViewModel {
 
   /// Load existing translations for current segments
   func loadExistingTranslations() {
+    guard !transcriptSegments.isEmpty else { return }
     let settings = SubtitleSettingsManager.shared
     let targetLang = settings.targetLanguage.languageIdentifier
 
@@ -1040,6 +1071,14 @@ final class EpisodeDetailViewModel {
   /// Check if translation exists for current language
   var hasExistingTranslation: Bool {
     transcriptSegments.contains { $0.translatedText != nil }
+  }
+
+  /// The display mode to actually render — falls back to .originalOnly when no translation is available,
+  /// so episodes without translation never show a confusing "dual subtitle" layout.
+  var effectiveDisplayMode: SubtitleDisplayMode {
+    let stored = subtitleSettings.displayMode
+    guard stored.requiresTranslation else { return stored }
+    return hasExistingTranslation ? stored : .originalOnly
   }
 
   func toggleStar() {
@@ -1384,9 +1423,35 @@ final class EpisodeDetailViewModel {
       wordTimingsData = timingsData
       transcriptState = .completed
       parseTranscriptSegments()
+      await loadTranslationsAfterParsing()
     } catch {
       logger.error("Failed to load transcript: \(error.localizedDescription)")
       transcriptState = .error("Failed to load transcript: \(error.localizedDescription)")
+    }
+  }
+
+  private func loadTranslationsAfterParsing() async {
+    guard !transcriptSegments.isEmpty else { return }
+    let settings = SubtitleSettingsManager.shared
+    let targetLang = settings.targetLanguage.languageIdentifier
+
+    if let translated = await translationService.loadExistingTranslation(
+      segments: transcriptSegments,
+      episodeTitle: episode.title,
+      podcastTitle: podcastTitle,
+      targetLanguage: targetLang
+    ) {
+      transcriptSegments = translated
+      regroupSentences()
+      translationStatus = .completed
+      if subtitleSettings.displayMode == .originalOnly {
+        subtitleSettings.displayMode = .dualTranslatedFirst
+      }
+      logger.info("Restored cached translation for \(self.episode.title)")
+    } else if settings.autoTranslateOnLoad {
+      translateTo(settings.targetLanguage)
+    } else {
+      translationStatus = .idle
     }
   }
 
