@@ -23,8 +23,16 @@ struct HTMLTextView: View {
     private func convertToSwiftAttributedString() -> AttributedString? {
         #if os(macOS)
         guard var result = try? AttributedString(attributedString, including: \.appKit) else { return nil }
+        // Strip baked-in foreground colors so text inherits SwiftUI's adaptive .primary style
+        for run in result.runs {
+            result[run.range].appKit.foregroundColor = nil
+        }
         #else
         guard var result = try? AttributedString(attributedString, including: \.uiKit) else { return nil }
+        // Strip baked-in foreground colors so text inherits SwiftUI's adaptive .primary style
+        for run in result.runs {
+            result[run.range].uiKit.foregroundColor = nil
+        }
         #endif
         if linkTimestamps {
             result = TimestampUtils.addTimestampLinks(to: result)
