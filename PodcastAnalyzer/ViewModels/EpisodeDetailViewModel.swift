@@ -149,6 +149,8 @@ final class EpisodeDetailViewModel {
   var selectedTranscriptLanguage: String?
   /// Engine override for transcript generation (nil = use global Settings default)
   var selectedTranscriptEngine: TranscriptEngine?
+  /// Language detected by Whisper auto-detect during the current/last generation run.
+  var transcriptDetectedLanguage: String?
 
   @ObservationIgnored
   private let fileStorage = FileStorageManager.shared
@@ -255,12 +257,12 @@ final class EpisodeDetailViewModel {
   @ObservationIgnored
   private var isObservingTranscriptManager = false
 
-  // Podcast language for transcription
-  var podcastLanguage: String = "en"
+  // Podcast language for transcription. Empty string means unknown — never use "en" as a default.
+  var podcastLanguage: String = ""
 
   init(
     episode: PodcastEpisodeInfo, podcastTitle: String, fallbackImageURL: String?,
-    podcastLanguage: String = "en"
+    podcastLanguage: String = ""
   ) {
     self.episode = episode
     self.podcastTitle = podcastTitle
@@ -288,6 +290,9 @@ final class EpisodeDetailViewModel {
   /// Immediately syncs transcriptState from current job status to avoid flash of 0%
   private func syncTranscriptState() {
     guard let job = TranscriptManager.shared.activeJobs[episodeKey] else { return }
+    if let lang = job.detectedLanguage {
+      transcriptDetectedLanguage = lang
+    }
     switch job.status {
     case .queued:
       transcriptState = .transcribing(progress: 0)
@@ -307,6 +312,12 @@ final class EpisodeDetailViewModel {
 
   func setModelContext(_ context: ModelContext) {
     self.modelContext = context
+    // SwiftData is authoritative. If it has a language, use it and discard whatever
+    // hint was passed at init. If it doesn't (podcast not yet cached, or no <language>
+    // tag in the RSS), keep the hint — the picker's empty-language fallback handles it.
+    if let lang = getPodcastLanguage() {
+      podcastLanguage = lang
+    }
     loadEpisodeModel()
     observePlaybackPosition()
     loadAIAnalysisFromSwiftData()
@@ -1185,9 +1196,11 @@ final class EpisodeDetailViewModel {
 
   // MARK: - Transcript Methods
 
-  /// Gets the podcast language from SwiftData, falling back to "en" if not found
-  private func getPodcastLanguage() -> String {
-    guard let context = modelContext else { return "en" }
+  /// Looks up the podcast language from SwiftData.
+  /// Returns nil when the podcast isn't in SwiftData or its language is empty,
+  /// so callers can fall back to whatever hint they already have.
+  private func getPodcastLanguage() -> String? {
+    guard let context = modelContext else { return nil }
 
     let descriptor = FetchDescriptor<PodcastInfoModel>(
       predicate: #Predicate { $0.title == podcastTitle }
@@ -1195,14 +1208,14 @@ final class EpisodeDetailViewModel {
 
     do {
       let results = try context.fetch(descriptor)
-      if let podcastModel = results.first {
-        return podcastModel.podcastInfo.language
+      if let lang = results.first?.podcastInfo.language, !lang.isEmpty {
+        return lang
       }
     } catch {
       logger.error("Failed to fetch podcast language: \(error.localizedDescription)")
     }
 
-    return "en"  // Default fallback
+    return nil
   }
 
   func checkTranscriptStatus() {
@@ -1210,7 +1223,7 @@ final class EpisodeDetailViewModel {
     checkTranscriptTask = Task { [weak self] in
       guard let self else { return }
       // Get podcast language and create transcript service
-      let language = self.getPodcastLanguage()
+      let language = self.getPodcastLanguage() ?? self.podcastLanguage
       let transcriptService = TranscriptService(language: language)
       let modelReady = await transcriptService.isModelReady()
 
@@ -1260,6 +1273,8 @@ final class EpisodeDetailViewModel {
     case .yapServer:
       selectedTranscriptLanguage ?? (podcastLanguage.isEmpty ? nil : podcastLanguage)
     }
+
+    transcriptDetectedLanguage = nil
 
     logger.info("[generateTranscript] engine=\(effectiveEngine.rawValue) selectedLang=\(self.selectedTranscriptLanguage ?? "<nil>") resolvedLang=\(language ?? "<nil>") podcastLang=\(self.podcastLanguage)")
 

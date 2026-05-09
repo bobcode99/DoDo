@@ -18,7 +18,8 @@ import WhisperKit
 nonisolated struct TranscriptionProgressUpdate: Sendable {
     let progress: Double   // 0.0 to 1.0
     let isComplete: Bool
-    let srtContent: String?  // Only set when isComplete == true
+    let srtContent: String?       // Only set when isComplete == true
+    let detectedLanguage: String? // Set after language detection step, before full transcription
 }
 
 // MARK: - WhisperTranscriptService
@@ -65,14 +66,14 @@ actor WhisperTranscriptService {
             Task {
                 do {
                     continuation.yield(
-                        TranscriptionProgressUpdate(progress: 0, isComplete: false, srtContent: nil)
+                        TranscriptionProgressUpdate(progress: 0, isComplete: false, srtContent: nil, detectedLanguage: nil)
                     )
 
                     // Load the model (uses cached CoreML artefacts).
                     let whisper = try await WhisperKit(model: modelVariant.rawValue)
 
                     continuation.yield(
-                        TranscriptionProgressUpdate(progress: 0.05, isComplete: false, srtContent: nil)
+                        TranscriptionProgressUpdate(progress: 0.05, isComplete: false, srtContent: nil, detectedLanguage: nil)
                     )
 
                     guard !Task.isCancelled else {
@@ -80,17 +81,36 @@ actor WhisperTranscriptService {
                         return
                     }
 
-                    // Decoding options tuned for podcast audio.
-                    // Extract the base language code (e.g. "zh-tw" → "zh", "en-us" → "en")
-                    let whisperLanguage: String? = language.flatMap { code in
-                        let base = code.lowercased().split(separator: "-").first.map(String.init)
-                        return base
+                    // Extract base language code (e.g. "zh-tw" → "zh", "en-us" → "en").
+                    // When no language is specified, run a fast detection pass first so we can
+                    // (a) show the detected language in the UI and (b) use it as an explicit
+                    // hint for transcription — prevents the English-prefill bias that causes
+                    // non-English audio to be transcribed as English.
+                    var resolvedWhisperLanguage: String? = language.flatMap { code in
+                        code.lowercased().split(separator: "-").first.map(String.init)
                     }
+
+                    var detectedLanguage: String? = nil
+                    if resolvedWhisperLanguage == nil {
+                        if let detected = try? await whisper.detectLanguage(audioPath: inputFile.path) {
+                            resolvedWhisperLanguage = detected.language
+                            detectedLanguage = detected.language
+                            continuation.yield(
+                                TranscriptionProgressUpdate(progress: 0.08, isComplete: false, srtContent: nil, detectedLanguage: detected.language)
+                            )
+                        }
+                    }
+
+                    guard !Task.isCancelled else {
+                        continuation.finish(throwing: CancellationError())
+                        return
+                    }
+
                     let options = DecodingOptions(
                         verbose: false,
                         task: .transcribe,
-                        language: whisperLanguage,
-                        usePrefillPrompt: true,
+                        language: resolvedWhisperLanguage,
+                        usePrefillPrompt: resolvedWhisperLanguage != nil,
                         wordTimestamps: true,
                         compressionRatioThreshold: 2.4,
                         logProbThreshold: -1.0,
@@ -106,7 +126,7 @@ actor WhisperTranscriptService {
                     let windowDuration: Double = 30.0
                     let totalWindows = max(ceil(estimatedDuration / windowDuration), 1.0)
 
-                    var lastReportedProgress = 0.05
+                    var lastReportedProgress = 0.08
 
                     let results = try await whisper.transcribe(
                         audioPath: inputFile.path,
@@ -114,7 +134,7 @@ actor WhisperTranscriptService {
                         callback: { progress in
                             // Use windowId to track how many 30s windows have been processed.
                             let fraction = min(
-                                0.05 + 0.90 * (Double(progress.windowId + 1) / totalWindows),
+                                0.08 + 0.87 * (Double(progress.windowId + 1) / totalWindows),
                                 0.95
                             )
                             if fraction > lastReportedProgress + 0.02 {
@@ -123,7 +143,8 @@ actor WhisperTranscriptService {
                                     TranscriptionProgressUpdate(
                                         progress: fraction,
                                         isComplete: false,
-                                        srtContent: nil
+                                        srtContent: nil,
+                                        detectedLanguage: nil
                                     )
                                 )
                             }
@@ -144,7 +165,7 @@ actor WhisperTranscriptService {
                     let srtContent = Self.segmentsToSRT(allSegments)
 
                     continuation.yield(
-                        TranscriptionProgressUpdate(progress: 1.0, isComplete: true, srtContent: srtContent)
+                        TranscriptionProgressUpdate(progress: 1.0, isComplete: true, srtContent: srtContent, detectedLanguage: detectedLanguage)
                     )
                     continuation.finish()
 

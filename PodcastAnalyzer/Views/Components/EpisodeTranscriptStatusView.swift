@@ -23,6 +23,9 @@ struct EpisodeTranscriptStatusView: View {
 
     private var pickerLocales: [SettingsViewModel.TranscriptLocaleOption] {
         let standard = SettingsViewModel.locales(for: effectiveEngine)
+        // If the podcast language is unknown, return the standard list as-is.
+        // An empty/missing language must never inject a phantom "(podcast)" entry.
+        guard !viewModel.podcastLanguage.isEmpty else { return standard }
         let podcastLang = viewModel.podcastLanguage.lowercased()
         let resolved = resolvedLanguage(podcastLang)
         if standard.contains(where: { $0.id == resolved }) { return standard }
@@ -31,7 +34,15 @@ struct EpisodeTranscriptStatusView: View {
     }
 
     private var transcriptLanguageName: String {
-        if effectiveEngine == .whisper, viewModel.selectedTranscriptLanguage == nil { return "Auto-detect" }
+        if effectiveEngine == .whisper, viewModel.selectedTranscriptLanguage == nil {
+            if let detected = viewModel.transcriptDetectedLanguage {
+                let name = pickerLocales.first { $0.id == detected }?.name
+                    ?? Locale.current.localizedString(forLanguageCode: detected)
+                    ?? detected
+                return name
+            }
+            return "Auto-detect"
+        }
         let code = viewModel.selectedTranscriptLanguage ?? viewModel.podcastLanguage
         return pickerLocales.first { $0.id == resolvedLanguage(code) }?.name ?? code
     }
@@ -174,9 +185,20 @@ struct EpisodeTranscriptStatusView: View {
     private var languagePicker: some View {
         Picker("Language", selection: Binding(
             get: {
-                effectiveEngine == .whisper
-                    ? (viewModel.selectedTranscriptLanguage ?? "auto")
-                    : resolvedLanguage(viewModel.selectedTranscriptLanguage ?? viewModel.podcastLanguage)
+                if effectiveEngine == .whisper {
+                    return viewModel.selectedTranscriptLanguage ?? "auto"
+                }
+                if let selected = viewModel.selectedTranscriptLanguage {
+                    return resolvedLanguage(selected)
+                }
+                let lang = viewModel.podcastLanguage
+                guard !lang.isEmpty else {
+                    // Language unknown — fall back to device locale so the picker
+                    // doesn't land on a random first entry or a phantom row.
+                    let deviceCode = Locale.current.language.languageCode?.identifier ?? "en"
+                    return resolvedLanguage(deviceCode)
+                }
+                return resolvedLanguage(lang)
             },
             set: { newValue in
                 if effectiveEngine == .whisper {

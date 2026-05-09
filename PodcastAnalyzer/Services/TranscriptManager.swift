@@ -30,6 +30,7 @@ struct TranscriptJob: Identifiable {
   let engine: TranscriptEngine?  // nil = use global Settings default
   var status: TranscriptJobStatus = .queued
   var yapServerJobID: String?    // Set once the yap HTTP job is accepted; used to cancel server-side
+  var detectedLanguage: String?  // Populated by Whisper auto-detect before full transcription
 }
 
 /// Manages background transcript generation with parallel processing.
@@ -350,6 +351,10 @@ class TranscriptManager {
           modelVariant: modelVariant,
           language: job.language)
         {
+          // Capture detected language as soon as Whisper reports it.
+          if let lang = progressUpdate.detectedLanguage {
+            activeJobs[job.id]?.detectedLanguage = lang
+          }
           if progressUpdate.isComplete {
             finalSRTContent = progressUpdate.srtContent
             activeJobs[job.id]?.status = .transcribing(progress: 1.0)
