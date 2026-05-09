@@ -7,6 +7,7 @@
 
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DataManagementView: View {
   @Environment(\.modelContext) var modelContext
@@ -20,6 +21,10 @@ struct DataManagementView: View {
   @State private var clearingMessage = ""
   @State private var opmlExportItem: ShareableOPML?
   @State private var diagnosticExportItem: ShareableOPML?
+  @State private var backupExportItem: ShareableOPML?
+  @State private var showBackupImporter = false
+  @State private var backupErrorAlert: String?
+  @Bindable private var backupService = BackupService.shared
 
   // Storage info - loaded async
   @State private var imageCacheSize: String = "Calculating..."
@@ -207,6 +212,49 @@ struct DataManagementView: View {
       } footer: {
         Text("OPML exports your subscriptions for use in other apps. Diagnostic report bundles logs and settings for support.")
       }
+
+      // MARK: - Backup & Restore
+      Section {
+        Button(action: exportFullBackup) {
+          HStack {
+            Image(systemName: "tray.and.arrow.up.fill")
+              .foregroundStyle(.indigo)
+              .frame(width: 24)
+            Text("Export Full Backup")
+            Spacer()
+            if BackupService.shared.isExporting {
+              ProgressView().scaleEffect(0.7)
+            }
+          }
+        }
+        .buttonStyle(.plain)
+        .disabled(BackupService.shared.isExporting || BackupService.shared.isImporting)
+
+        Button {
+          showBackupImporter = true
+        } label: {
+          HStack {
+            Image(systemName: "tray.and.arrow.down.fill")
+              .foregroundStyle(.indigo)
+              .frame(width: 24)
+            Text("Restore from Backup")
+            Spacer()
+            if BackupService.shared.isImporting {
+              ProgressView().scaleEffect(0.7)
+            }
+          }
+        }
+        .buttonStyle(.plain)
+        .disabled(
+          BackupService.shared.isExporting
+            || BackupService.shared.isImporting
+            || PodcastImportManager.shared.isImporting
+        )
+      } header: {
+        Text("Backup & Restore")
+      } footer: {
+        Text("Backs up subscriptions, full playback history, queue, AI analyses, and settings as a single JSON file. Restore on a new device with smart merge — your existing data is never deleted. Local audio, captions, and credentials are not included.")
+      }
     }
     .sheet(item: $opmlExportItem) { item in
       ShareSheet(items: [item.url])
@@ -214,11 +262,33 @@ struct DataManagementView: View {
     .sheet(item: $diagnosticExportItem) { item in
       ShareSheet(items: [item.url])
     }
+    .sheet(item: $backupExportItem) { item in
+      ShareSheet(items: [item.url])
+    }
+    .sheet(isPresented: $backupService.showProgressSheet) {
+      BackupProgressSheet()
+    }
+    .fileImporter(
+      isPresented: $showBackupImporter,
+      allowedContentTypes: [.json],
+      allowsMultipleSelection: false
+    ) { result in
+      handleBackupImport(result)
+    }
+    .alert("Backup Error", isPresented: Binding(
+      get: { backupErrorAlert != nil },
+      set: { if !$0 { backupErrorAlert = nil } }
+    )) {
+      Button("OK", role: .cancel) { backupErrorAlert = nil }
+    } message: {
+      Text(backupErrorAlert ?? "")
+    }
     .navigationTitle("Data Management")
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
     #endif
     .task {
+      BackupService.shared.setModelContext(modelContext)
       await calculateStorageInfoParallel()
     }
     // Confirmation dialogs
@@ -514,6 +584,39 @@ struct DataManagementView: View {
     }
   }
 
+  // MARK: - Full Backup Export / Import
+
+  private func exportFullBackup() {
+    Task {
+      do {
+        let url = try await BackupService.shared.exportBackup()
+        backupExportItem = ShareableOPML(url: url)
+      } catch {
+        backupErrorAlert = error.localizedDescription
+      }
+    }
+  }
+
+  private func handleBackupImport(_ result: Result<[URL], Error>) {
+    switch result {
+    case .failure(let error):
+      // User cancellation surfaces as a CocoaError with code .userCancelled.
+      let nsError = error as NSError
+      if nsError.code != NSUserCancelledError {
+        backupErrorAlert = error.localizedDescription
+      }
+    case .success(let urls):
+      guard let fileURL = urls.first else { return }
+      Task {
+        await BackupService.shared.importBackup(from: fileURL)
+        if let err = BackupService.shared.lastError {
+          backupErrorAlert = err
+          BackupService.shared.showProgressSheet = false
+        }
+      }
+    }
+  }
+
   // MARK: - OPML Export
 
   private func exportOPML() {
@@ -537,6 +640,92 @@ struct DataManagementView: View {
 struct ShareableOPML: Identifiable {
   let id = UUID()
   let url: URL
+}
+
+// MARK: - Backup Progress Sheet
+
+struct BackupProgressSheet: View {
+  @Bindable private var service = BackupService.shared
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      Group {
+        if service.isImporting {
+          progressContent
+        } else if let summary = service.lastSummary {
+          summaryContent(summary)
+        } else {
+          progressContent
+        }
+      }
+      .navigationTitle("Restore Backup")
+      #if os(iOS)
+      .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") {
+            service.dismissProgressSheet()
+            dismiss()
+          }
+          .disabled(service.isImporting)
+        }
+      }
+    }
+    .interactiveDismissDisabled(service.isImporting)
+  }
+
+  private var progressContent: some View {
+    VStack(spacing: 24) {
+      ProgressView(value: service.progress)
+        .progressViewStyle(.linear)
+      Text(service.status)
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+    }
+    .padding()
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+  }
+
+  private func summaryContent(_ s: BackupService.ImportSummary) -> some View {
+    List {
+      Section("Podcasts") {
+        statRow("Subscribed", value: "\(s.podcastsAdded) added · \(s.podcastsMerged) already in library")
+        if s.podcastsFailed > 0 {
+          statRow("Failed", value: "\(s.podcastsFailed)").foregroundStyle(.red)
+        }
+      }
+      Section("Episode History") {
+        statRow("New episodes", value: "\(s.episodesInserted)")
+        statRow("Merged", value: "\(s.episodesUpdated)")
+      }
+      Section("Other") {
+        statRow("Queue items", value: "\(s.queueReplaced)")
+        statRow("AI analyses", value: "\(s.analysesUpserted)")
+        statRow("Quick tags", value: "\(s.quickTagsUpserted)")
+        statRow("Settings", value: "\(s.settingsApplied)")
+      }
+      if !s.warnings.isEmpty {
+        Section("Warnings") {
+          ForEach(s.warnings.indices, id: \.self) { idx in
+            Text(s.warnings[idx])
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+    }
+  }
+
+  private func statRow(_ label: String, value: String) -> some View {
+    HStack {
+      Text(label)
+      Spacer()
+      Text(value).foregroundStyle(.secondary)
+    }
+  }
 }
 
 #if os(iOS)
