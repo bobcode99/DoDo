@@ -28,6 +28,17 @@ final class HomeViewModel {
   /// Stable ID list for `.animation(value:)` — avoids allocating a new array in view body.
   var scoredUpNextIDs: [String] { scoredUpNextEpisodes.map(\.id) }
 
+  /// Number of in-progress (Continue Listening) episodes in the Up Next list,
+  /// excluding the currently playing episode.  Used by the view to show the section subtitle.
+  var continueListeningCount: Int {
+    let nowPlayingId = EnhancedAudioManager.shared.currentEpisode?.id
+    return scoredUpNextEpisodes.filter { scored in
+      guard scored.episode.id != nowPlayingId else { return false }
+      if case .inProgress = scored.reason { return true }
+      return false
+    }.count
+  }
+
   // Top podcasts from Apple RSS - observable instance properties that sync with static cache
   var topPodcasts: [AppleRSSPodcast] = []
   var isLoadingTopPodcasts = false
@@ -374,25 +385,54 @@ final class HomeViewModel {
       }
     }
 
-    // Score and rank via UpNextSuggestionEngine
-    let scored = UpNextSuggestionEngine().score(inputs: inputs, limit: 25)
+    // ── Score a large pool so all tiers have enough candidates ─────────────
+    let allScored = UpNextSuggestionEngine().score(inputs: inputs, limit: 50)
     var scoredByKey: [String: ScoredEpisode] = [:]
-    for s in scored { scoredByKey[s.id] = s }
-    var result = scored.map(\.episode).prefix(20).map { $0 }
+    for s in allScored { scoredByKey[s.id] = s }
 
-    // Ensure the currently playing episode is at the top of Up Next
-    if let currentEpisode = EnhancedAudioManager.shared.currentEpisode {
-      let currentKey = Self.makeEpisodeKey(podcastTitle: currentEpisode.podcastTitle, episodeTitle: currentEpisode.title)
-      let currentModel = modelsByKey[currentKey]
+    // ── Tier 1: currently playing (pinned to position 0) ────────────────────
+    let currentEpisode = EnhancedAudioManager.shared.currentEpisode
+    let currentKey: String? = currentEpisode.map {
+      Self.makeEpisodeKey(podcastTitle: $0.podcastTitle, episodeTitle: $0.title)
+    }
 
-      // Don't add if already completed
+    // ── Tier 2: Continue Listening — in-progress episodes, newest-played first ─
+    // Any episode whose scoring reason is .inProgress (position > threshold) and
+    // is NOT the currently playing one lands here.  Sorted by lastPlayedDate DESC
+    // so the episode you just switched away from always appears at position 1.
+    var continueListening: [ScoredEpisode] = []
+
+    // ── Tier 3: Suggestions — unstarted, highest score first ─────────────────
+    var suggestions: [ScoredEpisode] = []
+
+    for scored in allScored {
+      guard scored.episode.id != currentKey else { continue }
+      if case .inProgress = scored.reason {
+        continueListening.append(scored)
+      } else if suggestions.count < 15 {
+        suggestions.append(scored)
+      }
+    }
+
+    continueListening.sort {
+      let aDate = modelsByKey[$0.episode.id]?.lastPlayedDate ?? .distantPast
+      let bDate = modelsByKey[$1.episode.id]?.lastPlayedDate ?? .distantPast
+      return aDate > bDate
+    }
+
+    // Build ordered list: Tier 2 → Tier 3 (Tier 1 prepended below)
+    var result: [LibraryEpisode] = (continueListening + suggestions).map(\.episode)
+
+    // ── Prepend Tier 1 ────────────────────────────────────────────────────────
+    if let currentEpisode {
+      let key = currentKey!
+      let currentModel = modelsByKey[key]
       if currentModel?.isCompleted != true {
-        if let existingIndex = result.firstIndex(where: { $0.id == currentKey }) {
-          // Already in list — move to top
-          let episode = result.remove(at: existingIndex)
-          result.insert(episode, at: 0)
+        result.removeAll { $0.id == key }
+        let libraryEpisode: LibraryEpisode
+        if let existing = scoredByKey[key]?.episode {
+          libraryEpisode = existing
         } else {
-          // Not in list (non-subscribed podcast or beyond prefix limit) — create and insert at top
           let episodeInfo = PodcastEpisodeInfo(
             title: currentEpisode.title,
             podcastEpisodeDescription: currentEpisode.episodeDescription,
@@ -402,8 +442,8 @@ final class HomeViewModel {
             duration: currentEpisode.duration,
             guid: currentEpisode.guid
           )
-          let libraryEpisode = LibraryEpisode(
-            id: currentKey,
+          libraryEpisode = LibraryEpisode(
+            id: key,
             podcastTitle: currentEpisode.podcastTitle,
             imageURL: currentEpisode.imageURL,
             language: "",
@@ -414,19 +454,24 @@ final class HomeViewModel {
             lastPlaybackPosition: currentModel?.lastPlaybackPosition ?? 0,
             savedDuration: currentModel?.duration ?? 0
           )
-          result.insert(libraryEpisode, at: 0)
+        }
+        result.insert(libraryEpisode, at: 0)
+        // Ensure the injected entry is scoreable by the view
+        if scoredByKey[key] == nil {
+          scoredByKey[key] = ScoredEpisode(
+            episode: libraryEpisode, downloadModel: currentModel,
+            score: .infinity, reason: .none, progressRatio: 0)
         }
       }
     }
 
     upNextEpisodes = result
-    // Rebuild scoredUpNextEpisodes in the same order as result (respects the pinned-to-top episode)
     scoredUpNextEpisodes = result.compactMap { episode in
       if let existing = scoredByKey[episode.id] { return existing }
-      // Currently playing episode injected from outside scored list — wrap with .none reason
-      return ScoredEpisode(episode: episode, downloadModel: modelsByKey[episode.id], score: .infinity, reason: .none, progressRatio: 0)
+      return ScoredEpisode(episode: episode, downloadModel: modelsByKey[episode.id],
+                           score: .infinity, reason: .none, progressRatio: 0)
     }
-    logger.info("Loaded \(self.upNextEpisodes.count) up next episodes (scored)")
+    logger.info("Loaded \(self.upNextEpisodes.count) up-next episodes (continueListening=\(continueListening.count), suggestions=\(suggestions.count))")
 
     // Populate auto-play candidates from up next episodes, excluding the currently playing episode
     let currentPlayingId = EnhancedAudioManager.shared.currentEpisode?.id

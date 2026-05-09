@@ -236,10 +236,17 @@ struct HomeView: View {
   @ViewBuilder
   private var upNextSection: some View {
     VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("Up Next")
-          .font(.title2)
-          .fontWeight(.bold)
+      HStack(alignment: .bottom) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Up Next")
+            .font(.title2)
+            .fontWeight(.bold)
+          if viewModel.continueListeningCount > 0 {
+            Text("\(viewModel.continueListeningCount) in progress")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
 
         Spacer()
 

@@ -22,20 +22,50 @@ struct UpNextListView: View {
   @State private var showDeleteConfirmation = false
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
 
+  // Access singleton directly to determine now-playing without creating a timer
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  // MARK: Tier partitioning
+  // Episodes arrive pre-ordered by HomeViewModel:
+  //   [now-playing] → [continue-listening (in-progress)] → [suggestions (unstarted)]
+  // We re-derive the tiers here so the list can show section headers.
+
+  private var nowPlayingId: String? { audioManager.currentEpisode?.id }
+
+  private var nowPlayingEpisode: LibraryEpisode? {
+    guard let id = nowPlayingId else { return nil }
+    return episodes.first { $0.id == id }
+  }
+
+  private var continueListeningEpisodes: [LibraryEpisode] {
+    episodes.filter { $0.id != nowPlayingId && $0.hasProgress }
+  }
+
+  private var suggestionEpisodes: [LibraryEpisode] {
+    episodes.filter { $0.id != nowPlayingId && !$0.hasProgress }
+  }
+
   var body: some View {
-    List(episodes) { episode in
-      EpisodeRowView(
-        libraryEpisode: episode,
-        episodeModel: episodeModels[episode.id],
-        onToggleStar: { onToggleStar(episode) },
-        onDownload: { onDownload(episode) },
-        onDeleteRequested: {
-          episodeToDelete = episode
-          showDeleteConfirmation = true
-        },
-        onTogglePlayed: { onTogglePlayed(episode) }
-      )
-      .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+    List {
+      if let playing = nowPlayingEpisode {
+        Section("Now Playing") {
+          episodeRow(playing)
+        }
+      }
+      if !continueListeningEpisodes.isEmpty {
+        Section("Continue Listening") {
+          ForEach(continueListeningEpisodes) { episode in
+            episodeRow(episode)
+          }
+        }
+      }
+      if !suggestionEpisodes.isEmpty {
+        Section("Up Next") {
+          ForEach(suggestionEpisodes) { episode in
+            episodeRow(episode)
+          }
+        }
+      }
     }
     .listStyle(.plain)
     .onAppear { batchFetchEpisodeModels() }
@@ -64,6 +94,22 @@ struct UpNextListView: View {
     } message: {
       Text("Are you sure you want to delete this downloaded episode?")
     }
+  }
+
+  @ViewBuilder
+  private func episodeRow(_ episode: LibraryEpisode) -> some View {
+    EpisodeRowView(
+      libraryEpisode: episode,
+      episodeModel: episodeModels[episode.id],
+      onToggleStar: { onToggleStar(episode) },
+      onDownload: { onDownload(episode) },
+      onDeleteRequested: {
+        episodeToDelete = episode
+        showDeleteConfirmation = true
+      },
+      onTogglePlayed: { onTogglePlayed(episode) }
+    )
+    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
   }
 
   // MARK: - Episode Model Fetch
