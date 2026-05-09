@@ -30,6 +30,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSUIPasteboardUsageDescription</key>
+	<string>Used to paste podcast RSS feed URLs and episode links from other apps.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Required for speech recognition processing (if needed)</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
