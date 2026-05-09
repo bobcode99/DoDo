@@ -9,12 +9,13 @@ struct PlayerEpisodeInfoView: View {
         VStack(spacing: 12) {
             HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .center, spacing: 4) {
-                    Text(viewModel.episodeTitle)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.primary)
+                    MarqueeText(
+                        text: viewModel.episodeTitle,
+                        font: .title3,
+                        fontWeight: .bold,
+                        alignment: .center
+                    )
+                    .foregroundStyle(.primary)
 
                     Button(action: onNavigateToPodcast) {
                         Text(viewModel.podcastTitle)

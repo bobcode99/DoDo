@@ -82,10 +82,11 @@ struct MiniPlayerBar: View {
 
             // Episode info
             VStack(alignment: .leading, spacing: 2) {
-              Text(audioManager.currentEpisode?.title ?? "Not Playing")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .lineLimit(1)
+              MarqueeText(
+                text: audioManager.currentEpisode?.title ?? "Not Playing",
+                font: .subheadline,
+                fontWeight: .medium
+              )
 
               Text(audioManager.currentEpisode?.podcastTitle ?? "Select an episode to play")
                 .font(.caption)
