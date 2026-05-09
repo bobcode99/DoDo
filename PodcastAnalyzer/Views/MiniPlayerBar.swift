@@ -11,14 +11,14 @@ import SwiftUI
 /// Navigation state for expanded player -> main nav transitions
 enum ExpandedPlayerNavigation: Equatable {
   case none
-  case episodeDetail(PodcastEpisodeInfo, podcastTitle: String, imageURL: String?)
+  case episodeDetail(PodcastEpisodeInfo, podcastTitle: String, imageURL: String?, language: String?)
   case podcastEpisodeList(PodcastInfoModel)
 
   static func == (lhs: ExpandedPlayerNavigation, rhs: ExpandedPlayerNavigation) -> Bool {
     switch (lhs, rhs) {
     case (.none, .none):
       return true
-    case let (.episodeDetail(e1, t1, i1), .episodeDetail(e2, t2, i2)):
+    case let (.episodeDetail(e1, t1, i1, _), .episodeDetail(e2, t2, i2, _)):
       return e1.title == e2.title && t1 == t2 && i1 == i2
     case let (.podcastEpisodeList(p1), .podcastEpisodeList(p2)):
       return p1.id == p2.id
@@ -114,8 +114,8 @@ struct MiniPlayerBar: View {
     }
     .sheet(isPresented: $showExpandedPlayer, onDismiss: handleExpandedPlayerDismissed) {
       ExpandedPlayerView(
-        onNavigateToEpisodeDetail: { episode, podcastTitle, imageURL in
-          deferredNavigation = .episodeDetail(episode, podcastTitle: podcastTitle, imageURL: imageURL)
+        onNavigateToEpisodeDetail: { episode, podcastTitle, imageURL, language in
+          deferredNavigation = .episodeDetail(episode, podcastTitle: podcastTitle, imageURL: imageURL, language: language)
         },
         onNavigateToPodcast: { podcast in
           deferredNavigation = .podcastEpisodeList(podcast)
@@ -180,13 +180,13 @@ struct MiniPlayerBar: View {
     switch navigation {
     case .none:
       break
-    case let .episodeDetail(episode, podcastTitle, imageURL):
+    case let .episodeDetail(episode, podcastTitle, imageURL, language):
       coordinator?.activeRouter.push(
         EpisodeDetailRoute(
           episode: episode,
           podcastTitle: podcastTitle,
           fallbackImageURL: imageURL,
-          podcastLanguage: nil
+          podcastLanguage: language
         )
       )
     case let .podcastEpisodeList(podcastModel):
