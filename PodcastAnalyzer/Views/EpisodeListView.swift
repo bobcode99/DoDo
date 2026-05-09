@@ -598,8 +598,14 @@ struct EpisodeListView: View {
           .background(Color.gray.opacity(0.15))
           .clipShape(.rect(cornerRadius: 4))
 
-          // Subscribe button
-          Button(action: subscribe) {
+          // Subscribe / Unsubscribe button
+          Button {
+            if isSubscribed {
+              showUnsubscribeConfirmation = true
+            } else {
+              subscribe()
+            }
+          } label: {
             HStack {
               Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
               Text(isSubscribed ? "Subscribed" : "Subscribe")
@@ -613,7 +619,6 @@ struct EpisodeListView: View {
             .clipShape(.rect(cornerRadius: 16))
           }
           .buttonStyle(.plain)
-          .disabled(isSubscribed)
           .padding(.top, 4)
 
           if viewModel.podcastInfo.podcastInfoDescription != nil {
