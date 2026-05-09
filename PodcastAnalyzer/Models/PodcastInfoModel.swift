@@ -60,9 +60,8 @@ class PodcastInfoModel {
   var autoTranscribeWithYap: Bool = false
 
   /// Three-state auto-download setting (AntennaPod pattern).
-  /// "enabled" | "disabled" | "inheritGlobal". Defaults to "disabled" so
-  /// auto-download is opt-in per podcast — the user must explicitly enable it.
-  var autoDownloadSetting: String = AutoDownloadSetting.disabled.rawValue
+  /// "enabled" | "disabled" | "inheritGlobal".
+  var autoDownloadSetting: String = AutoDownloadSetting.inheritGlobal.rawValue
 
   /// Comma-separated include terms (case-insensitive). Empty = no filter.
   var episodeFilterInclude: String = ""
