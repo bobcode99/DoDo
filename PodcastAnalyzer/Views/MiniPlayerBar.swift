@@ -52,13 +52,15 @@ struct MiniPlayerBar: View {
         .opacity(audioManager.currentEpisode == nil ? 0 : 1)
 
       // Main content
-      HStack(spacing: 12) {
-        // Tappable area: artwork + episode info opens expanded player
-        Button {
-          if audioManager.currentEpisode != nil {
-            showExpandedPlayer = true
-          }
-        } label: {
+      ZStack {
+        Button(action: openExpandedPlayer) {
+          Color.clear
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open expanded player")
+
+        HStack(spacing: 12) {
           HStack(spacing: 12) {
             // Artwork or Placeholder
             Group {
@@ -91,22 +93,21 @@ struct MiniPlayerBar: View {
                 .lineLimit(1)
             }
           }
+          .allowsHitTesting(false)
+
+          Spacer()
+
+          // Play/Pause button
+          Button(action: {
+            handlePlayPauseAction()
+          }) {
+            Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+              .font(.title2)
+              .frame(width: 32)
+              .foregroundStyle(.primary)
+          }
+          .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
         }
-        .buttonStyle(.plain)
-
-        Spacer()
-
-        // Play/Pause button
-        Button(action: {
-          handlePlayPauseAction()
-        }) {
-          Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-            .font(.title2)
-            .frame(width: 32)
-            .foregroundStyle(.primary)
-        }
-        .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
-
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 10)
@@ -133,6 +134,11 @@ struct MiniPlayerBar: View {
   }
 
   // MARK: - Play/Pause Action
+
+  private func openExpandedPlayer() {
+    guard audioManager.currentEpisode != nil else { return }
+    showExpandedPlayer = true
+  }
 
   private func handlePlayPauseAction() {
     // Case 1: Currently playing - just pause
