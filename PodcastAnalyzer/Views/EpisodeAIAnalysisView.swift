@@ -36,6 +36,8 @@ struct EpisodeAIAnalysisView: View {
   @State private var formatHintDraft: String = ""
   @State private var formatHintSaved: Bool = false
   @State private var isRegenerating: Bool = false
+  @State private var promptCopied: Bool = false
+  @State private var showPromptPreview: Bool = false
   @FocusState private var isFormatFieldFocused: Bool
 
   private let settings = AISettingsManager.shared
@@ -111,6 +113,23 @@ struct EpisodeAIAnalysisView: View {
             }
           }
       }
+    }
+    .sheet(isPresented: $showPromptPreview) {
+      PromptPreviewSheet(
+        podcastTitle: viewModel.podcastTitle,
+        episodeTitle: viewModel.episode.title,
+        podcastLanguage: viewModel.podcastLanguage,
+        transcript: viewModel.transcriptText,
+        formatHint: formatHintDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          ? nil : formatHintDraft,
+        onCopied: {
+          promptCopied = true
+          Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            promptCopied = false
+          }
+        }
+      )
     }
   }
 
@@ -550,19 +569,48 @@ struct EpisodeAIAnalysisView: View {
     #endif
   }
 
+  /// Pair of buttons shown together: primary "Analyze" + secondary "Copy prompt".
+  /// Stacked so the secondary action is discoverable instead of buried behind a long-press.
   private func generateButton(title: String, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack {
-        Image(systemName: "sparkles")
-        Text(title)
+    VStack(spacing: 10) {
+      Button(action: action) {
+        HStack {
+          Image(systemName: "sparkles")
+          Text(title)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(canAnalyze ? Color.blue : Color.gray)
+        .foregroundStyle(.white)
+        .clipShape(.rect(cornerRadius: 12))
       }
-      .frame(maxWidth: .infinity)
-      .padding()
-      .background(canAnalyze ? Color.blue : Color.gray)
-      .foregroundStyle(.white)
-      .clipShape(.rect(cornerRadius: 12))
+      .disabled(!canAnalyze)
+
+      if viewModel.hasTranscript {
+        copyPromptLink
+      }
     }
-    .disabled(!canAnalyze)
+  }
+
+  /// Visible secondary action: opens the prompt preview sheet. Independent of
+  /// `canAnalyze` (a configured provider isn't required) — the entire purpose is
+  /// to let users paste the prompt into their own external LLM.
+  private var copyPromptLink: some View {
+    Button {
+      showPromptPreview = true
+    } label: {
+      HStack(spacing: 6) {
+        Image(systemName: promptCopied ? "checkmark.circle.fill" : "doc.on.doc")
+        Text(promptCopied ? "Copied — paste into your LLM" : "Copy prompt for external LLM")
+      }
+      .font(.subheadline)
+      .foregroundStyle(promptCopied ? .green : .blue)
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 10)
+      .background((promptCopied ? Color.green : Color.blue).opacity(0.1))
+      .clipShape(.rect(cornerRadius: 10))
+    }
+    .buttonStyle(.plain)
   }
 
   private func analysisResultCard(_ result: CloudAnalysisResult) -> some View {
@@ -1419,6 +1467,147 @@ struct FlowLayout: Layout {
       }
 
       self.size = CGSize(width: maxWidth, height: currentY + lineHeight)
+    }
+  }
+}
+
+// MARK: - Prompt Preview Sheet
+
+/// Shows the assembled (system + user) prompt before copying. Lets the user
+/// see exactly what would be sent to an LLM and copy it for use in external tools.
+private struct PromptPreviewSheet: View {
+  let podcastTitle: String
+  let episodeTitle: String
+  let podcastLanguage: String?
+  let transcript: String
+  let formatHint: String?
+  let onCopied: () -> Void
+
+  @Environment(\.dismiss) private var dismiss
+  @State private var didCopy = false
+
+  private var prompt: (system: String, user: String) {
+    CloudAIService.shared.buildPrompt(
+      type: .analysis,
+      transcript: transcript,
+      episodeTitle: episodeTitle,
+      podcastTitle: podcastTitle,
+      podcastLanguage: podcastLanguage,
+      formatHint: formatHint
+    )
+  }
+
+  private var combined: String {
+    "## System\n\(prompt.system)\n\n## User\n\(prompt.user)"
+  }
+
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(episodeTitle)
+              .font(.headline)
+              .lineLimit(2)
+            Text(podcastTitle)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+
+          HStack(spacing: 12) {
+            Label("\(combined.count) chars", systemImage: "textformat.size")
+            if formatHint != nil {
+              Label("Custom format", systemImage: "text.append")
+                .foregroundStyle(.blue)
+            }
+            if transcript.isEmpty {
+              Label("No transcript", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+            }
+          }
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+          if transcript.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+              Text("Heads up")
+                .font(.caption.bold())
+                .foregroundStyle(.orange)
+              Text("This episode has no transcript yet, so the prompt below has no source text. Generate or fetch a transcript first to get a complete prompt.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.1))
+            .clipShape(.rect(cornerRadius: 10))
+          }
+
+          promptSection(title: "System", body: prompt.system)
+          promptSection(title: "User", body: prompt.user)
+        }
+        .padding()
+        .padding(.bottom, 80)
+      }
+      .safeAreaInset(edge: .bottom) {
+        Button(action: copy) {
+          HStack {
+            Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.on.doc.fill")
+            Text(didCopy ? "Copied to Clipboard" : "Copy Prompt")
+              .fontWeight(.semibold)
+          }
+          .frame(maxWidth: .infinity)
+          .padding()
+          .background(didCopy ? Color.green : Color.blue)
+          .foregroundStyle(.white)
+          .clipShape(.rect(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .padding()
+        .background(.regularMaterial)
+      }
+      .navigationTitle("Prompt Preview")
+      #if os(iOS)
+      .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Done") { dismiss() }
+        }
+      }
+    }
+  }
+
+  private func promptSection(title: String, body: String) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(title.uppercased())
+        .font(.caption2.bold())
+        .foregroundStyle(.secondary)
+        .tracking(0.5)
+      Text(body)
+        .font(.caption.monospaced())
+        .textSelection(.enabled)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.gray.opacity(0.12))
+        .clipShape(.rect(cornerRadius: 10))
+    }
+  }
+
+  private func copy() {
+    #if os(iOS)
+    UIPasteboard.general.string = combined
+    #else
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(combined, forType: .string)
+    #endif
+
+    didCopy = true
+    onCopied()
+
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(2))
+      didCopy = false
     }
   }
 }

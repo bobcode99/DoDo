@@ -75,7 +75,8 @@ final class BackupService {
             queue: queueModels.map(BackupQueueItem.init(from:)),
             aiAnalyses: analysisModels.map(BackupAIAnalysis.init(from:)),
             quickTags: quickTagsModels.map(BackupQuickTags.init(from:)),
-            settings: BackupSettings.snapshotSafe()
+            settings: BackupSettings.snapshotSafe(),
+            aiFormatHints: AISettingsManager.shared.allFormatHints
         )
 
         let encoder = JSONEncoder()
@@ -107,6 +108,7 @@ final class BackupService {
         var analysesUpserted: Int = 0
         var quickTagsUpserted: Int = 0
         var settingsApplied: Int = 0
+        var formatHintsRestored: Int = 0
         var warnings: [String] = []
     }
 
@@ -200,6 +202,12 @@ final class BackupService {
             upsertQuickTags(bq, in: ctx, summary: &summary)
         }
 
+        // 5b. Per-podcast AI "Show Format" hints — restore via existing setter (overwrites on conflict).
+        for (podcastTitle, hint) in archive.aiFormatHints {
+            AISettingsManager.shared.saveFormatHint(hint, for: podcastTitle)
+            summary.formatHintsRestored += 1
+        }
+
         // 6. Settings safelist — write through.
         status = "Applying settings…"
         progress = 0.97
@@ -248,7 +256,7 @@ final class BackupService {
             return
         }
 
-        m.autoTranscribeWithYap = bp.autoTranscribeWithYap
+        m.autoTranscribeNewEpisodes = bp.autoTranscribeNewEpisodes
         m.autoDownloadSetting = bp.autoDownloadSetting
         m.episodeFilterInclude = bp.episodeFilterInclude
         m.episodeFilterExclude = bp.episodeFilterExclude
@@ -448,7 +456,7 @@ extension BackupPodcast {
         self.podcastDescription = m.podcastInfo.podcastInfoDescription
         self.dateAdded = m.dateAdded
         self.isSubscribed = m.isSubscribed
-        self.autoTranscribeWithYap = m.autoTranscribeWithYap
+        self.autoTranscribeNewEpisodes = m.autoTranscribeNewEpisodes
         self.autoDownloadSetting = m.autoDownloadSetting
         self.episodeFilterInclude = m.episodeFilterInclude
         self.episodeFilterExclude = m.episodeFilterExclude

@@ -402,6 +402,11 @@ final class AISettingsManager {
         return hints
     }
 
+    /// All saved per-podcast format hints, keyed by podcast title. Used by backup export.
+    var allFormatHints: [String: String] {
+        loadFormatHints()
+    }
+
     // MARK: - Local Server URLs
 
     var lmstudioBaseURL: URL {

@@ -645,6 +645,30 @@ final class CloudAIService {
         )
     }
 
+    // MARK: - Public: Prompt Preview
+
+    /// Assembles the same (system, user) prompt pair that would be sent to a cloud
+    /// provider for `type`, without actually invoking the model. Used by the
+    /// "Copy prompt" affordance so users can paste it into an external tool.
+    func buildPrompt(
+        type: CloudAnalysisType,
+        transcript: String,
+        episodeTitle: String,
+        podcastTitle: String,
+        podcastLanguage: String? = nil,
+        formatHint: String? = nil
+    ) -> (system: String, user: String) {
+        let system = buildSystemPrompt(for: type, podcastLanguage: podcastLanguage, formatHint: formatHint)
+        let user = buildUserPrompt(
+            transcript: transcript,
+            episodeTitle: episodeTitle,
+            podcastTitle: podcastTitle,
+            analysisType: type,
+            formatHint: formatHint
+        )
+        return (system, user)
+    }
+
     // MARK: - Private: Build Prompts
 
     private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil) -> String {

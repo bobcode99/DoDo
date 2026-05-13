@@ -117,6 +117,20 @@ struct SettingsView: View {
           }
         }
 
+        // MARK: - Auto-Transcribe
+        Section {
+          NavigationLink(destination: AutoTranscribeManagementView()) {
+            HStack {
+              Image(systemName: "waveform.badge.plus")
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+              Text("Auto-transcribe Podcasts")
+            }
+          }
+        } footer: {
+          Text("Manage which podcasts auto-transcribe new episodes. Engine is resolved at run time: YAP server when configured, otherwise local (gated by charging).")
+        }
+
         // MARK: - Auto-Download Section
         Section {
           Toggle(isOn: $allowCellularAutoDownload) {

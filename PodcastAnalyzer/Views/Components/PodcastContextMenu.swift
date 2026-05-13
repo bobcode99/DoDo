@@ -16,6 +16,7 @@ struct PodcastContextMenu: ViewModifier {
 
   @State private var showUnsubscribeConfirmation = false
   @State private var showEpisodeFilterSheet = false
+  @State private var showTranscribeBackfillSheet = false
 
   func body(content: Content) -> some View {
     content
@@ -42,17 +43,19 @@ struct PodcastContextMenu: ViewModifier {
 
         Divider()
 
-        // Auto-transcript via Yap server (only shown when a server URL is configured)
-        if !YapServerSettings.shared.serverURL.isEmpty {
-          Toggle(isOn: Binding(
-            get: { podcast.autoTranscribeWithYap },
-            set: { newValue in
-              podcast.autoTranscribeWithYap = newValue
-              try? modelContext.save()
+        // Auto-transcribe new episodes — engine resolved at run time (YAP → local).
+        Toggle(isOn: Binding(
+          get: { podcast.autoTranscribeNewEpisodes },
+          set: { newValue in
+            let wasOff = !podcast.autoTranscribeNewEpisodes
+            podcast.autoTranscribeNewEpisodes = newValue
+            try? modelContext.save()
+            if newValue && wasOff {
+              showTranscribeBackfillSheet = true
             }
-          )) {
-            Label("Auto Transcript (Yap)", systemImage: "waveform.badge.plus")
           }
+        )) {
+          Label("Auto-transcribe new episodes", systemImage: "waveform.badge.plus")
         }
 
         // Three-state auto-download setting (AntennaPod pattern)
@@ -91,6 +94,13 @@ struct PodcastContextMenu: ViewModifier {
       }
       .sheet(isPresented: $showEpisodeFilterSheet) {
         PodcastEpisodeFilterView(podcast: podcast, modelContext: modelContext)
+      }
+      .sheet(isPresented: $showTranscribeBackfillSheet) {
+        TranscribeBackfillSheet(
+          podcastTitle: podcast.podcastInfo.title,
+          podcastLanguage: podcast.podcastInfo.language,
+          episodes: podcast.podcastInfo.episodes
+        )
       }
       .confirmationDialog(
         "Unsubscribe from Podcast",

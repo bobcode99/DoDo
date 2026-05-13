@@ -184,6 +184,73 @@ class TranscriptManager {
     }
   }
 
+  // MARK: - Auto-transcribe engine resolution
+
+  /// Resolution outcome for `resolveAutoTranscribeEngine`. Callers should treat
+  /// `.blocked` as a UI affordance: show the one-time battery warning and, on
+  /// user opt-in, call `setAllowLocalOnBattery(true)` and try again.
+  enum AutoTranscribeEngineDecision: Sendable {
+    case yap
+    case local(TranscriptEngine)
+    case blocked(reason: String)
+  }
+
+  /// Session-scoped consent to run local transcription on battery. Not persisted
+  /// — the user must re-confirm every cold launch, so the warning isn't lost.
+  private(set) var allowLocalOnBattery: Bool = false
+
+  /// Set by the one-time battery-warning dialog. Resets to `false` at next launch.
+  func setAllowLocalOnBattery(_ allow: Bool) {
+    allowLocalOnBattery = allow
+    if allow {
+      logger.info("User opted in to local transcription on battery for this session.")
+    }
+  }
+
+  /// Resolves the engine for an auto-enqueue path (post-download hook, feed
+  /// refresh) and applies non-UI gates: Low Power Mode skip, YAP per-podcast
+  /// failure cooldown. Returns the engine to enqueue with, or nil to skip.
+  /// Call sites should treat nil as "don't auto-enqueue right now" — *not* as
+  /// an error worth surfacing.
+  func engineForAutoEnqueue(podcastTitle: String) -> TranscriptEngine? {
+    guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return nil }
+    switch resolveAutoTranscribeEngine() {
+    case .yap:
+      return canAutoQueueYap(podcastTitle: podcastTitle) ? .yapServer : nil
+    case .local(let local):
+      return local
+    case .blocked:
+      return nil
+    }
+  }
+
+  /// Decides which engine should handle a new auto-transcribe job *right now*,
+  /// given the current YAP server config and device power state. Pure function
+  /// — does not enqueue. Call this before `queueTranscript(...)` so that an
+  /// auto-enqueue path (feed refresh, post-download hook, backfill sheet) can
+  /// surface the battery warning before consuming the user's battery.
+  func resolveAutoTranscribeEngine() -> AutoTranscribeEngineDecision {
+    // 1. Prefer YAP when configured. Battery is irrelevant for YAP (work happens server-side).
+    if !YapServerSettings.shared.serverURL.isEmpty {
+      return .yap
+    }
+
+    // 2. No YAP — fall back to local engine. Gated by charging or session opt-in.
+    let local = TranscriptEngine(
+      rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
+    ) ?? .appleSpeech
+
+    #if os(iOS)
+    if PowerMonitor.shared.isCharging || allowLocalOnBattery {
+      return .local(local)
+    }
+    return .blocked(reason: "On battery and YAP server is not configured.")
+    #else
+    // macOS: PowerMonitor reports !isCharging always; treat as unrestricted.
+    return .local(local)
+    #endif
+  }
+
   // MARK: - Processing
 
   private func startProcessingIfNeeded() {

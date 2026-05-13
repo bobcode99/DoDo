@@ -62,6 +62,7 @@ struct EpisodeListView: View {
   @State private var loadError: String?
   @State private var podcastModel: PodcastInfoModel?
   @State private var showEpisodeFilterSheet = false
+  @State private var showTranscribeBackfillSheet = false
 
   private let applePodcastService = ApplePodcastService()
 
@@ -439,16 +440,18 @@ struct EpisodeListView: View {
               Label("Auto Download: \(current.displayName)", systemImage: "arrow.down.circle")
             }
 
-            if !YapServerSettings.shared.serverURL.isEmpty {
-              Button {
-                podcastModel?.autoTranscribeWithYap.toggle()
-                try? modelContext.save()
-              } label: {
-                if podcastModel?.autoTranscribeWithYap == true {
-                  Label("Auto Transcript (Yap): On", systemImage: "waveform.badge.plus")
-                } else {
-                  Label("Auto Transcript (Yap): Off", systemImage: "waveform")
-                }
+            Button {
+              let wasOff = podcastModel?.autoTranscribeNewEpisodes != true
+              podcastModel?.autoTranscribeNewEpisodes.toggle()
+              try? modelContext.save()
+              if wasOff && podcastModel?.autoTranscribeNewEpisodes == true {
+                showTranscribeBackfillSheet = true
+              }
+            } label: {
+              if podcastModel?.autoTranscribeNewEpisodes == true {
+                Label("Auto-transcribe: On", systemImage: "waveform.badge.plus")
+              } else {
+                Label("Auto-transcribe: Off", systemImage: "waveform")
               }
             }
 
@@ -509,6 +512,15 @@ struct EpisodeListView: View {
     .sheet(isPresented: $showEpisodeFilterSheet) {
       if let model = podcastModel {
         PodcastEpisodeFilterView(podcast: model, modelContext: modelContext)
+      }
+    }
+    .sheet(isPresented: $showTranscribeBackfillSheet) {
+      if let model = podcastModel {
+        TranscribeBackfillSheet(
+          podcastTitle: model.podcastInfo.title,
+          podcastLanguage: model.podcastInfo.language,
+          episodes: model.podcastInfo.episodes
+        )
       }
     }
   }

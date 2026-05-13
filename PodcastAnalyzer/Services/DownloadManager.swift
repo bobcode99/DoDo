@@ -310,26 +310,25 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
             )
           }
 
-          // Trigger per-podcast Yap auto-transcript if enabled
+          // Per-podcast auto-transcribe: resolve engine at run time (YAP / local / skip).
           let container = DownloadManager.shared.modelContainer
-          if let container,
-             !ProcessInfo.processInfo.isLowPowerModeEnabled,
-             TranscriptManager.shared.canAutoQueueYap(podcastTitle: podcastTitle) {
+          if let container {
             let ctx = ModelContext(container)
             let title = podcastTitle
             let descriptor = FetchDescriptor<PodcastInfoModel>(
               predicate: #Predicate { $0.title == title && $0.isSubscribed == true }
             )
             if let podcast = try? ctx.fetch(descriptor).first,
-               podcast.autoTranscribeWithYap,
-               !TranscriptManager.shared.isGenerating(episodeTitle: episodeTitle, podcastTitle: podcastTitle) {
+               podcast.autoTranscribeNewEpisodes,
+               !TranscriptManager.shared.isGenerating(episodeTitle: episodeTitle, podcastTitle: podcastTitle),
+               let engine = TranscriptManager.shared.engineForAutoEnqueue(podcastTitle: podcastTitle) {
               TranscriptManager.shared.queueTranscript(
                 episodeTitle: episodeTitle,
                 podcastTitle: podcastTitle,
                 audioPath: destinationURL.path,
                 audioRemoteURL: nil,
                 language: language,
-                engine: .yapServer
+                engine: engine
               )
             }
           }

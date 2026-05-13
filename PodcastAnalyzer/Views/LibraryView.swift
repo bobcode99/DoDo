@@ -11,8 +11,20 @@ import SwiftUI
 
 struct LibraryView: View {
   @State private var viewModel = LibraryViewModel(modelContext: nil)
+  @State private var syncManager = BackgroundSyncManager.shared
+  @State private var transcriptManager = TranscriptManager.shared
+  @State private var showTranscriptProgressSheet = false
   @AppStorage("showEpisodeArtwork") private var showEpisodeArtwork = true
   @Environment(\.modelContext) private var modelContext
+
+  private var activeTranscriptCount: Int {
+    transcriptManager.activeJobs.values.filter { job in
+      switch job.status {
+      case .queued, .downloadingModel, .transcribing: return true
+      case .completed, .failed: return false
+      }
+    }.count
+  }
 
   @Query(
     filter: #Predicate<PodcastInfoModel> { $0.isSubscribed },
@@ -58,10 +70,52 @@ struct LibraryView: View {
           .scaleEffect(1.5)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(Color.platformBackground)
+      } else if subscribedPodcasts.isEmpty
+                && viewModel.savedEpisodes.isEmpty
+                && viewModel.downloadedEpisodes.isEmpty {
+        ContentUnavailableView {
+          Label("No Podcasts Yet", systemImage: "antenna.radiowaves.left.and.right")
+        } description: {
+          Text("Search for a show or paste an RSS feed URL to start building your library.")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.platformBackground)
       }
     }
     .navigationTitle(Constants.libraryString)
     .platformToolbarTitleDisplayMode()
+    .toolbar {
+      if syncManager.isSyncing {
+        ToolbarItem(placement: .navigation) {
+          HStack(spacing: 6) {
+            ProgressView().scaleEffect(0.7)
+            if syncManager.syncProgressTotal > 0 {
+              Text("\(syncManager.syncProgressCurrent)/\(syncManager.syncProgressTotal)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+          }
+          .transition(.opacity)
+        }
+      }
+      if activeTranscriptCount > 0 {
+        ToolbarItem(placement: .navigation) {
+          Button {
+            showTranscriptProgressSheet = true
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "waveform.badge.plus")
+              Text("\(activeTranscriptCount)")
+                .font(.caption2.monospacedDigit())
+            }
+          }
+          .transition(.opacity)
+        }
+      }
+    }
+    .sheet(isPresented: $showTranscriptProgressSheet) {
+      TranscriptGenerationProgressOverallView()
+    }
     .navigationDestination(for: LibrarySubpageRoute.self) { route in
       switch route {
       case .saved:

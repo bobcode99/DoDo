@@ -13,6 +13,18 @@ struct LibraryQuickAccessSection: View {
   let downloadedCount: Int
   let latestCount: Int
 
+  @State private var transcriptManager = TranscriptManager.shared
+  @State private var showTranscriptProgressSheet = false
+
+  private var activeTranscriptCount: Int {
+    transcriptManager.activeJobs.values.filter { job in
+      switch job.status {
+      case .queued, .downloadingModel, .transcribing: return true
+      case .completed, .failed: return false
+      }
+    }.count
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 12) {
@@ -35,6 +47,36 @@ struct LibraryQuickAccessSection: View {
             count: downloadedCount,
             isLoading: false
           )
+        }
+        .buttonStyle(.plain)
+      }
+
+      if activeTranscriptCount > 0 {
+        Button { showTranscriptProgressSheet = true } label: {
+          HStack {
+            HStack(spacing: 8) {
+              Image(systemName: "waveform.badge.plus")
+                .font(.system(size: 16))
+                .foregroundStyle(.blue)
+              Text("Transcribing")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+            }
+            Spacer()
+            HStack(spacing: 4) {
+              ProgressView().scaleEffect(0.7)
+              Text("\(activeTranscriptCount)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+              Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+          }
+          .padding(.horizontal, 16)
+          .padding(.vertical, 14)
+          .background(.regularMaterial, in: .rect(cornerRadius: 12))
         }
         .buttonStyle(.plain)
       }
@@ -67,6 +109,9 @@ struct LibraryQuickAccessSection: View {
         .background(.regularMaterial, in: .rect(cornerRadius: 12))
       }
       .buttonStyle(.plain)
+    }
+    .sheet(isPresented: $showTranscriptProgressSheet) {
+      TranscriptGenerationProgressOverallView()
     }
   }
 }

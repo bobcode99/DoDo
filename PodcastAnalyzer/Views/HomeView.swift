@@ -74,6 +74,7 @@ struct TrendingEpisodeDetailDestination: Hashable {
 
 struct HomeView: View {
   @State private var viewModel = HomeViewModel()
+  @State private var syncManager = BackgroundSyncManager.shared
   @Environment(\.modelContext) private var modelContext
   @State private var showRegionPicker = false
 
@@ -142,6 +143,19 @@ struct HomeView: View {
     .navigationTitle(Constants.homeString)
     .platformToolbarTitleDisplayMode()
     .toolbar {
+      if syncManager.isSyncing {
+        ToolbarItem(placement: .navigation) {
+          HStack(spacing: 6) {
+            ProgressView().scaleEffect(0.7)
+            if syncManager.syncProgressTotal > 0 {
+              Text("\(syncManager.syncProgressCurrent)/\(syncManager.syncProgressTotal)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+          }
+          .transition(.opacity)
+        }
+      }
       ToolbarItem(placement: .primaryAction) {
         Button(action: { showRegionPicker = true }) {
           HStack(spacing: 4) {

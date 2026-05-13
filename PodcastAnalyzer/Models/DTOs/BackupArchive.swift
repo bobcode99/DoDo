@@ -18,6 +18,7 @@ struct BackupArchive: Codable, Sendable {
     var aiAnalyses: [BackupAIAnalysis]
     var quickTags: [BackupQuickTags]
     var settings: BackupSettings
+    var aiFormatHints: [String: String] = [:]
 }
 
 struct BackupPodcast: Codable, Sendable {
@@ -28,7 +29,7 @@ struct BackupPodcast: Codable, Sendable {
     var podcastDescription: String?
     var dateAdded: Date
     var isSubscribed: Bool
-    var autoTranscribeWithYap: Bool
+    var autoTranscribeNewEpisodes: Bool
     var autoDownloadSetting: String
     var episodeFilterInclude: String
     var episodeFilterExclude: String

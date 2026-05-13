@@ -411,6 +411,30 @@ class BackgroundSyncManager {
       podcast.predictedNextReleaseDate = nextDate
 
       logger.info("Found \(newEpisodes.count) new episodes for \(updatedPodcast.title)")
+
+      // Auto-enqueue transcription for shows the user opted into.
+      // We only fire here when the engine is YAP, since YAP can transcribe
+      // from a remote URL — no local audio file is needed. Local engines
+      // (Whisper / AppleSpeech) require the downloaded file, so they are
+      // handled by DownloadManager once the audio lands on disk.
+      if podcast.autoTranscribeNewEpisodes,
+         let engine = TranscriptManager.shared.engineForAutoEnqueue(podcastTitle: updatedPodcast.title),
+         engine == .yapServer {
+        for episode in newEpisodes {
+          guard !TranscriptManager.shared.isGenerating(
+            episodeTitle: episode.title, podcastTitle: updatedPodcast.title
+          ) else { continue }
+          TranscriptManager.shared.queueTranscript(
+            episodeTitle: episode.title,
+            podcastTitle: updatedPodcast.title,
+            audioPath: "",
+            audioRemoteURL: episode.audioURL,
+            language: updatedPodcast.language,
+            engine: .yapServer
+          )
+        }
+        logger.info("Auto-enqueued \(newEpisodes.count) YAP transcript jobs for \(updatedPodcast.title)")
+      }
     }
   }
 
@@ -500,13 +524,16 @@ class BackgroundSyncManager {
       guard let self else { return }
 
       // Only sync immediately if data is stale (avoids redundant fetch every app-foreground)
-      let isStale: Bool
       if let last = lastSyncDate {
-        isStale = Date().timeIntervalSince(last) >= minimumSyncInterval
+        let age = Date().timeIntervalSince(last)
+        if age >= minimumSyncInterval {
+          logger.info("Foreground sync: lastSync \(Int(age))s ago (>= \(Int(self.minimumSyncInterval))s threshold) — syncing now")
+          await self.syncNow()
+        } else {
+          logger.info("Foreground sync: lastSync \(Int(age))s ago — fresh, skipping immediate sync")
+        }
       } else {
-        isStale = true
-      }
-      if isStale {
+        logger.info("Foreground sync: no prior sync recorded — syncing now")
         await self.syncNow()
       }
 

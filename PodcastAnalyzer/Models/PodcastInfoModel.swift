@@ -53,11 +53,12 @@ class PodcastInfoModel {
 
   // MARK: - Per-Podcast Automation
 
-  /// When `true`, a Yap server transcript job is queued automatically after each
-  /// episode download completes. Requires the Yap server URL to be configured.
-  /// Only triggers when Low Power Mode is off. Respects the session-level
-  /// failure cap in `TranscriptManager`.
-  var autoTranscribeWithYap: Bool = false
+  /// When `true`, new episodes from this podcast are queued for transcription
+  /// automatically. The engine is resolved at execution time: YAP server when
+  /// configured, otherwise a local engine (Whisper / Apple Speech) gated by the
+  /// device's charging state. Respects `TranscriptManager`'s per-podcast
+  /// session failure cap.
+  var autoTranscribeNewEpisodes: Bool = false
 
   /// Three-state auto-download setting (AntennaPod pattern).
   /// "enabled" | "disabled" | "inheritGlobal".
