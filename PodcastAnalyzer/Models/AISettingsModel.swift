@@ -109,43 +109,108 @@ nonisolated enum TranscriptFormatForAI: String, CaseIterable, Codable {
 // MARK: - Analysis Language Setting
 
 nonisolated enum AnalysisLanguage: String, CaseIterable, Codable {
+    // Behaviour-based options
     case deviceLanguage = "Device Language"
-    case english = "English"
     case matchPodcast = "Match Podcast"
 
+    // Popular languages (alphabetical within each script family for predictable picker order)
+    case english = "English"
+    case spanish = "Spanish"
+    case french = "French"
+    case german = "German"
+    case italian = "Italian"
+    case portuguese = "Portuguese"
+    case dutch = "Dutch"
+    case russian = "Russian"
+    case arabic = "Arabic"
+    case hindi = "Hindi"
+    case chineseSimplified = "Chinese (Simplified)"
+    case chineseTraditional = "Chinese (Traditional)"
+    case japanese = "Japanese"
+    case korean = "Korean"
+
+    // Custom override — paired with `customAnalysisLanguageName` in AISettingsManager.
+    case custom = "Custom…"
+
     var displayName: String { rawValue }
+
+    /// Groups picker entries into Behaviour / Popular Languages / Custom.
+    static var behaviorCases: [AnalysisLanguage] { [.deviceLanguage, .matchPodcast] }
+    static var popularLanguageCases: [AnalysisLanguage] {
+        [.english, .spanish, .french, .german, .italian, .portuguese, .dutch,
+         .russian, .arabic, .hindi,
+         .chineseSimplified, .chineseTraditional, .japanese, .korean]
+    }
 
     var icon: String {
         switch self {
         case .deviceLanguage: return "iphone"
-        case .english: return "globe.americas"
         case .matchPodcast: return "waveform"
+        case .english: return "globe.americas"
+        case .spanish, .portuguese: return "globe.europe.africa"
+        case .french, .german, .italian, .dutch, .russian: return "globe.europe.africa"
+        case .arabic, .hindi: return "globe"
+        case .chineseSimplified, .chineseTraditional, .japanese, .korean: return "globe.asia.australia"
+        case .custom: return "pencil.line"
+        }
+    }
+
+    /// Emoji equivalent of `icon` — flags for languages, semantic glyphs for
+    /// the behavior / custom modes. Used by the Response Language picker.
+    var emoji: String {
+        switch self {
+        case .deviceLanguage: return "📱"
+        case .matchPodcast: return "🎙️"
+        case .english: return "🇬🇧"
+        case .spanish: return "🇪🇸"
+        case .french: return "🇫🇷"
+        case .german: return "🇩🇪"
+        case .italian: return "🇮🇹"
+        case .portuguese: return "🇵🇹"
+        case .dutch: return "🇳🇱"
+        case .russian: return "🇷🇺"
+        case .arabic: return "🇸🇦"
+        case .hindi: return "🇮🇳"
+        case .chineseSimplified: return "🇨🇳"
+        case .chineseTraditional: return "🇹🇼"
+        case .japanese: return "🇯🇵"
+        case .korean: return "🇰🇷"
+        case .custom: return "✏️"
         }
     }
 
     var description: String {
         switch self {
         case .deviceLanguage: return "Use your device's language settings"
-        case .english: return "Always respond in English"
         case .matchPodcast: return "Match the podcast's language"
+        case .custom: return "Type any language you want responses in"
+        default: return "Always respond in \(rawValue)"
         }
     }
 
-    /// Returns the language instruction to include in AI prompts
-    func getLanguageInstruction(podcastLanguage: String? = nil) -> String {
+    /// Returns the language instruction to include in AI prompts.
+    /// `customLanguageName` is only consulted when `self == .custom`.
+    func getLanguageInstruction(
+        podcastLanguage: String? = nil,
+        customLanguageName: String? = nil
+    ) -> String {
         switch self {
         case .deviceLanguage:
             let preferredLanguage = Locale.preferredLanguages.first ?? "en"
             let languageName = Locale.current.localizedString(forLanguageCode: preferredLanguage) ?? "English"
             return "IMPORTANT: Respond in \(languageName)."
-        case .english:
-            return "IMPORTANT: Respond in English."
         case .matchPodcast:
             if let podcastLang = podcastLanguage, !podcastLang.isEmpty {
                 let languageName = Locale.current.localizedString(forLanguageCode: podcastLang) ?? podcastLang
                 return "IMPORTANT: Respond in \(languageName) (the podcast's language)."
             }
             return "" // No instruction if podcast language unknown
+        case .custom:
+            let trimmed = (customLanguageName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return "" }
+            return "IMPORTANT: Respond in \(trimmed)."
+        default:
+            return "IMPORTANT: Respond in \(rawValue)."
         }
     }
 }
@@ -365,6 +430,12 @@ final class AISettingsManager {
         didSet { saveSettings() }
     }
 
+    /// Free-form language name used when `analysisLanguage == .custom`.
+    /// Persisted separately so users can type any language (e.g. "Swiss German").
+    var customAnalysisLanguageName: String {
+        didSet { UserDefaults.standard.set(customAnalysisLanguageName, forKey: "ai_custom_analysis_language") }
+    }
+
     var transcriptFormat: TranscriptFormatForAI {
         didSet { saveSettings() }
     }
@@ -459,6 +530,9 @@ final class AISettingsManager {
         } else {
             self.analysisLanguage = .deviceLanguage // Default
         }
+
+        // Load custom analysis language name (only meaningful when analysisLanguage == .custom)
+        self.customAnalysisLanguageName = UserDefaults.standard.string(forKey: "ai_custom_analysis_language") ?? ""
 
         // Load transcript format setting
         if let formatString = UserDefaults.standard.string(forKey: "ai_transcript_format"),

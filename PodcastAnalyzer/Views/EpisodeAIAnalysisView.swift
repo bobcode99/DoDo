@@ -1485,21 +1485,15 @@ private struct PromptPreviewSheet: View {
 
   @Environment(\.dismiss) private var dismiss
   @State private var didCopy = false
+  @State private var systemPrompt: String = ""
+  @State private var userPrompt: String = ""
+  @State private var combined: String = ""
+  @State private var isBuilding: Bool = true
 
-  private var prompt: (system: String, user: String) {
-    CloudAIService.shared.buildPrompt(
-      type: .analysis,
-      transcript: transcript,
-      episodeTitle: episodeTitle,
-      podcastTitle: podcastTitle,
-      podcastLanguage: podcastLanguage,
-      formatHint: formatHint
-    )
-  }
-
-  private var combined: String {
-    "## System\n\(prompt.system)\n\n## User\n\(prompt.user)"
-  }
+  // SwiftUI `Text` lays out synchronously on the main thread; a 50–100 KB
+  // monospaced prompt freezes the UI. Truncate the preview — copy carries the
+  // full content.
+  private static let previewCharLimit = 4_000
 
   var body: some View {
     NavigationStack {
@@ -1515,7 +1509,11 @@ private struct PromptPreviewSheet: View {
           }
 
           HStack(spacing: 12) {
-            Label("\(combined.count) chars", systemImage: "textformat.size")
+            if isBuilding {
+              Label("Building…", systemImage: "hourglass")
+            } else {
+              Label("\(combined.count) chars", systemImage: "textformat.size")
+            }
             if formatHint != nil {
               Label("Custom format", systemImage: "text.append")
                 .foregroundStyle(.blue)
@@ -1543,8 +1541,19 @@ private struct PromptPreviewSheet: View {
             .clipShape(.rect(cornerRadius: 10))
           }
 
-          promptSection(title: "System", body: prompt.system)
-          promptSection(title: "User", body: prompt.user)
+          if isBuilding {
+            HStack(spacing: 8) {
+              ProgressView()
+              Text("Preparing prompt preview…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 40)
+          } else {
+            promptSection(title: "System", body: systemPrompt)
+            promptSection(title: "User", body: userPrompt)
+          }
         }
         .padding()
         .padding(.bottom, 80)
@@ -1558,11 +1567,12 @@ private struct PromptPreviewSheet: View {
           }
           .frame(maxWidth: .infinity)
           .padding()
-          .background(didCopy ? Color.green : Color.blue)
+          .background(isBuilding ? Color.gray : (didCopy ? Color.green : Color.blue))
           .foregroundStyle(.white)
           .clipShape(.rect(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .disabled(isBuilding)
         .padding()
         .background(.regularMaterial)
       }
@@ -1575,16 +1585,36 @@ private struct PromptPreviewSheet: View {
           Button("Done") { dismiss() }
         }
       }
+      .task(id: transcript) {
+        await buildPrompts()
+      }
     }
   }
 
+  @ViewBuilder
   private func promptSection(title: String, body: String) -> some View {
+    let truncated = body.count > Self.previewCharLimit
+    let displayed: String = {
+      guard truncated else { return body }
+      let head = body.prefix(Self.previewCharLimit)
+      let omitted = body.count - Self.previewCharLimit
+      return "\(head)\n\n… [\(omitted) more characters — full prompt is copied to clipboard]"
+    }()
+
     VStack(alignment: .leading, spacing: 6) {
-      Text(title.uppercased())
-        .font(.caption2.bold())
-        .foregroundStyle(.secondary)
-        .tracking(0.5)
-      Text(body)
+      HStack {
+        Text(title.uppercased())
+          .font(.caption2.bold())
+          .foregroundStyle(.secondary)
+          .tracking(0.5)
+        Spacer()
+        if truncated {
+          Text("preview truncated")
+            .font(.caption2)
+            .foregroundStyle(.orange)
+        }
+      }
+      Text(displayed)
         .font(.caption.monospaced())
         .textSelection(.enabled)
         .padding(12)
@@ -1594,7 +1624,28 @@ private struct PromptPreviewSheet: View {
     }
   }
 
+  private func buildPrompts() async {
+    // Yield once so SwiftUI gets a chance to paint the sheet (with the
+    // "Preparing…" spinner) before we run string work on the main actor.
+    await Task.yield()
+
+    let pair = CloudAIService.shared.buildPrompt(
+      type: .analysis,
+      transcript: transcript,
+      episodeTitle: episodeTitle,
+      podcastTitle: podcastTitle,
+      podcastLanguage: podcastLanguage,
+      formatHint: formatHint
+    )
+    systemPrompt = pair.system
+    userPrompt = pair.user
+    combined = "## System\n\(pair.system)\n\n## User\n\(pair.user)"
+    isBuilding = false
+  }
+
   private func copy() {
+    guard !combined.isEmpty else { return }
+
     #if os(iOS)
     UIPasteboard.general.string = combined
     #else

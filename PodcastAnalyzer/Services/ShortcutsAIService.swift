@@ -464,7 +464,7 @@ class ShortcutsAIService {
         analysisType: CloudAnalysisType
     ) -> String {
         let settings = AISettingsManager.shared
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction()
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(customLanguageName: settings.customAnalysisLanguageName)
 
         switch analysisType {
         case .analysis:

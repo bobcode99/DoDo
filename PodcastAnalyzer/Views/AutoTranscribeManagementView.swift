@@ -2,8 +2,9 @@
 //  AutoTranscribeManagementView.swift
 //  PodcastAnalyzer
 //
-//  Global overview of every podcast with auto-transcribe enabled, with a
-//  one-tap disable per row and a "Disable all" bulk action.
+//  Central overview of every subscribed podcast. The first section lists shows
+//  with auto-transcribe enabled (with disable / bulk-disable), and the second
+//  section lists the rest so users can flip the feature on from one place.
 //
 
 import SwiftData
@@ -13,40 +14,79 @@ struct AutoTranscribeManagementView: View {
   @Environment(\.modelContext) private var modelContext
 
   @Query(
-    filter: #Predicate<PodcastInfoModel> {
-      $0.isSubscribed && $0.autoTranscribeNewEpisodes
-    },
+    filter: #Predicate<PodcastInfoModel> { $0.isSubscribed },
     sort: \.lastUpdated,
     order: .reverse
-  ) private var enabledPodcasts: [PodcastInfoModel]
+  ) private var subscribedPodcasts: [PodcastInfoModel]
 
   @State private var syncManager = TranscriptManager.shared
   @State private var showDisableAllConfirmation = false
+  @State private var searchText: String = ""
+
+  private var enabledPodcasts: [PodcastInfoModel] {
+    filtered(subscribedPodcasts.filter { $0.autoTranscribeNewEpisodes })
+  }
+
+  private var otherPodcasts: [PodcastInfoModel] {
+    filtered(subscribedPodcasts.filter { !$0.autoTranscribeNewEpisodes })
+  }
+
+  private func filtered(_ podcasts: [PodcastInfoModel]) -> [PodcastInfoModel] {
+    let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !needle.isEmpty else { return podcasts }
+    return podcasts.filter { $0.podcastInfo.title.lowercased().contains(needle) }
+  }
 
   var body: some View {
     Group {
-      if enabledPodcasts.isEmpty {
+      if subscribedPodcasts.isEmpty {
         ContentUnavailableView(
-          "No Auto-Transcribe Shows",
-          systemImage: "waveform.slash",
-          description: Text("Enable \"Auto-transcribe new episodes\" on any podcast's context menu, and it will appear here.")
+          "No Subscribed Podcasts",
+          systemImage: "rectangle.stack.badge.person.crop",
+          description: Text("Subscribe to a podcast to manage auto-transcribe from here.")
         )
       } else {
         List {
-          Section {
-            ForEach(enabledPodcasts) { podcast in
-              row(for: podcast)
+          if !enabledPodcasts.isEmpty {
+            Section {
+              ForEach(enabledPodcasts) { podcast in
+                row(for: podcast)
+              }
+            } header: {
+              Text("Auto-transcribe On (\(enabledPodcasts.count))")
+            } footer: {
+              Text("New episodes from these podcasts are queued for transcription automatically. The engine is YAP server when configured, otherwise a local engine (gated by charging state).")
+                .font(.footnote)
             }
-          } footer: {
-            Text("New episodes from these podcasts are queued for transcription automatically. The engine is YAP server when configured, otherwise a local engine (gated by charging state).")
-              .font(.footnote)
+          }
+
+          if !otherPodcasts.isEmpty {
+            Section {
+              ForEach(otherPodcasts) { podcast in
+                row(for: podcast)
+              }
+            } header: {
+              Text("Other Subscribed (\(otherPodcasts.count))")
+            } footer: {
+              if enabledPodcasts.isEmpty {
+                Text("Tap any toggle to start auto-transcribing a podcast's new episodes.")
+                  .font(.footnote)
+              }
+            }
+          }
+
+          if enabledPodcasts.isEmpty && otherPodcasts.isEmpty {
+            Section {
+              ContentUnavailableView.search(text: searchText)
+            }
           }
         }
+        .searchable(text: $searchText, prompt: "Search podcasts")
       }
     }
     .navigationTitle("Auto-transcribe")
     .toolbar {
-      if !enabledPodcasts.isEmpty {
+      if !subscribedPodcasts.filter({ $0.autoTranscribeNewEpisodes }).isEmpty {
         ToolbarItem(placement: .primaryAction) {
           Button("Disable All", role: .destructive) {
             showDisableAllConfirmation = true
@@ -55,12 +95,12 @@ struct AutoTranscribeManagementView: View {
       }
     }
     .confirmationDialog(
-      "Disable Auto-transcribe for \(enabledPodcasts.count) podcasts?",
+      "Disable Auto-transcribe for \(subscribedPodcasts.filter({ $0.autoTranscribeNewEpisodes }).count) podcasts?",
       isPresented: $showDisableAllConfirmation,
       titleVisibility: .visible
     ) {
       Button("Disable All", role: .destructive) {
-        for podcast in enabledPodcasts {
+        for podcast in subscribedPodcasts where podcast.autoTranscribeNewEpisodes {
           podcast.autoTranscribeNewEpisodes = false
         }
         try? modelContext.save()
@@ -74,26 +114,22 @@ struct AutoTranscribeManagementView: View {
   @ViewBuilder
   private func row(for podcast: PodcastInfoModel) -> some View {
     let title = podcast.podcastInfo.title
+    let enabled = podcast.autoTranscribeNewEpisodes
     let pending = activeCount(for: title)
 
     HStack(spacing: 12) {
-      Image(systemName: "waveform.badge.plus")
-        .foregroundStyle(.blue)
+      Image(systemName: enabled ? "waveform.badge.plus" : "waveform")
+        .foregroundStyle(enabled ? .blue : .secondary)
         .frame(width: 28)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .font(.body)
           .lineLimit(1)
-        if pending > 0 {
-          Text("\(pending) in progress")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        } else {
-          Text("Listening for new episodes")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
+        Text(subtitle(enabled: enabled, pending: pending, episodes: podcast.podcastInfo.episodes.count))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
       }
       Spacer()
 
@@ -106,6 +142,14 @@ struct AutoTranscribeManagementView: View {
       ))
       .labelsHidden()
     }
+  }
+
+  private func subtitle(enabled: Bool, pending: Int, episodes: Int) -> String {
+    if enabled {
+      if pending > 0 { return "\(pending) in progress" }
+      return "Listening for new episodes"
+    }
+    return "\(episodes) episode\(episodes == 1 ? "" : "s")"
   }
 
   private func activeCount(for podcastTitle: String) -> Int {

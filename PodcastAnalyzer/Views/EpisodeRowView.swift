@@ -366,14 +366,6 @@ struct EpisodeRowView: View {
 
       // Status indicators
       HStack(spacing: 4) {
-        if let date = episode.pubDate,
-           Date().timeIntervalSince(date) < 3 * 86_400,
-           !isCompleted {
-          Image(systemName: "sparkle")
-            .font(.system(size: 10))
-            .foregroundStyle(.blue)
-        }
-
         if isStarred {
           Image(systemName: "star.fill")
             .font(.system(size: 10))

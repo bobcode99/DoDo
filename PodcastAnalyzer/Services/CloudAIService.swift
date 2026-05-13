@@ -102,7 +102,7 @@ final class CloudAIService {
         progressCallback?("Starting Shortcuts analysis...", 0.2)
 
         // Log the language setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         logger.info("Shortcuts Analysis Request - Type: \(analysisType.rawValue), Language setting: \(self.settings.analysisLanguage.rawValue), Instruction: \(languageInstruction.isEmpty ? "None" : languageInstruction)")
 
         // Build the prompt with JSON format
@@ -212,7 +212,7 @@ final class CloudAIService {
     ) async throws -> CloudQAResult {
         progressCallback?("Preparing question for Shortcuts...", 0.2)
 
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\nLanguage: \(languageInstruction)"
 
         // Log the language setting
@@ -293,7 +293,7 @@ final class CloudAIService {
         podcastLanguage: String? = nil,
         formatHint: String? = nil
     ) -> String {
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\nLanguage: \(languageInstruction)"
 
         let formatHintLine: String
@@ -395,7 +395,7 @@ final class CloudAIService {
         progressCallback?("Preparing analysis...", 0.1)
 
         // Log the language setting for streaming analysis
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         logger.info("Streaming Analysis Request - Provider: \(provider.displayName), Type: \(analysisType.rawValue), Language setting: \(self.settings.analysisLanguage.rawValue), Instruction: \(languageInstruction.isEmpty ? "None" : languageInstruction)")
 
         let systemPrompt = buildSystemPrompt(for: analysisType, podcastLanguage: podcastLanguage, formatHint: formatHint)
@@ -568,7 +568,7 @@ final class CloudAIService {
         progressCallback?("Processing question...", 0.2)
 
         // Get language instruction based on user setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
 
         // Log the language setting
@@ -673,7 +673,7 @@ final class CloudAIService {
 
     private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil) -> String {
         // Get language instruction based on user setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
 
         let formatHintLine: String
