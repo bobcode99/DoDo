@@ -132,7 +132,7 @@ struct TranscribeBackfillSheet: View {
         episodeTitle: ep.title, podcastTitle: podcastTitle
       ) else { continue }
 
-      TranscriptManager.shared.queueTranscript(
+      TranscriptManager.shared.queueAutoTranscript(
         episodeTitle: ep.title,
         podcastTitle: podcastTitle,
         audioPath: "",                       // YAP can use remote; local will fall back to .failed if no local file

@@ -12,19 +12,9 @@ import SwiftUI
 struct LibraryView: View {
   @State private var viewModel = LibraryViewModel(modelContext: nil)
   @State private var syncManager = BackgroundSyncManager.shared
-  @State private var transcriptManager = TranscriptManager.shared
   @State private var showTranscriptProgressSheet = false
   @AppStorage("showEpisodeArtwork") private var showEpisodeArtwork = true
   @Environment(\.modelContext) private var modelContext
-
-  private var activeTranscriptCount: Int {
-    transcriptManager.activeJobs.values.filter { job in
-      switch job.status {
-      case .queued, .downloadingModel, .transcribing: return true
-      case .completed, .failed: return false
-      }
-    }.count
-  }
 
   @Query(
     filter: #Predicate<PodcastInfoModel> { $0.isSubscribed },
@@ -98,19 +88,10 @@ struct LibraryView: View {
           .transition(.opacity)
         }
       }
-      if activeTranscriptCount > 0 {
-        ToolbarItem(placement: .navigation) {
-          Button {
-            showTranscriptProgressSheet = true
-          } label: {
-            HStack(spacing: 4) {
-              Image(systemName: "waveform.badge.plus")
-              Text("\(activeTranscriptCount)")
-                .font(.caption2.monospacedDigit())
-            }
-          }
-          .transition(.opacity)
-        }
+      ToolbarItem(placement: .navigation) {
+        // Isolated subview observes TranscriptManager so progress ticks don't
+        // invalidate the entire LibraryView body on every update.
+        TranscriptToolbarBadge(showSheet: $showTranscriptProgressSheet)
       }
     }
     .sheet(isPresented: $showTranscriptProgressSheet) {
@@ -184,6 +165,43 @@ struct LibraryView: View {
       }
   }
 
+}
+
+// MARK: - Isolated transcript toolbar badge
+
+/// Reads `TranscriptManager.shared.activeJobs` only inside this small view, so
+/// the high-frequency progress updates re-render only the badge instead of
+/// the whole Library screen.
+private struct TranscriptToolbarBadge: View {
+  @Binding var showSheet: Bool
+  @State private var manager = TranscriptManager.shared
+
+  private var activeCount: Int {
+    var count = 0
+    for job in manager.activeJobs.values {
+      switch job.status {
+      case .queued, .downloadingModel, .transcribing: count += 1
+      case .completed, .failed: break
+      }
+    }
+    return count
+  }
+
+  var body: some View {
+    let count = activeCount
+    if count > 0 {
+      Button {
+        showSheet = true
+      } label: {
+        HStack(spacing: 4) {
+          Image(systemName: "waveform.badge.plus")
+          Text("\(count)")
+            .font(.caption2.monospacedDigit())
+        }
+      }
+      .transition(.opacity)
+    }
+  }
 }
 
 #Preview {

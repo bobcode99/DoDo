@@ -424,7 +424,7 @@ class BackgroundSyncManager {
           guard !TranscriptManager.shared.isGenerating(
             episodeTitle: episode.title, podcastTitle: updatedPodcast.title
           ) else { continue }
-          TranscriptManager.shared.queueTranscript(
+          TranscriptManager.shared.queueAutoTranscript(
             episodeTitle: episode.title,
             podcastTitle: updatedPodcast.title,
             audioPath: "",

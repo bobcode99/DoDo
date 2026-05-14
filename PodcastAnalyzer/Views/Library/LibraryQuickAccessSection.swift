@@ -13,17 +13,7 @@ struct LibraryQuickAccessSection: View {
   let downloadedCount: Int
   let latestCount: Int
 
-  @State private var transcriptManager = TranscriptManager.shared
   @State private var showTranscriptProgressSheet = false
-
-  private var activeTranscriptCount: Int {
-    transcriptManager.activeJobs.values.filter { job in
-      switch job.status {
-      case .queued, .downloadingModel, .transcribing: return true
-      case .completed, .failed: return false
-      }
-    }.count
-  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -51,35 +41,9 @@ struct LibraryQuickAccessSection: View {
         .buttonStyle(.plain)
       }
 
-      if activeTranscriptCount > 0 {
-        Button { showTranscriptProgressSheet = true } label: {
-          HStack {
-            HStack(spacing: 8) {
-              Image(systemName: "waveform.badge.plus")
-                .font(.system(size: 16))
-                .foregroundStyle(.blue)
-              Text("Transcribing")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.primary)
-            }
-            Spacer()
-            HStack(spacing: 4) {
-              ProgressView().scaleEffect(0.7)
-              Text("\(activeTranscriptCount)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-              Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-          }
-          .padding(.horizontal, 16)
-          .padding(.vertical, 14)
-          .background(.regularMaterial, in: .rect(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-      }
+      // Isolated subview observes TranscriptManager so progress ticks don't
+      // invalidate the rest of LibraryQuickAccessSection on every update.
+      TranscriptingCard(showSheet: $showTranscriptProgressSheet)
 
       NavigationLink(value: LibrarySubpageRoute.latest) {
         HStack {
@@ -112,6 +76,60 @@ struct LibraryQuickAccessSection: View {
     }
     .sheet(isPresented: $showTranscriptProgressSheet) {
       TranscriptGenerationProgressOverallView()
+    }
+  }
+}
+
+// MARK: - Isolated transcribing card
+
+/// Renders the "Transcribing N" card only when there are active jobs. Observing
+/// `TranscriptManager.shared.activeJobs` inside this small view prevents progress
+/// ticks from invalidating the parent section on every update.
+private struct TranscriptingCard: View {
+  @Binding var showSheet: Bool
+  @State private var manager = TranscriptManager.shared
+
+  private var activeCount: Int {
+    var count = 0
+    for job in manager.activeJobs.values {
+      switch job.status {
+      case .queued, .downloadingModel, .transcribing: count += 1
+      case .completed, .failed: break
+      }
+    }
+    return count
+  }
+
+  var body: some View {
+    let count = activeCount
+    if count > 0 {
+      Button { showSheet = true } label: {
+        HStack {
+          HStack(spacing: 8) {
+            Image(systemName: "waveform.badge.plus")
+              .font(.system(size: 16))
+              .foregroundStyle(.blue)
+            Text("Transcribing")
+              .font(.subheadline)
+              .fontWeight(.medium)
+              .foregroundStyle(.primary)
+          }
+          Spacer()
+          HStack(spacing: 4) {
+            ProgressView().scaleEffect(0.7)
+            Text("\(count)")
+              .font(.caption.monospacedDigit())
+              .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(.regularMaterial, in: .rect(cornerRadius: 12))
+      }
+      .buttonStyle(.plain)
     }
   }
 }

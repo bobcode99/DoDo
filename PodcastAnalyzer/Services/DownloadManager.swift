@@ -300,9 +300,10 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
             ]
           )
 
-          // Trigger auto-transcript if enabled (global engine)
+          // Trigger auto-transcript if enabled (global engine).
+          // queueAutoTranscript skips silently when the episode already has a caption file.
           if SubtitleSettingsManager.shared.autoGenerateTranscripts {
-            TranscriptManager.shared.queueTranscript(
+            TranscriptManager.shared.queueAutoTranscript(
               episodeTitle: episodeTitle,
               podcastTitle: podcastTitle,
               audioPath: destinationURL.path,
@@ -322,7 +323,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
                podcast.autoTranscribeNewEpisodes,
                !TranscriptManager.shared.isGenerating(episodeTitle: episodeTitle, podcastTitle: podcastTitle),
                let engine = TranscriptManager.shared.engineForAutoEnqueue(podcastTitle: podcastTitle) {
-              TranscriptManager.shared.queueTranscript(
+              TranscriptManager.shared.queueAutoTranscript(
                 episodeTitle: episodeTitle,
                 podcastTitle: podcastTitle,
                 audioPath: destinationURL.path,

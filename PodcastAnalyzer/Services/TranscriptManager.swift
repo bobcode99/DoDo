@@ -76,6 +76,11 @@ class TranscriptManager {
   private var yapConsecutiveFailures: [String: Int] = [:]
   private let yapFailureLimit = 3
 
+  // Per-job timestamp of the last YAP progress update we forwarded to activeJobs.
+  // Used to throttle high-frequency poll callbacks to ~4 Hz so the @Observable
+  // dictionary doesn't invalidate every SwiftUI consumer on each tick.
+  private var lastYapProgressUpdate: [String: Date] = [:]
+
   private init() {}
 
   // No deinit needed — TranscriptManager is a singleton (static let shared)
@@ -116,6 +121,44 @@ class TranscriptManager {
     activeJobs[jobId] = job
     logger.info("Queued transcript job for: \(episodeTitle)")
     startProcessingIfNeeded()
+  }
+
+  /// Auto-enqueue variant that no-ops when the episode already has a caption file
+  /// on disk. Use this from non-user-initiated paths (post-download hook, feed
+  /// refresh, opt-in backfill). Manual "Generate Transcript" buttons should keep
+  /// calling `queueTranscript` so the user can intentionally replace a transcript.
+  func queueAutoTranscript(
+    episodeTitle: String, podcastTitle: String, audioPath: String,
+    audioRemoteURL: String? = nil, language: String?,
+    engine: TranscriptEngine? = nil
+  ) {
+    let jobId = makeJobId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
+    if let existing = activeJobs[jobId] {
+      switch existing.status {
+      case .queued, .downloadingModel, .transcribing, .completed:
+        return  // already in flight or done; let queueTranscript handle retry of .failed
+      case .failed:
+        break
+      }
+    }
+
+    Task { [weak self] in
+      guard let self else { return }
+      let exists = await FileStorageManager.shared.captionFileExists(
+        for: episodeTitle, podcastTitle: podcastTitle)
+      if exists {
+        self.logger.info("Auto-transcript skipped — caption already exists: \(episodeTitle)")
+        return
+      }
+      self.queueTranscript(
+        episodeTitle: episodeTitle,
+        podcastTitle: podcastTitle,
+        audioPath: audioPath,
+        audioRemoteURL: audioRemoteURL,
+        language: language,
+        engine: engine
+      )
+    }
   }
 
   /// Checks if a transcript is being generated for an episode
@@ -550,6 +593,15 @@ class TranscriptManager {
     // Monotonic guard: never let a late-arriving callback regress progress.
     guard case .transcribing(let current) = activeJobs[jobID]?.status,
           progress > current else { return }
+    // Throttle: forward progress at most every 0.25s unless it jumps ≥5% or hits 100%.
+    // Without this, YAP's poll loop fires several updates per second and every
+    // @Observable consumer of activeJobs re-renders on each tick.
+    let now = Date()
+    let last = lastYapProgressUpdate[jobID] ?? .distantPast
+    let elapsed = now.timeIntervalSince(last)
+    let delta = progress - current
+    guard elapsed >= 0.25 || delta >= 0.05 || progress >= 1.0 else { return }
+    lastYapProgressUpdate[jobID] = now
     activeJobs[jobID]?.status = .transcribing(progress: progress)
   }
 
