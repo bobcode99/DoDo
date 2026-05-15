@@ -9,8 +9,27 @@
 
 import AppIntents
 import SwiftUI
-import UIKit
 import WidgetKit
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
+extension Image {
+  init?(artworkData: Data) {
+    #if canImport(UIKit)
+    guard let image = UIImage(data: artworkData) else { return nil }
+    self.init(uiImage: image)
+    #elseif canImport(AppKit)
+    guard let image = NSImage(data: artworkData) else { return nil }
+    self.init(nsImage: image)
+    #else
+    return nil
+    #endif
+  }
+}
 
 // MARK: - Widget Entry
 
@@ -199,8 +218,8 @@ struct SmallWidgetView: View {
 
   @ViewBuilder
   private var artworkBackground: some View {
-    if let artworkData = entry.artworkData, let uiImage = UIImage(data: artworkData) {
-      Image(uiImage: uiImage)
+    if let artworkData = entry.artworkData, let image = Image(artworkData: artworkData) {
+      image
         .resizable()
         .aspectRatio(contentMode: .fill)
     } else {
@@ -305,8 +324,8 @@ struct MediumWidgetView: View {
 
   @ViewBuilder
   private var artworkPanel: some View {
-    if let artworkData = entry.artworkData, let uiImage = UIImage(data: artworkData) {
-      Image(uiImage: uiImage)
+    if let artworkData = entry.artworkData, let image = Image(artworkData: artworkData) {
+      image
         .resizable()
         .aspectRatio(contentMode: .fill)
     } else {

@@ -36,9 +36,11 @@ struct TranscriptSearchSheet: View {
                 }
             }
             .navigationTitle("Search Transcript")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         dismiss()
                     } label: {

@@ -34,6 +34,8 @@ struct MacSearchView: View {
           applePodcastsResultsView
         case .library:
           libraryResultsView
+        case .transcripts:
+          emptySearchView
         }
       }
     }

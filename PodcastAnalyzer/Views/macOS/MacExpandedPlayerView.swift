@@ -6,6 +6,7 @@
 //
 
 #if os(macOS)
+import SwiftData
 import SwiftUI
 
 struct MacExpandedPlayerView: View {

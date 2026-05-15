@@ -84,6 +84,34 @@ extension CachedAsyncImage where Content == Image, Placeholder == ProgressView<E
   }
 }
 
+// MARK: - Apple Artwork URL Upgrade
+
+/// Rewrites Apple iTunes/mzstatic artwork URLs to a higher resolution.
+///
+/// Apple serves podcast artwork at `https://.../{N}x{N}bb.{ext}`; the source
+/// image is the same regardless of the requested size, so requesting a larger
+/// path gives back a sharper image. For non-Apple URLs the string is returned
+/// unchanged.
+nonisolated enum AppleArtworkURL {
+  /// Cap on the rewritten dimension. Apple's CDN typically serves up to ~3000px.
+  static let maxDimension = 1200
+
+  /// Returns the URL string rewritten to `targetPixels x targetPixels` if the
+  /// URL matches the Apple `{N}x{N}bb` pattern. Caps the result at `maxDimension`.
+  static func upgrade(_ urlString: String, targetPixels: Int) -> String {
+    let clamped = min(max(targetPixels, 100), maxDimension)
+    guard let regex = try? NSRegularExpression(pattern: "[0-9]{2,4}x[0-9]{2,4}bb") else {
+      return urlString
+    }
+    let range = NSRange(urlString.startIndex..., in: urlString)
+    return regex.stringByReplacingMatches(
+      in: urlString,
+      range: range,
+      withTemplate: "\(clamped)x\(clamped)bb"
+    )
+  }
+}
+
 // MARK: - Cached Artwork Image (Specialized for Podcasts)
 
 nonisolated struct CachedArtworkImage: View {
@@ -97,9 +125,13 @@ nonisolated struct CachedArtworkImage: View {
     self.cornerRadius = cornerRadius
   }
 
+  /// Target pixel dimension for the source image — aim for @3x quality so
+  /// retina displays get a sharp result after Nuke downsamples.
+  private var targetPixels: Int { Int(size * 3) }
+
   private var url: URL? {
     guard let urlString else { return nil }
-    return URL(string: urlString)
+    return URL(string: AppleArtworkURL.upgrade(urlString, targetPixels: targetPixels))
   }
 
   private var request: ImageRequest? {

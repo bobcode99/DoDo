@@ -47,7 +47,9 @@ struct PodcastEpisodeFilterView: View {
         }
       }
       .navigationTitle("Episode Filter")
+      #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
+      #endif
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") {

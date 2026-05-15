@@ -305,6 +305,7 @@ struct PlaybackSettingsTab: View {
 
 struct TranscriptSettingsTab: View {
   @State private var viewModel = SettingsViewModel()
+  @State private var showAutoTranscribeManagement = false
 
   var body: some View {
     @Bindable var viewModel = viewModel
@@ -364,10 +365,24 @@ struct TranscriptSettingsTab: View {
       // MARK: Auto-generate
       Section {
         Toggle("Auto-Generate Transcripts", isOn: $subtitleSettings.autoGenerateTranscripts)
+
+        Button {
+          showAutoTranscribeManagement = true
+        } label: {
+          HStack {
+            Label("Auto-transcribe Podcasts", systemImage: "waveform.badge.plus")
+            Spacer()
+            Image(systemName: "chevron.right")
+              .font(.caption)
+              .foregroundStyle(.tertiary)
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
       } header: {
         Text("Automation")
       } footer: {
-        Text("Automatically generate transcripts when episodes are downloaded.")
+        Text("Manage which podcasts auto-transcribe new episodes. Engine is resolved at run time: YAP server when configured, otherwise local (gated by charging).")
       }
 
       // MARK: Whisper models list
@@ -389,6 +404,17 @@ struct TranscriptSettingsTab: View {
     .onAppear {
       viewModel.checkTranscriptModelStatus()
       WhisperModelManager.shared.checkAllModelStatuses()
+    }
+    .sheet(isPresented: $showAutoTranscribeManagement) {
+      NavigationStack {
+        AutoTranscribeManagementView()
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button("Done") { showAutoTranscribeManagement = false }
+            }
+          }
+      }
+      .frame(minWidth: 520, minHeight: 480)
     }
   }
 

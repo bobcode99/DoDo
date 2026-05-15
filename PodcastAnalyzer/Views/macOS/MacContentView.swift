@@ -258,6 +258,22 @@ struct MacContentView: View {
           )
         }
       }
+      .navigationDestination(for: AppleRSSPodcast.self) { podcast in
+        EpisodeListView(
+          podcastName: podcast.name,
+          podcastArtwork: podcast.safeArtworkUrl,
+          artistName: podcast.artistName,
+          collectionId: podcast.id,
+          applePodcastUrl: podcast.url
+        )
+      }
+      .navigationDestination(for: TrendingEpisodeDetailDestination.self) { dest in
+        EpisodeDetailView(
+          episode: dest.asPodcastEpisodeInfo,
+          podcastTitle: dest.podcastName,
+          fallbackImageURL: dest.podcastArtworkUrl
+        )
+      }
     }
   }
 

@@ -316,7 +316,7 @@ struct HomeView: View {
           }
           .padding(.horizontal)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
         .animation(.default, value: viewModel.scoredUpNextIDs)
       }
     }
@@ -388,7 +388,7 @@ struct HomeView: View {
             }
             .padding(.horizontal)
           }
-          .scrollIndicators(.hidden)
+          .scrollIndicators(.never)
         }
       }
     }
@@ -589,12 +589,13 @@ struct ForYouCard: View {
 
 // MARK: - Trending Episodes Paged View
 
-/// Horizontal paged scroll: each page shows 3 episode rows stacked vertically.
-/// Apple Podcasts "Top Episodes" style with artwork, rank, title, and metadata.
+/// Horizontal paged scroll: each page shows 3 compact episode rows stacked
+/// vertically. Apple Podcasts "Top Episodes" style with artwork, rank, title,
+/// and metadata. Row sizing is set by `TrendingEpisodeRow` (compact density).
 struct TrendingEpisodesPagedView: View {
   let episodes: [ApplePodcastService.TrendingEpisode]
 
-  /// Split episodes into pages of 3
+  /// Split episodes into pages of 3.
   private var pages: [[ApplePodcastService.TrendingEpisode]] {
     stride(from: 0, to: episodes.count, by: 3).map { start in
       Array(episodes[start..<min(start + 3, episodes.count)])
@@ -611,7 +612,7 @@ struct TrendingEpisodesPagedView: View {
               TrendingEpisodeRowWithNav(episode: episode, rank: rank)
               if rowIndex < page.count - 1 {
                 Divider()
-                  .padding(.leading, 86)
+                  .padding(.leading, 68)
               }
             }
           }
@@ -622,8 +623,8 @@ struct TrendingEpisodesPagedView: View {
       .scrollTargetLayout()
     }
     .scrollTargetBehavior(.viewAligned)
-    .scrollIndicators(.hidden)
-    .frame(height: 210)
+    .scrollIndicators(.never)
+    .frame(height: 170)
   }
 }
 
@@ -704,32 +705,35 @@ struct TrendingEpisodeRow: View {
   }
 
   var body: some View {
-    HStack(spacing: 8) {
-      CachedArtworkImage(urlString: episode.podcastArtworkUrl, size: 50, cornerRadius: 8)
-
+    HStack(spacing: 10) {
       Text("\(rank)")
-        .font(.subheadline)
+        .font(.footnote)
         .fontWeight(.bold)
         .foregroundStyle(.secondary)
-        .frame(width: 20)
+        .frame(width: 18, alignment: .trailing)
+        .monospacedDigit()
 
-      VStack(alignment: .leading, spacing: 2) {
+      CachedArtworkImage(urlString: episode.podcastArtworkUrl, size: 40, cornerRadius: 6)
+
+      VStack(alignment: .leading, spacing: 1) {
         Text(episode.episode.trackName)
           .font(.subheadline)
           .fontWeight(.medium)
-          .lineLimit(2)
+          .lineLimit(1)
+          .truncationMode(.tail)
           .foregroundStyle(.primary)
 
         if !metadataText.isEmpty {
           Text(metadataText)
             .font(.caption2)
             .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
       }
 
       Spacer(minLength: 0)
     }
-    .padding(.vertical, 6)
+    .padding(.vertical, 4)
   }
 }
 
