@@ -12,6 +12,8 @@ import WidgetKit
 import Speech
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 private let logger = Logger(subsystem: "com.podcast.analyzer", category: "App")
@@ -82,6 +84,16 @@ struct PodcastAnalyzerApp: App {
           Task.detached(priority: .utility) {
             await FileStorageManager.shared.migrateFlatCaptionFilesToSubfolders()
           }
+
+          // macOS: embed the MCP HTTP server and set up the menubar controller.
+          // Both honor the user's Preferences toggles; neither runs unless asked.
+          #if os(macOS)
+          MCPServerManager.shared.bootstrap(modelContainer: sharedModelContainer)
+          MCPMenubarController.shared.bootstrap()
+          if UserDefaults.standard.bool(forKey: MCPMenubarController.keyHeadless) {
+            NSApp.setActivationPolicy(.accessory)
+          }
+          #endif
 
           // Handle any pending widget toggle (pause) flag from cold launch.
           EnhancedAudioManager.shared.handleWidgetToggleOnActive()

@@ -32,10 +32,10 @@
 	</dict>
 	<key>NSUIPasteboardUsageDescription</key>
 	<string>Used to paste podcast RSS feed URLs and episode links from other apps.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Required for speech recognition processing (if needed)</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Required for on-device podcast transcription</string>
+	<string>Used to generate on-device transcripts of podcast episodes you choose to transcribe. Audio never leaves your device.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Used only when you configure a local Whisper or Ollama server in Settings. The app does not connect to anything on your network unless you opt in.</string>
 <key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

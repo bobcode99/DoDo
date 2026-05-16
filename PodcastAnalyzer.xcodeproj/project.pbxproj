@@ -16,6 +16,8 @@
 		15AEEAE12F26464200D90D05 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 15AEEA172F2642D900D90D05 /* SwiftUI.framework */; };
 		15AEEAEE2F26464500D90D05 /* PodcastAnalyzerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000022ED303EC000ABAA0 /* WhisperKit */; };
+		AABB0003000000000000AABB /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002000000000000AABB /* MCP */; };
+		CCDD0003000000000000CCDD /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = CCDD0002000000000000CCDD /* Hummingbird */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -127,6 +129,8 @@
 				158240912ED303EC000ABA90 /* FeedKit in Frameworks */,
 				158240932ED303EC000ABA90 /* XMLKit in Frameworks */,
 				AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */,
+				AABB0003000000000000AABB /* MCP in Frameworks */,
+				CCDD0003000000000000CCDD /* Hummingbird in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,6 +233,8 @@
 				AA0000022ED303EC000ABAA0 /* WhisperKit */,
 				BB0000022F4F0001000NUKE0 /* Nuke */,
 				BB0000032F4F0001000NUKE0 /* NukeUI */,
+				AABB0002000000000000AABB /* MCP */,
+				CCDD0002000000000000CCDD /* Hummingbird */,
 			);
 			productName = PodcastAnalyzer;
 			productReference = 15ED5EED2EC44BC6001B6CD7 /* PodcastAnalyzer.app */;
@@ -317,6 +323,8 @@
 				155164712ED371680015567A /* XCRemoteSwiftPackageReference "ZMarkupParser" */,
 				AA0000012ED303EC000ABAA0 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */,
+				AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */,
+				CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 15ED5EEE2EC44BC6001B6CD7 /* Products */;
@@ -913,12 +921,28 @@
 				minimumVersion = 0.9.0;
 			};
 		};
+		AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/modelcontextprotocol/swift-sdk.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.12.1;
+			};
+		};
 		BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kean/Nuke.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 12.0.0;
+			};
+		};
+		CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hummingbird-project/hummingbird.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -944,6 +968,11 @@
 			package = AA0000012ED303EC000ABAA0 /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
 		};
+		AABB0002000000000000AABB /* MCP */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */;
+			productName = MCP;
+		};
 		BB0000022F4F0001000NUKE0 /* Nuke */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */;
@@ -953,6 +982,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */;
 			productName = NukeUI;
+		};
+		CCDD0002000000000000CCDD /* Hummingbird */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */;
+			productName = Hummingbird;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

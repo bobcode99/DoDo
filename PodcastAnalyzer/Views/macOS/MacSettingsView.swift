@@ -11,7 +11,7 @@ import SwiftUI
 
 struct MacSettingsView: View {
   private enum SettingsTab: Hashable, CaseIterable {
-    case general, appearance, sync, playback, transcript, ai, storage
+    case general, appearance, sync, playback, transcript, ai, mcp, storage
 
     var title: LocalizedStringKey {
       switch self {
@@ -21,6 +21,7 @@ struct MacSettingsView: View {
       case .playback: "Playback"
       case .transcript: "Transcript"
       case .ai: "AI"
+      case .mcp: "MCP"
       case .storage: "Storage"
       }
     }
@@ -33,6 +34,7 @@ struct MacSettingsView: View {
       case .playback: "play.circle"
       case .transcript: "text.bubble"
       case .ai: "sparkles"
+      case .mcp: "network"
       case .storage: "internaldrive"
       }
     }
@@ -61,6 +63,7 @@ struct MacSettingsView: View {
     case .playback: PlaybackSettingsTab()
     case .transcript: TranscriptSettingsTab()
     case .ai: AISettingsTab()
+    case .mcp: MacMCPSettingsView()
     case .storage: StorageSettingsTab()
     }
   }
@@ -204,6 +207,16 @@ struct AppearanceSettingsTab: View {
 
 struct SyncSettingsTab: View {
   @State private var viewModel = SettingsViewModel()
+  @AppStorage("allowAutoDownloadOnBattery") private var allowAutoDownloadOnBattery = false
+  @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
+
+  private let cacheLimitOptions: [(label: String, value: Int)] = [
+    ("Unlimited", 0),
+    ("5 episodes", 5),
+    ("10 episodes", 10),
+    ("25 episodes", 25),
+    ("50 episodes", 50)
+  ]
 
   var body: some View {
     @Bindable var syncManager = BackgroundSyncManager.shared
@@ -239,6 +252,27 @@ struct SyncSettingsTab: View {
         Text("Sync Settings")
       } footer: {
         Text("Automatically check for new episodes periodically while the app is running.")
+      }
+
+      Section {
+        Toggle(isOn: $allowAutoDownloadOnBattery) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Download on Battery")
+            Text("Allow auto-downloads when the Mac isn't plugged in")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+
+        Picker("Episode Cache Limit", selection: $episodeCacheLimit) {
+          ForEach(cacheLimitOptions, id: \.value) { option in
+            Text(option.label).tag(option.value)
+          }
+        }
+      } header: {
+        Text("Auto-Download")
+      } footer: {
+        Text("Per-podcast settings (Always / Never / Use Global) are in each podcast's context menu. Cache limit caps total auto-downloaded episodes; 0 = unlimited.")
       }
     }
     .formStyle(.grouped)
@@ -397,10 +431,15 @@ struct TranscriptSettingsTab: View {
           Text("On macOS, Medium and Large v3 Turbo offer the best accuracy. Models are stored in ~/Library/Caches.")
         }
       }
+
+      // MARK: YAP server config
+      if viewModel.selectedTranscriptEngine == .yapServer {
+        YapServerSection()
+      }
     }
     .formStyle(.grouped)
     .padding()
-    .frame(minHeight: viewModel.selectedTranscriptEngine == .whisper ? 500 : 300)
+    .frame(minHeight: minTranscriptTabHeight(for: viewModel.selectedTranscriptEngine))
     .onAppear {
       viewModel.checkTranscriptModelStatus()
       WhisperModelManager.shared.checkAllModelStatuses()
@@ -418,6 +457,13 @@ struct TranscriptSettingsTab: View {
     }
   }
 
+  private func minTranscriptTabHeight(for engine: TranscriptEngine) -> CGFloat {
+    switch engine {
+    case .whisper: 500
+    case .yapServer: 360
+    default: 300
+    }
+  }
 }
 
 // MARK: - Apple Speech Status View
