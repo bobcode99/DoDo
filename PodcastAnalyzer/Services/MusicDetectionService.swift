@@ -97,7 +97,7 @@ private nonisolated final class ClassificationObserver: NSObject, SNResultsObser
 
   func request(_ request: SNRequest, didProduce result: SNResult) {
     guard let result = result as? SNClassificationResult else { return }
-    guard let match = result.classifications.first(where: isMusicMatch(_:)) else { return }
+      guard result.classifications.first(where: isMusicMatch(_:)) != nil else { return }
 
     let range = MusicDetectionService.TimeRange(
       start: result.timeRange.start.seconds,

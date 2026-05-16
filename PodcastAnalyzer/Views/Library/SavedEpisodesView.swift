@@ -59,9 +59,13 @@ struct SavedEpisodesView: View {
     .onAppear {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
-    }
-    .task {
-      await viewModel.refreshSavedEpisodes()
+      // Refresh on every appearance — including pop-back from EpisodeDetailView
+      // — so stars toggled in the detail view (especially on episodes from
+      // unsubscribed podcasts) show up here without an app restart. `.task`
+      // doesn't help here because NavigationStack preserves this view's
+      // identity across the push, so the task never re-fires on pop-back.
+      refreshTask?.cancel()
+      refreshTask = Task { await viewModel.refreshSavedEpisodes() }
     }
     .onDisappear {
       refreshTask?.cancel()

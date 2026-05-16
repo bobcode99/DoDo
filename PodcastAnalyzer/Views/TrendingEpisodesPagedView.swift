@@ -1,7 +1,17 @@
+//
+//  TrendingEpisodesPagedView.swift
+//  PodcastAnalyzer
+//
+//  Created by JunNianLo on 2026/5/16.
+//
+
+
 import NukeUI
 import SwiftData
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// Horizontal paged scroll: each page shows 3 compact episode rows stacked
 /// vertically. Apple Podcasts "Top Episodes" style with artwork, rank, title,
@@ -17,9 +27,10 @@ struct TrendingEpisodesPagedView: View {
   )
 
   /// How much of the next column should be visible so the horizontal-scroll
-  /// affordance is discoverable. Sized to reveal just the rank + artwork of
-  /// the next-column episode.
-  private let peekWidth: CGFloat = 60
+  /// affordance is discoverable. Sized to reveal the rank (18pt) + spacing
+  /// (10pt) + the full 40pt artwork + a small breathing margin so the album
+  /// art of the next-column episode reads clearly.
+  private let peekWidth: CGFloat = 80
   private let columnSpacing: CGFloat = 16
 
   var body: some View {
@@ -40,5 +51,33 @@ struct TrendingEpisodesPagedView: View {
     .scrollTargetBehavior(.viewAligned)
     .scrollIndicators(.never)
     .frame(height: 210)
+  }
+}
+
+private struct TrendingEpisodeRowWithNav: View {
+  let episode: ApplePodcastService.TrendingEpisode
+  let rank: Int
+
+  var body: some View {
+    HStack(spacing: 0) {
+      NavigationLink(value: TrendingEpisodeDetailDestination(from: episode)) {
+        TrendingEpisodeRow(episode: episode, rank: rank)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      Menu {
+        TrendingEpisodeContextMenu(episode: episode)
+      } label: {
+        Image(systemName: "ellipsis")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+          .frame(width: 28, height: 28)
+          .contentShape(Rectangle())
+      }
+    }
+    .contextMenu {
+      TrendingEpisodeContextMenu(episode: episode)
+    }
   }
 }

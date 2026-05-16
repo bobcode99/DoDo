@@ -1,3 +1,11 @@
+//
+//  MacTrendingEpisodesGrid.swift
+//  PodcastAnalyzer
+//
+//  Created by JunNianLo on 2026/5/16.
+//
+
+
 import SwiftData
 import SwiftUI
 
@@ -12,14 +20,14 @@ struct MacTrendingEpisodesGrid: View {
   /// first column, 4/5/6 in the second, etc. — which is the layout the user
   /// asked for.
   private let rows: [GridItem] = Array(
-    repeating: GridItem(.flexible(minimum: 48), spacing: 4),
+    repeating: GridItem(.flexible(minimum: 56), spacing: 4),
     count: 3
   )
 
   /// Visible columns including the partial 4th column hint (0.2 = 20%).
   private let visibleColumns: CGFloat = 3.2
   private let columnSpacing: CGFloat = 16
-  private let rowHeight: CGFloat = 60
+  private let rowHeight: CGFloat = 68
 
   var body: some View {
     ScrollView(.horizontal) {

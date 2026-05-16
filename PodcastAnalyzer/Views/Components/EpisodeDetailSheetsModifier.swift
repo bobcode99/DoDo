@@ -2,6 +2,7 @@ import SwiftUI
 
 #if canImport(Translation)
 @preconcurrency import Translation
+import SwiftData
 #endif
 
 extension View {

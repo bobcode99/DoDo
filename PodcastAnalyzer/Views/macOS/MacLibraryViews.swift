@@ -143,6 +143,11 @@ struct MacLibrarySavedView: View {
     .onAppear {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
+      // `setModelContext` no-ops on subsequent visits (`isAlreadyLoaded` short
+      // circuits it). Without an explicit refresh here, a star toggled in
+      // EpisodeDetailView — including on episodes from unsubscribed podcasts —
+      // wouldn't show up until the next app launch.
+      Task { await viewModel.refreshSavedEpisodes() }
     }
     .onDisappear {
       viewModel.cleanup()
@@ -204,6 +209,9 @@ struct MacLibraryDownloadedView: View {
     .onAppear {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
+      // Same staleness fix as Saved — pick up newly-completed downloads
+      // triggered from EpisodeDetailView / DownloadManager elsewhere.
+      Task { await viewModel.refreshDownloadedEpisodes() }
     }
     .onDisappear {
       viewModel.cleanup()
