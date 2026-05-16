@@ -26,6 +26,34 @@ struct EpisodeDetailRoute: Hashable, Identifiable {
   }
 }
 
+// MARK: - macOS sub-page routes
+//
+// On macOS the episode detail is split into three NavigationStack pages
+// (Summary / Transcript / AI Analysis). These routes push the Transcript and
+// AI sub-pages from the Summary landing page.
+
+struct EpisodeTranscriptRoute: Hashable, Identifiable {
+  let episode: PodcastEpisodeInfo
+  let podcastTitle: String
+  let fallbackImageURL: String?
+  let podcastLanguage: String?
+
+  var id: String {
+    "\(podcastTitle)\u{1F}\(episode.id)#transcript"
+  }
+}
+
+struct EpisodeAIAnalysisRoute: Hashable, Identifiable {
+  let episode: PodcastEpisodeInfo
+  let podcastTitle: String
+  let fallbackImageURL: String?
+  let podcastLanguage: String?
+
+  var id: String {
+    "\(podcastTitle)\u{1F}\(episode.id)#ai"
+  }
+}
+
 // MARK: - Up Next List Route
 
 /// Carries episodes to UpNextListView lazily — construction is deferred until navigation.

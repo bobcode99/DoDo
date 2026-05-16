@@ -8,11 +8,7 @@ struct ExpandedPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = ExpandedPlayerViewModel()
-    @State private var showSpeedPicker = false
     @State private var showQueue = false
-
-    private let playbackSpeeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
-    private let quickSpeeds: [Float] = [0.8, 1.0, 1.3, 1.5, 1.8, 2.0]
 
     var onNavigateToEpisodeDetail: ((PodcastEpisodeInfo, String, String?, String?) -> Void)?
     var onNavigateToPodcast: ((PodcastInfoModel) -> Void)?
@@ -52,10 +48,7 @@ struct ExpandedPlayerView: View {
                             )
                             .padding(.horizontal, 32)
 
-                            PlayerControlsView(
-                                viewModel: viewModel,
-                                onOpenSpeedPicker: openSpeedPicker
-                            )
+                            PlayerControlsView(viewModel: viewModel)
 
                             #if os(iOS)
                             HStack(spacing: 12) {
@@ -83,27 +76,7 @@ struct ExpandedPlayerView: View {
                     }
                     .containerRelativeFrame(.vertical, alignment: .center)
                 }
-                .blur(radius: showSpeedPicker || showQueue ? 3 : 0)
-
-                if showSpeedPicker {
-                    SpeedPickerOverlay(
-                        currentSpeed: viewModel.playbackSpeed,
-                        quickSpeeds: quickSpeeds,
-                        allSpeeds: playbackSpeeds,
-                        onSelectSpeed: { speed in
-                            viewModel.setPlaybackSpeed(speed)
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                showSpeedPicker = false
-                            }
-                        },
-                        onDismiss: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                showSpeedPicker = false
-                            }
-                        }
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                }
+                .blur(radius: showQueue ? 3 : 0)
 
                 if showQueue {
                     QueueOverlay(
@@ -134,12 +107,6 @@ struct ExpandedPlayerView: View {
             .onChange(of: viewModel.currentEpisode?.id) {
                 viewModel.checkEpisodeChange()
             }
-        }
-    }
-
-    private func openSpeedPicker() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            showSpeedPicker = true
         }
     }
 

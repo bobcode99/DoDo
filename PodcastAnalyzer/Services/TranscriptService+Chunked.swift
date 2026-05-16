@@ -60,6 +60,12 @@ extension TranscriptService {
           totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil
         ))
 
+        // Detect music in parallel with chunk export. SoundAnalysis is
+        // read-only, AVAssetExportSession writes to temp files — they don't
+        // contend for the same resource. Music detection typically finishes
+        // well before transcription, so this overlap is essentially free.
+        async let musicRangesTask = MusicDetectionService.detectMusicRanges(in: audioURL)
+
         self.logger.info("Exporting audio chunks (chunkDuration: \(chunkDuration)s)")
         let overlap: TimeInterval = 2.0
         let chunks = try await ChunkedTranscriptionService.exportAudioChunks(
@@ -135,14 +141,26 @@ extension TranscriptService {
         let mergedSegments = ChunkedTranscriptionService.mergeChunkSegments(
           allChunkResults, overlap: overlap)
 
-        guard !mergedSegments.isEmpty else {
+        // Await the music-detection result (started in parallel above) and
+        // splice `[♪ Music]` markers in place of any transcribed segments that
+        // fall inside detected music ranges.
+        let musicRanges = await musicRangesTask
+        if !musicRanges.isEmpty {
+          self.logger.info("Detected \(musicRanges.count) music range(s); annotating SRT")
+        }
+        let annotatedSegments = ChunkedTranscriptionService.annotateMusicSegments(
+          speechSegments: mergedSegments,
+          musicRanges: musicRanges
+        )
+
+        guard !annotatedSegments.isEmpty else {
           throw NSError(
             domain: "TranscriptService", code: 3,
             userInfo: [NSLocalizedDescriptionKey:
               "Transcription produced no content. The audio may be silent or in an unsupported format."])
         }
 
-        let srtContent = SRTFormatter.format(chunkSegments: mergedSegments)
+        let srtContent = SRTFormatter.format(chunkSegments: annotatedSegments)
 
         continuation.yield(TranscriptionProgress(
           progress: 1.0, currentTimeSeconds: audioFileDuration,

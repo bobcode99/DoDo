@@ -11,10 +11,12 @@ import SwiftUI
 struct MacMiniPlayerBar: View {
   @Binding var showExpandedPlayer: Bool
   private var audioManager: EnhancedAudioManager { .shared }
+  // Lightweight view model shared with PlayerControlsView for transport state.
+  // Wraps EnhancedAudioManager.shared, so a second instance here doesn't
+  // create a competing source of truth.
+  @State private var playerViewModel = ExpandedPlayerViewModel()
   @State private var isHoveringProgress = false
   @State private var isDraggingProgress = false
-  @AppStorage("skipForwardInterval") private var skipForwardInterval: Int = 30
-  @AppStorage("skipBackwardInterval") private var skipBackwardInterval: Int = 15
 
   private var progressPercentage: Double {
     guard audioManager.duration > 0 else { return 0 }
@@ -60,8 +62,8 @@ struct MacMiniPlayerBar: View {
 
         Spacer()
 
-        // Center: Playback controls
-        centerControls
+        // Center: Playback controls — shared with iOS/Mac expanded player
+        PlayerControlsView(viewModel: playerViewModel, style: .compact)
 
         Spacer()
 
@@ -117,69 +119,6 @@ struct MacMiniPlayerBar: View {
       content
         .clipShape(.rect(cornerRadius: 14))
         .background(.ultraThinMaterial, in: .rect(cornerRadius: 14))
-    }
-  }
-
-  // MARK: - Center Controls
-
-  @ViewBuilder
-  private var centerControls: some View {
-    if #available(macOS 26, *) {
-      GlassEffectContainer(spacing: 24) {
-        HStack(spacing: 24) {
-          Button("Skip back \(skipBackwardInterval) seconds", systemImage: "gobackward.\(skipBackwardInterval)", action: { audioManager.skipBackward() })
-            .buttonStyle(.glass)
-            .help("Skip back \(skipBackwardInterval) seconds")
-
-          Button(audioManager.isPlaying ? "Pause" : "Play", systemImage: audioManager.isPlaying ? "pause.fill" : "play.fill", action: togglePlayback)
-            .buttonStyle(.glassProminent)
-            .help(audioManager.isPlaying ? "Pause" : "Play")
-            .keyboardShortcut(.space, modifiers: [])
-
-          Button("Skip forward \(skipForwardInterval) seconds", systemImage: "goforward.\(skipForwardInterval)", action: { audioManager.skipForward() })
-            .buttonStyle(.glass)
-            .help("Skip forward \(skipForwardInterval) seconds")
-        }
-      }
-    } else {
-      HStack(spacing: 24) {
-        Button(action: { audioManager.skipBackward() }) {
-          Image(systemName: "gobackward.\(skipBackwardInterval)")
-            .font(.system(size: 18))
-            .foregroundStyle(.primary)
-        }
-        .buttonStyle(.plain)
-        .help("Skip back \(skipBackwardInterval) seconds")
-
-        Button(action: togglePlayback) {
-          Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-            .font(.system(size: 24))
-            .foregroundStyle(.primary)
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(audioManager.isPlaying ? "Pause" : "Play")
-        .keyboardShortcut(.space, modifiers: [])
-
-        Button(action: { audioManager.skipForward() }) {
-          Image(systemName: "goforward.\(skipForwardInterval)")
-            .font(.system(size: 18))
-            .foregroundStyle(.primary)
-        }
-        .buttonStyle(.plain)
-        .help("Skip forward \(skipForwardInterval) seconds")
-      }
-    }
-  }
-
-  // MARK: - Actions
-
-  private func togglePlayback() {
-    if audioManager.isPlaying {
-      audioManager.pause()
-    } else {
-      audioManager.resume()
     }
   }
 

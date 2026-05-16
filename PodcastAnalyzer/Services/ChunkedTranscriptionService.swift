@@ -243,6 +243,37 @@ nonisolated enum ChunkedTranscriptionService {
     return merged
   }
 
+  /// Replaces any transcribed segments that fall inside detected music ranges
+  /// with explicit `[♪ Music]` marker segments. Apple Speech produces garbage
+  /// on music; this keeps the SRT honest by dropping those segments and
+  /// surfacing the music ranges directly.
+  ///
+  /// A segment is considered to be "music" when its midpoint lies inside any
+  /// music range — using the midpoint avoids accidentally dropping speech
+  /// that runs up to a music boundary.
+  static func annotateMusicSegments(
+    speechSegments: [ChunkSegment],
+    musicRanges: [MusicDetectionService.TimeRange],
+    marker: String = "[\u{266A} Music]"
+  ) -> [ChunkSegment] {
+    guard !musicRanges.isEmpty else { return speechSegments }
+
+    let speechOnly = speechSegments.filter { segment in
+      let midpoint = (segment.startTime + segment.endTime) / 2
+      return !musicRanges.contains { $0.contains(midpoint) }
+    }
+
+    let markers = musicRanges.map { range in
+      ChunkSegment(
+        startTime: range.start,
+        endTime: range.end,
+        text: marker
+      )
+    }
+
+    return (speechOnly + markers).sorted { $0.startTime < $1.startTime }
+  }
+
   /// Removes temporary chunk files
   static func cleanupTempFiles(_ chunks: [AudioChunk]) {
     for chunk in chunks {

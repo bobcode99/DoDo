@@ -237,7 +237,23 @@ struct MacContentView: View {
         }
       }
       .navigationDestination(for: EpisodeDetailRoute.self) { route in
-        EpisodeDetailView(
+        MacEpisodeDetailView(
+          episode: route.episode,
+          podcastTitle: route.podcastTitle,
+          fallbackImageURL: route.fallbackImageURL,
+          podcastLanguage: route.podcastLanguage ?? "en"
+        )
+      }
+      .navigationDestination(for: EpisodeTranscriptRoute.self) { route in
+        MacEpisodeTranscriptView(
+          episode: route.episode,
+          podcastTitle: route.podcastTitle,
+          fallbackImageURL: route.fallbackImageURL,
+          podcastLanguage: route.podcastLanguage ?? "en"
+        )
+      }
+      .navigationDestination(for: EpisodeAIAnalysisRoute.self) { route in
+        MacEpisodeAIAnalysisView(
           episode: route.episode,
           podcastTitle: route.podcastTitle,
           fallbackImageURL: route.fallbackImageURL,
@@ -268,7 +284,7 @@ struct MacContentView: View {
         )
       }
       .navigationDestination(for: TrendingEpisodeDetailDestination.self) { dest in
-        EpisodeDetailView(
+        MacEpisodeDetailView(
           episode: dest.asPodcastEpisodeInfo,
           podcastTitle: dest.podcastName,
           fallbackImageURL: dest.podcastArtworkUrl

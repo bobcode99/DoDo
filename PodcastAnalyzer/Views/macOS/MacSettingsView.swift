@@ -597,43 +597,11 @@ struct MacWhisperModelRow: View {
 
 // MARK: - AI Settings Tab
 
+/// Renders the AI provider configuration UI inline in the Settings tab
+/// instead of pushing a sheet — keeps every Settings pane on one page.
 struct AISettingsTab: View {
-  @State private var showAISettings = false
-
   var body: some View {
-    Form {
-      Section {
-        Button(action: { showAISettings = true }) {
-          LabeledContent("Configure AI Providers") {
-            if AISettingsManager.shared.hasConfiguredProvider {
-              Text(AISettingsManager.shared.selectedProvider.displayName)
-                .foregroundStyle(.secondary)
-            } else {
-              Text("Not configured")
-                .foregroundStyle(.orange)
-            }
-          }
-        }
-        .buttonStyle(.plain)
-      } header: {
-        Text("AI Analysis")
-      } footer: {
-        Text("Configure cloud AI providers (OpenAI, Claude, Gemini, Grok) for transcript analysis.")
-      }
-    }
-    .formStyle(.grouped)
-    .padding()
-    .sheet(isPresented: $showAISettings) {
-      NavigationStack {
-        AISettingsView()
-          .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button("Close") { showAISettings = false }
-            }
-          }
-      }
-      .frame(minWidth: 500, minHeight: 400)
-    }
+    AISettingsView()
   }
 }
 

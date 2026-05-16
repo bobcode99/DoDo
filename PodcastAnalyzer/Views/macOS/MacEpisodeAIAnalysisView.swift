@@ -1,38 +1,31 @@
 //
-//  EpisodeDetailView.swift
+//  MacEpisodeAIAnalysisView.swift
 //  PodcastAnalyzer
 //
-//  iOS episode detail. Collapses the header on scroll, reserves 80pt at the
-//  bottom for the mini player. Shared tab / toolbar / sheets are in
-//  `Views/Components/EpisodeDetail*`. The macOS counterpart lives in
-//  `MacEpisodeDetailView.swift` — and is aliased here so shared iOS-leaning
-//  files (HomeView, SearchView, etc.) keep compiling on macOS even though
-//  they are never displayed there at runtime.
+//  Standalone AI Analysis page on macOS. Pushed from MacEpisodeDetailView via
+//  EpisodeAIAnalysisRoute. Reuses EpisodeAIAnalysisView verbatim with a small
+//  EpisodeMiniHeader on top for context.
 //
 
 #if os(macOS)
-typealias EpisodeDetailView = MacEpisodeDetailView
-#endif
-
-#if os(iOS)
 import SwiftData
 import SwiftUI
 
-struct EpisodeDetailView: View {
+struct MacEpisodeAIAnalysisView: View {
     @State private var viewModel: EpisodeDetailViewModel
 
-    @State private var selectedTab = 0
+    // Sheets / alerts state.
     @State private var showDeleteConfirmation = false
     @State private var showSubtitleSettings = false
     @State private var showTranslationLanguagePicker = false
     @State private var showRegenerateConfirmation = false
 
-    // Header collapse state
-    @State private var isHeaderVisible: Bool = true
+    // Scroll bindings required by EpisodeAIAnalysisView. As with the
+    // Transcript page, the collapsing header is iOS-only — these stay at
+    // their defaults on macOS.
+    @State private var isHeaderVisible = true
     @State private var lastScrollOffset: CGFloat = 0
-    @State private var isUserScrolling: Bool = false
-
-    // Scroll-to-top trigger
+    @State private var isUserScrolling = false
     @State private var scrollToTopTrigger = false
 
     init(
@@ -53,36 +46,25 @@ struct EpisodeDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            EpisodeDetailHeaderView(viewModel: viewModel)
-                .frame(height: isHeaderVisible ? nil : 0)
-                .clipped()
-                .opacity(isHeaderVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
+            EpisodeMiniHeader(viewModel: viewModel)
             Divider()
-                .opacity(isHeaderVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
-            EpisodeDetailTabsContent(
+            EpisodeAIAnalysisView(
                 viewModel: viewModel,
-                selectedTab: $selectedTab,
+                embedsOwnScroll: true,
                 isHeaderVisible: $isHeaderVisible,
                 lastScrollOffset: $lastScrollOffset,
                 isUserScrolling: $isUserScrolling,
-                scrollToTopTrigger: $scrollToTopTrigger,
-                enableScrollHeaderCollapse: true,
-                onShowTranslationLanguagePicker: { showTranslationLanguagePicker = true },
-                onShowSubtitleSettings: { showSubtitleSettings = true },
-                onShowRegenerateConfirmation: { showRegenerateConfirmation = true }
+                scrollToTopTrigger: $scrollToTopTrigger
             )
         }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: 80)
-        }
-        .navigationBarTitleDisplayMode(.inline)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .navigationTitle("AI Analysis")
+        .navigationSubtitle(viewModel.title)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 EpisodeDetailToolbarItems(
                     viewModel: viewModel,
-                    selectedTab: selectedTab,
+                    selectedTab: 2, // AI tab — translate button is hidden
                     showTranslationLanguagePicker: $showTranslationLanguagePicker,
                     showDeleteConfirmation: $showDeleteConfirmation
                 )

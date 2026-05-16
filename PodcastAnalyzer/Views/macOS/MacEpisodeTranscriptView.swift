@@ -1,38 +1,31 @@
 //
-//  EpisodeDetailView.swift
+//  MacEpisodeTranscriptView.swift
 //  PodcastAnalyzer
 //
-//  iOS episode detail. Collapses the header on scroll, reserves 80pt at the
-//  bottom for the mini player. Shared tab / toolbar / sheets are in
-//  `Views/Components/EpisodeDetail*`. The macOS counterpart lives in
-//  `MacEpisodeDetailView.swift` — and is aliased here so shared iOS-leaning
-//  files (HomeView, SearchView, etc.) keep compiling on macOS even though
-//  they are never displayed there at runtime.
+//  Standalone Transcript page on macOS. Pushed from MacEpisodeDetailView via
+//  EpisodeTranscriptRoute. Reuses TranscriptContentView verbatim with a small
+//  EpisodeMiniHeader on top for context.
 //
 
 #if os(macOS)
-typealias EpisodeDetailView = MacEpisodeDetailView
-#endif
-
-#if os(iOS)
 import SwiftData
 import SwiftUI
 
-struct EpisodeDetailView: View {
+struct MacEpisodeTranscriptView: View {
     @State private var viewModel: EpisodeDetailViewModel
 
-    @State private var selectedTab = 0
+    // Sheets / alerts state — driven by the shared modifier.
     @State private var showDeleteConfirmation = false
     @State private var showSubtitleSettings = false
     @State private var showTranslationLanguagePicker = false
     @State private var showRegenerateConfirmation = false
 
-    // Header collapse state
-    @State private var isHeaderVisible: Bool = true
+    // Scroll bindings required by TranscriptContentView. macOS has no
+    // collapsing header so `isHeaderVisible` stays true and the other
+    // values are unused but kept satisfied for the API.
+    @State private var isHeaderVisible = true
     @State private var lastScrollOffset: CGFloat = 0
-    @State private var isUserScrolling: Bool = false
-
-    // Scroll-to-top trigger
+    @State private var isUserScrolling = false
     @State private var scrollToTopTrigger = false
 
     init(
@@ -53,36 +46,27 @@ struct EpisodeDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            EpisodeDetailHeaderView(viewModel: viewModel)
-                .frame(height: isHeaderVisible ? nil : 0)
-                .clipped()
-                .opacity(isHeaderVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
+            EpisodeMiniHeader(viewModel: viewModel)
             Divider()
-                .opacity(isHeaderVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
-            EpisodeDetailTabsContent(
+            TranscriptContentView(
                 viewModel: viewModel,
-                selectedTab: $selectedTab,
                 isHeaderVisible: $isHeaderVisible,
                 lastScrollOffset: $lastScrollOffset,
                 isUserScrolling: $isUserScrolling,
                 scrollToTopTrigger: $scrollToTopTrigger,
-                enableScrollHeaderCollapse: true,
-                onShowTranslationLanguagePicker: { showTranslationLanguagePicker = true },
+                onShowTranslationPicker: { showTranslationLanguagePicker = true },
                 onShowSubtitleSettings: { showSubtitleSettings = true },
                 onShowRegenerateConfirmation: { showRegenerateConfirmation = true }
             )
         }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: 80)
-        }
-        .navigationBarTitleDisplayMode(.inline)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .navigationTitle("Transcript")
+        .navigationSubtitle(viewModel.title)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 EpisodeDetailToolbarItems(
                     viewModel: viewModel,
-                    selectedTab: selectedTab,
+                    selectedTab: 1, // Transcript — translate button shows
                     showTranslationLanguagePicker: $showTranslationLanguagePicker,
                     showDeleteConfirmation: $showDeleteConfirmation
                 )

@@ -15,8 +15,6 @@ struct MacExpandedPlayerView: View {
   @State private var viewModel = ExpandedPlayerViewModel()
   @State private var isDraggingProgress = false
   @State private var dragProgress: Double = 0
-  @AppStorage("skipForwardInterval") private var skipForwardInterval: Int = 30
-  @AppStorage("skipBackwardInterval") private var skipBackwardInterval: Int = 15
 
   var body: some View {
     ZStack {
@@ -107,8 +105,8 @@ struct MacExpandedPlayerView: View {
         .padding(.top, 16)
         .padding(.horizontal, 20)
 
-      // Playback controls
-      playbackControls
+      // Playback controls (shared with iOS via PlayerControlsView)
+      PlayerControlsView(viewModel: viewModel, style: .expanded)
         .padding(.top, 20)
 
       Spacer()
@@ -161,86 +159,6 @@ struct MacExpandedPlayerView: View {
           .font(.caption)
           .foregroundStyle(.secondary)
           .monospacedDigit()
-      }
-    }
-  }
-
-  // MARK: - Playback Controls
-
-  @ViewBuilder
-  private var playbackControls: some View {
-    if #available(macOS 26, *) {
-      GlassEffectContainer(spacing: 32) {
-        HStack(spacing: 32) {
-          // Speed button
-          Menu {
-            ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
-              Button(Formatters.formatSpeed(Float(speed))) {
-                viewModel.setPlaybackSpeed(Float(speed))
-              }
-            }
-          } label: {
-            Text(Formatters.formatSpeed(viewModel.playbackSpeed))
-              .font(.system(size: 13, weight: .medium))
-              .frame(minWidth: 36)
-          }
-          .buttonStyle(.glass)
-          .menuStyle(.borderlessButton)
-
-          Button("Skip back \(skipBackwardInterval) seconds", systemImage: "gobackward.\(skipBackwardInterval)", action: viewModel.skipBackward)
-            .font(.title2)
-            .buttonStyle(.glass)
-
-          Button(
-            viewModel.isPlaying ? "Pause" : "Play",
-            systemImage: viewModel.isPlaying ? "pause.fill" : "play.fill",
-            action: viewModel.togglePlayPause
-          )
-          .font(.system(size: 44))
-          .buttonStyle(.glassProminent)
-          .keyboardShortcut(.space, modifiers: [])
-
-          Button("Skip forward \(skipForwardInterval) seconds", systemImage: "goforward.\(skipForwardInterval)", action: viewModel.skipForward)
-            .font(.title2)
-            .buttonStyle(.glass)
-        }
-      }
-    } else {
-      HStack(spacing: 32) {
-        // Speed button
-        Menu {
-          ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
-            Button(Formatters.formatSpeed(Float(speed))) {
-              viewModel.setPlaybackSpeed(Float(speed))
-            }
-          }
-        } label: {
-          Text(Formatters.formatSpeed(viewModel.playbackSpeed))
-            .font(.system(size: 13, weight: .medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 6))
-        }
-        .menuStyle(.borderlessButton)
-
-        Button(action: viewModel.skipBackward) {
-          Image(systemName: "gobackward.\(skipBackwardInterval)")
-            .font(.title2)
-        }
-        .buttonStyle(.plain)
-
-        Button(action: viewModel.togglePlayPause) {
-          Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
-            .font(.system(size: 44))
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.space, modifiers: [])
-
-        Button(action: viewModel.skipForward) {
-          Image(systemName: "goforward.\(skipForwardInterval)")
-            .font(.title2)
-        }
-        .buttonStyle(.plain)
       }
     }
   }
@@ -358,3 +276,4 @@ private struct MacQueueRow: View {
 }
 
 #endif
+
