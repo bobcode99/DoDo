@@ -1,10 +1,10 @@
-import Foundation
 //
 //  ExtensionView.swift
 //  PodcastAnalyzer
 //
 //  Created by Bob on 2025/12/17.
 //
+import Foundation
 import SwiftUI
 
 extension View {

@@ -5,8 +5,9 @@
 //  ViewModel for EpisodeListView - handles filtering, sorting, and episode operations
 //
 
-import SwiftData
 import SwiftUI
+import OSLog
+import SwiftData
 import ZMarkupParser
 
 #if os(iOS)
@@ -15,7 +16,6 @@ import UIKit
 import AppKit
 #endif
 
-import OSLog
 
 private let viewModelLogger = Logger(subsystem: "com.podcast.analyzer", category: "ViewModelLifecycle")
 

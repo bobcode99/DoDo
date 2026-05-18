@@ -8,10 +8,10 @@
 //  feeding them to Apple Speech (which produces garbage on music).
 //
 
-import AVFoundation
 import Foundation
-import OSLog
 import SoundAnalysis
+import OSLog
+import AVFoundation
 
 nonisolated enum MusicDetectionService {
 

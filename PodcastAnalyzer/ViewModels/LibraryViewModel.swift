@@ -5,9 +5,9 @@
 //  ViewModel for Library tab - manages subscribed podcasts, saved, downloaded, and latest episodes
 //
 
+import SwiftUI
 import Foundation
 import SwiftData
-import SwiftUI
 import OSLog
 
 #if DEBUG

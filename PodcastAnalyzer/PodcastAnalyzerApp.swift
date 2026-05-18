@@ -5,11 +5,11 @@
 //  Created by Bob on 2025/11/12.
 //
 
+import OSLog
+import Speech
 import SwiftData
 import SwiftUI
-import OSLog
 import WidgetKit
-import Speech
 #if os(iOS)
 import UIKit
 #elseif os(macOS)

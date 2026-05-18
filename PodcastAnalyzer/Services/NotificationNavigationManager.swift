@@ -5,11 +5,10 @@
 //  Handles notification tap navigation to EpisodeDetailView
 //
 
+import SwiftUI
 import Foundation
 import Observation
 import SwiftData
-import SwiftUI
-import UserNotifications
 import OSLog
 
 // MARK: - Notification Navigation Target

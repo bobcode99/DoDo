@@ -6,9 +6,9 @@
 //  Users can create Shortcuts that use Apple Intelligence to analyze transcripts
 //
 
+import SwiftData
 import AppIntents
 import Foundation
-import SwiftData
 
 // MARK: - Import Podcasts Intent
 

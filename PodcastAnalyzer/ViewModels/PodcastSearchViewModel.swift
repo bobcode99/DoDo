@@ -5,8 +5,8 @@
 //  Created by Bob on 2025/12/23.
 //
 
-import Observation
 import SwiftUI
+import Observation
 
 @MainActor
 @Observable

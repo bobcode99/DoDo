@@ -5,8 +5,8 @@
 //  Created by Bob on 2025/12/17.
 //
 
-import Foundation
 
+import Foundation
 public struct PodcastInfo: Sendable, Identifiable {
   public let id: String  // This will be the rssUrl
   public let title: String

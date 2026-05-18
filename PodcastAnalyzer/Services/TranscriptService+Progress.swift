@@ -5,10 +5,10 @@
 //  Streaming transcription with real-time progress updates.
 //
 
-import AVFoundation
 import Foundation
-import OSLog
 import Speech
+import OSLog
+import AVFoundation
 
 @available(iOS 26.0, *)
 extension TranscriptService {

@@ -7,8 +7,8 @@
 //  so sendRequest/sendStreamingRequest throw — they should never be called.
 //
 
-import Foundation
 
+import Foundation
 nonisolated struct ShortcutsClient: AIProviderClient {
     let provider: CloudAIProvider
     let requiresAPIKey: Bool = false

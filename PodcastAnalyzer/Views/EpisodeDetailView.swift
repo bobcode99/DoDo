@@ -10,12 +10,12 @@
 //  they are never displayed there at runtime.
 //
 
+import SwiftData
 #if os(macOS)
 typealias EpisodeDetailView = MacEpisodeDetailView
 #endif
 
 #if os(iOS)
-import SwiftData
 import SwiftUI
 
 struct EpisodeDetailView: View {

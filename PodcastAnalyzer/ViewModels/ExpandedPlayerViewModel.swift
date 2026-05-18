@@ -5,9 +5,9 @@
 //  ViewModel for expanded player view - supports Apple Podcasts style UI
 //
 
+import SwiftUI
 import Observation
 import SwiftData
-import SwiftUI
 
 #if os(iOS)
 import UIKit

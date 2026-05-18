@@ -5,8 +5,8 @@
 //  Settings for AI providers (Cloud APIs with BYOK)
 //
 
-import Foundation
 import SwiftUI
+import Foundation
 
 // MARK: - Transcript Format for AI Analysis
 

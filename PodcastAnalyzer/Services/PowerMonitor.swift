@@ -8,10 +8,10 @@
 //
 
 import Foundation
+import OSLog
 #if os(iOS)
 import UIKit
 #endif
-import OSLog
 
 /// Tracks device charging state. Implicitly @MainActor via SWIFT_DEFAULT_ACTOR_ISOLATION.
 final class PowerMonitor {

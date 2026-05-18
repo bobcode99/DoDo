@@ -9,12 +9,12 @@
 //  when browsing large podcast episode lists.
 //
 
-import SwiftUI
 
 // MARK: - Episode Detail Route
 
 /// Navigation route that defers EpisodeDetailView construction until the user
 /// actually taps the row. Carrying only value types keeps it cheap to create.
+import SwiftUI
 struct EpisodeDetailRoute: Hashable, Identifiable {
   let episode: PodcastEpisodeInfo
   let podcastTitle: String

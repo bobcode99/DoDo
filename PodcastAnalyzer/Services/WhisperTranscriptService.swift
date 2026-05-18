@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import OSLog
 import WhisperKit
 
 // MARK: - Progress Update
@@ -236,3 +235,4 @@ actor WhisperTranscriptService {
 
 import AVFoundation
 import CoreMedia
+import OSLog

@@ -1,6 +1,6 @@
-import OSLog
 import SwiftData
 import SwiftUI
+import OSLog
 
 private let logger = Logger(subsystem: "com.podcast.analyzer", category: "ExpandedPlayerView")
 

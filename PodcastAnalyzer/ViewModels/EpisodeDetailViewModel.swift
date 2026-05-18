@@ -5,11 +5,11 @@
 //  Enhanced with download management and playback state
 //
 
-import Observation
-import SwiftData
 import SwiftUI
-import ZMarkupParser
+import Observation
 import OSLog
+import SwiftData
+import ZMarkupParser
 
 #if canImport(Translation)
 @preconcurrency import Translation

@@ -1,6 +1,6 @@
+import SwiftUI
 import Foundation
 import SwiftData
-import SwiftUI
 import OSLog
 
 // MARK: - Transcript Model Status

@@ -7,10 +7,10 @@
 //  TranscriptService+Progress.swift, and TranscriptService+Chunked.swift.
 //
 
-import AVFoundation
 import Foundation
-import Speech
 import OSLog
+import Speech
+import AVFoundation
 
 @available(iOS 26.0, *)
 public actor TranscriptService {

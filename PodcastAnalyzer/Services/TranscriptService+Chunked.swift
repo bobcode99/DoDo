@@ -8,7 +8,6 @@
 import AVFoundation
 import Foundation
 import OSLog
-import Speech
 
 @available(iOS 26.0, *)
 extension TranscriptService {

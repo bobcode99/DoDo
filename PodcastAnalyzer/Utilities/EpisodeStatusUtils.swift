@@ -5,10 +5,10 @@
 //  Centralized utilities for checking episode status (downloaded, transcript, AI analysis, etc.)
 //
 
+import SwiftUI
 import Foundation
 import Observation
 import SwiftData
-import SwiftUI
 
 // MARK: - Episode Key Utilities
 

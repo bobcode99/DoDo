@@ -1,0 +1,127 @@
+included:
+  - PodcastAnalyzer
+  - PodcastAnalyzerTests
+  - PodcastAnalyzerWidget
+
+excluded:
+  - .build
+  - DerivedData
+  - build
+  - PodcastAnalyzer.xcodeproj
+  - "**/*.generated.swift"
+  - "PodcastAnalyzer/Assets.xcassets"
+  - .agents
+
+# --- Dead-code / unused analyzer rules ---
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+# unused_import has known false positives for SDK overlay modules whose
+# symbols resolve to a re-exported parent (Logger→os via OSLog), macro
+# expansions (WidgetBundle's @main → WidgetKit), and audio types bridged
+# from AVFAudio (AVAudioFile → AVFoundation). Always keep these.
+unused_import:
+  always_keep_imports:
+    - OSLog
+    - WidgetKit
+    - AVFoundation
+    - SwiftData
+    - SwiftUI
+    - Foundation
+    - UIKit
+    - AppKit
+    - Combine
+
+# --- Opt-in style rules that help surface dead/redundant code ---
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - empty_collection_literal
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - unowned_variable_capture
+  - first_where
+  - last_where
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - contains_over_range_nil_comparison
+  - flatmap_over_map_reduce
+  - reduce_into
+  - sorted_first_last
+  - toggle_bool
+  - prefer_zero_over_explicit_init
+  - explicit_init
+  - closure_parameter_position
+  - closure_spacing
+  - operator_usage_whitespace
+  - prohibited_super_call
+  - overridden_super_call
+  - discarded_notification_center_observer
+  - identical_operands
+
+disabled_rules:
+  # Style noise — re-enable later if desired
+  - trailing_comma
+  - todo
+  - opening_brace
+  - multiple_closures_with_trailing_closure
+  - large_tuple
+  - cyclomatic_complexity
+
+# --- Relaxed thresholds (focus on dead code, not style noise) ---
+line_length:
+  warning: 160
+  error: 240
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 800
+  error: 1500
+  ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 500
+  error: 900
+
+function_body_length:
+  warning: 80
+  error: 160
+
+function_parameter_count:
+  warning: 8
+  error: 12
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 60
+    error: 80
+  excluded:
+    - id
+    - vm
+    - x
+    - y
+    - z
+    - i
+    - j
+    - to
+    - on
+
+type_name:
+  min_length:
+    warning: 3
+    error: 2
+  max_length:
+    warning: 60
+    error: 80
+
+nesting:
+  type_level:
+    warning: 3
+
+reporter: "xcode"

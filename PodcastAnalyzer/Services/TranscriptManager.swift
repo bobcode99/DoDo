@@ -5,10 +5,10 @@
 //  Manages background transcript generation across the app
 //
 
-import Foundation
-import Speech
 import SwiftData
+import Foundation
 import OSLog
+import Speech
 
 /// Tracks the status of a transcript generation job
 enum TranscriptJobStatus: Equatable {

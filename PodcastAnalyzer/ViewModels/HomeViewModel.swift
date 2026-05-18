@@ -5,10 +5,10 @@
 //  ViewModel for Home tab - manages Up Next episodes and Popular Shows from Apple
 //
 
+import SwiftUI
 import Foundation
 import Observation
 import SwiftData
-import SwiftUI
 import OSLog
 
 @MainActor
