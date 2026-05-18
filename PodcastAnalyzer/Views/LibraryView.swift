@@ -116,6 +116,13 @@ struct LibraryView: View {
       viewModel.setModelContext(modelContext)
       viewModel.setPodcasts(subscribedPodcasts)
       updateSortedPodcasts()
+      // Re-fetch saved/starred episodes on every appearance so stars set from
+      // Home/Search/Trending (outside the Library tab) surface immediately and
+      // the ContentUnavailableView clears once content exists.
+      Task {
+        await viewModel.refreshSavedEpisodes()
+        await viewModel.refreshDownloadedEpisodes()
+      }
     }
     .task {
       // Only run the initial load if it hasn't already been kicked off by setModelContext.

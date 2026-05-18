@@ -1489,6 +1489,8 @@ private struct PromptPreviewSheet: View {
   @State private var userPrompt: String = ""
   @State private var combined: String = ""
   @State private var isBuilding: Bool = true
+  @State private var includeTimestamps: Bool = false
+  @State private var transcriptOnly: Bool = false
 
   // SwiftUI `Text` lays out synchronously on the main thread; a 50–100 KB
   // monospaced prompt freezes the UI. Truncate the preview — copy carries the
@@ -1526,6 +1528,35 @@ private struct PromptPreviewSheet: View {
           .font(.caption)
           .foregroundStyle(.secondary)
 
+          if !transcript.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+              Toggle(isOn: $includeTimestamps) {
+                Label {
+                  Text("Include timestamps")
+                  Text("Prefix each line with [MM:SS] from the transcript")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                } icon: {
+                  Image(systemName: "clock")
+                }
+              }
+              Toggle(isOn: $transcriptOnly) {
+                Label {
+                  Text("Transcript only")
+                  Text("Copy just the transcript text, without the analysis instructions")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                } icon: {
+                  Image(systemName: "text.alignleft")
+                }
+              }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.gray.opacity(0.08))
+            .clipShape(.rect(cornerRadius: 10))
+          }
+
           if transcript.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
               Text("Heads up")
@@ -1550,6 +1581,8 @@ private struct PromptPreviewSheet: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, 40)
+          } else if transcriptOnly {
+            promptSection(title: "Transcript", body: userPrompt)
           } else {
             promptSection(title: "System", body: systemPrompt)
             promptSection(title: "User", body: userPrompt)
@@ -1588,6 +1621,12 @@ private struct PromptPreviewSheet: View {
       .task(id: transcript) {
         await buildPrompts()
       }
+      .onChange(of: includeTimestamps) { _, _ in
+        Task { await buildPrompts() }
+      }
+      .onChange(of: transcriptOnly) { _, _ in
+        Task { await buildPrompts() }
+      }
     }
   }
 
@@ -1625,21 +1664,33 @@ private struct PromptPreviewSheet: View {
   }
 
   private func buildPrompts() async {
+    isBuilding = true
     // Yield once so SwiftUI gets a chance to paint the sheet (with the
     // "Preparing…" spinner) before we run string work on the main actor.
     await Task.yield()
 
-    let pair = CloudAIService.shared.buildPrompt(
-      type: .analysis,
-      transcript: transcript,
-      episodeTitle: episodeTitle,
-      podcastTitle: podcastTitle,
-      podcastLanguage: podcastLanguage,
-      formatHint: formatHint
-    )
-    systemPrompt = pair.system
-    userPrompt = pair.user
-    combined = "## System\n\(pair.system)\n\n## User\n\(pair.user)"
+    let format: TranscriptFormatForAI = includeTimestamps ? .segmentBased : .sentenceBased
+
+    if transcriptOnly {
+      // No system/user wrapper — just the transcript body, optionally with timestamps.
+      let formatted = format.formatTranscript(transcript)
+      systemPrompt = ""
+      userPrompt = formatted
+      combined = formatted
+    } else {
+      let pair = CloudAIService.shared.buildPrompt(
+        type: .analysis,
+        transcript: transcript,
+        episodeTitle: episodeTitle,
+        podcastTitle: podcastTitle,
+        podcastLanguage: podcastLanguage,
+        formatHint: formatHint,
+        transcriptFormatOverride: format
+      )
+      systemPrompt = pair.system
+      userPrompt = pair.user
+      combined = "## System\n\(pair.system)\n\n## User\n\(pair.user)"
+    }
     isBuilding = false
   }
 

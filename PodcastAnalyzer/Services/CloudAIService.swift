@@ -650,28 +650,44 @@ final class CloudAIService {
     /// Assembles the same (system, user) prompt pair that would be sent to a cloud
     /// provider for `type`, without actually invoking the model. Used by the
     /// "Copy prompt" affordance so users can paste it into an external tool.
+    ///
+    /// - Parameter transcriptFormatOverride: When non-nil, formats the transcript and
+    ///   tailors timestamp-related instructions to this format instead of the user's
+    ///   saved `settings.transcriptFormat`. Used by the prompt preview sheet so users
+    ///   can toggle timestamps for export without changing their saved setting.
     func buildPrompt(
         type: CloudAnalysisType,
         transcript: String,
         episodeTitle: String,
         podcastTitle: String,
         podcastLanguage: String? = nil,
-        formatHint: String? = nil
+        formatHint: String? = nil,
+        transcriptFormatOverride: TranscriptFormatForAI? = nil
     ) -> (system: String, user: String) {
-        let system = buildSystemPrompt(for: type, podcastLanguage: podcastLanguage, formatHint: formatHint)
+        let effectiveFormat = transcriptFormatOverride ?? settings.transcriptFormat
+        // Match the real analyze path: format the raw SRT into the chosen shape
+        // before embedding it in the user prompt.
+        let formattedTranscript = effectiveFormat.formatTranscript(transcript)
+        let system = buildSystemPrompt(
+            for: type,
+            podcastLanguage: podcastLanguage,
+            formatHint: formatHint,
+            transcriptFormatOverride: effectiveFormat
+        )
         let user = buildUserPrompt(
-            transcript: transcript,
+            transcript: formattedTranscript,
             episodeTitle: episodeTitle,
             podcastTitle: podcastTitle,
             analysisType: type,
-            formatHint: formatHint
+            formatHint: formatHint,
+            transcriptFormatOverride: effectiveFormat
         )
         return (system, user)
     }
 
     // MARK: - Private: Build Prompts
 
-    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil) -> String {
+    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil, transcriptFormatOverride: TranscriptFormatForAI? = nil) -> String {
         // Get language instruction based on user setting
         let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
@@ -683,9 +699,11 @@ final class CloudAIService {
             formatHintLine = "\n\nNote: If the transcript contains sponsored or advertisement segments, ignore them — do not include ads in topics, takeaways, highlights, or quotes."
         }
 
+        let effectiveFormat = transcriptFormatOverride ?? settings.transcriptFormat
+
         switch type {
         case .analysis:
-            let useTimestamps = settings.transcriptFormat == .segmentBased
+            let useTimestamps = effectiveFormat == .segmentBased
             let quotesSchema = useTimestamps
                 ? #""notableQuotes": [{"text": "quote 1", "timestamp": "MM:SS"}, {"text": "quote 2", "timestamp": "MM:SS"}]"#
                 : #""notableQuotes": ["quote 1", "quote 2"]"#
@@ -733,7 +751,8 @@ final class CloudAIService {
         episodeTitle: String,
         podcastTitle: String,
         analysisType: CloudAnalysisType,
-        formatHint: String? = nil
+        formatHint: String? = nil,
+        transcriptFormatOverride: TranscriptFormatForAI? = nil
     ) -> String {
         let instruction: String
         switch analysisType {
@@ -741,8 +760,9 @@ final class CloudAIService {
             instruction = "Please provide one complete analysis of this podcast episode, covering summary, topics, entities, highlights, quotes, action items, and conclusion."
         }
 
+        let effectiveFormat = transcriptFormatOverride ?? settings.transcriptFormat
         // When using segment-based format, tell the AI timestamps are present so it uses them
-        let timestampNote = settings.transcriptFormat == .segmentBased
+        let timestampNote = effectiveFormat == .segmentBased
             ? "\nNote: The transcript includes timestamps in [MM:SS] or [H:MM:SS] format. Reference these timestamps when relevant (e.g. for highlights, quotes, and key moments)."
             : ""
 
@@ -893,6 +913,10 @@ enum CloudAIError: LocalizedError {
                 return "Transcript too long. Try a shorter episode or use a model with larger context."
             }
             return "Invalid request: \(message)"
+        case 0:
+            // statusCode 0 is used for non-HTTP failures (e.g. Shortcuts execution).
+            // Show the underlying message directly instead of the misleading "API error (0)" prefix.
+            return message
         default:
             return "API error (\(statusCode)): \(message)"
         }

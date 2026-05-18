@@ -248,10 +248,13 @@ final class EpisodeDetailViewModel {
   private var briefSummaryTask: Task<Void, Never>?
 
   @ObservationIgnored
-  private var cloudAnalysisTask: Task<Void, Never>?
-
-  @ObservationIgnored
   private var cloudQuestionTask: Task<Void, Never>?
+
+  /// Listens for `.cloudAnalysisJobFinished` so the view model reloads the
+  /// freshly-saved `EpisodeAIAnalysis` row after the coordinator completes a
+  /// job for this episode.
+  @ObservationIgnored
+  private var cloudJobObserverTask: Task<Void, Never>?
 
   // Flag to track transcript manager observation
   @ObservationIgnored
@@ -321,6 +324,26 @@ final class EpisodeDetailViewModel {
     loadEpisodeModel()
     observePlaybackPosition()
     loadAIAnalysisFromSwiftData()
+    observeCloudAnalysisJobFinished()
+  }
+
+  /// Listen for coordinator completion so a re-opened detail view that
+  /// reattached mid-stream picks up the freshly-saved SwiftData row.
+  private func observeCloudAnalysisJobFinished() {
+    cloudJobObserverTask?.cancel()
+    cloudJobObserverTask = Task { [weak self] in
+      guard let self else { return }
+      let myAudioURL = self.cloudJobKey
+      let stream = NotificationCenter.default.notifications(named: .cloudAnalysisJobFinished)
+      for await note in stream {
+        if Task.isCancelled { break }
+        guard
+          let finishedURL = note.userInfo?["audioURL"] as? String,
+          finishedURL == myAudioURL
+        else { continue }
+        self.loadAIAnalysisFromSwiftData()
+      }
+    }
   }
 
   // MARK: - Episode Properties
@@ -1951,17 +1974,48 @@ final class EpisodeDetailViewModel {
 
   // MARK: - Cloud AI (Transcript Analysis with BYOK)
 
-  // Cloud analysis state and cache
-  var cloudAnalysisState: AnalysisState = .idle
+  // Cloud analysis state and cache. The active job's streaming progress lives
+  // on `CloudAnalysisJobCoordinator.shared` (keyed by audio URL) so the work
+  // survives view tear-down and a re-opened detail view picks the stream back
+  // up mid-flight. The computed properties below read the coordinator snapshot
+  // first and fall back to the view-model-local backing for validation errors
+  // and idle/cleared states.
+  private var _localCloudAnalysisState: AnalysisState = .idle
   var cloudQuestionState: AnalysisState = .idle
   var cloudAnalysisCache: CachedCloudAnalysis = CachedCloudAnalysis()
 
-  // Streaming response text (updated in real-time)
-  var streamingText: String = ""
-  var isStreaming: Bool = false
-  var currentStreamingType: CloudAnalysisType?
+  private var cloudJobKey: String { episode.audioURL ?? "" }
 
-  /// Generate cloud-based transcript analysis with streaming
+  var cloudAnalysisState: AnalysisState {
+    get {
+      if let snap = CloudAnalysisJobCoordinator.shared.snapshot(for: cloudJobKey) {
+        return snap.state
+      }
+      return _localCloudAnalysisState
+    }
+    set { _localCloudAnalysisState = newValue }
+  }
+
+  var streamingText: String {
+    CloudAnalysisJobCoordinator.shared.snapshot(for: cloudJobKey)?.streamingText ?? ""
+  }
+
+  var isStreaming: Bool {
+    CloudAnalysisJobCoordinator.shared.snapshot(for: cloudJobKey)?.isStreaming ?? false
+  }
+
+  var currentStreamingType: CloudAnalysisType? {
+    CloudAnalysisJobCoordinator.shared.snapshot(for: cloudJobKey)?.currentType
+  }
+
+  /// Generate cloud-based transcript analysis with streaming.
+  ///
+  /// Delegates the actual work to `CloudAnalysisJobCoordinator.shared`, which
+  /// owns the in-flight Task and the live snapshot. The view model's
+  /// `cloudAnalysisState` / `streamingText` / `isStreaming` /
+  /// `currentStreamingType` are computed against that snapshot, so popping the
+  /// detail view (or navigating off the macOS AI page) does not interrupt the
+  /// request, and reopening the same episode resumes the streaming UI mid-flight.
   func generateCloudAnalysis(type: CloudAnalysisType, formatHint: String? = nil) {
     let settings = AISettingsManager.shared
 
@@ -1975,55 +2029,30 @@ final class EpisodeDetailViewModel {
       return
     }
 
-    cloudAnalysisTask?.cancel()
-    cloudAnalysisTask = Task {
-      do {
-        cloudAnalysisState = .analyzing(progress: 0, message: "Preparing...")
-        streamingText = ""
-        isStreaming = true
-        currentStreamingType = type
-
-        let service = CloudAIService.shared
-
-        let result = try await service.analyzeTranscriptStreaming(
-          transcriptText,
-          episodeTitle: episode.title,
-          podcastTitle: podcastTitle,
-          analysisType: type,
-          podcastLanguage: podcastLanguage,
-          formatHint: formatHint,
-          onChunk: { [weak self] text in
-            Task { @MainActor in
-              self?.streamingText = text
-            }
-          },
-          progressCallback: { [weak self] message, progress in
-            Task { @MainActor in
-              self?.cloudAnalysisState = .analyzing(progress: progress, message: message)
-            }
-          }
-        )
-
-        isStreaming = false
-        currentStreamingType = nil
-        streamingText = ""
-
-        // Store in cache
-        cloudAnalysisCache.analysis = result
-        cloudAnalysisState = .completed
-
-        // Save to SwiftData
-        saveCloudAnalysisToSwiftData(result: result, type: type)
-
-        logger.info("Cloud analysis (\(type.rawValue)) completed successfully")
-      } catch {
-        isStreaming = false
-        currentStreamingType = nil
-        streamingText = ""
-        cloudAnalysisState = .error(error.localizedDescription)
-        logger.error("Cloud analysis failed: \(error.localizedDescription)")
-      }
+    guard let audioURL = episode.audioURL, !audioURL.isEmpty else {
+      cloudAnalysisState = .error("Episode has no audio URL — cannot key the analysis job.")
+      return
     }
+
+    guard let context = modelContext else {
+      cloudAnalysisState = .error("Model context not available.")
+      return
+    }
+
+    // Clear the local error backing so the coordinator snapshot is what the
+    // computed property returns from here on.
+    _localCloudAnalysisState = .idle
+
+    CloudAnalysisJobCoordinator.shared.startAnalysis(
+      audioURL: audioURL,
+      transcript: transcriptText,
+      episodeTitle: episode.title,
+      podcastTitle: podcastTitle,
+      type: type,
+      podcastLanguage: podcastLanguage,
+      formatHint: formatHint,
+      modelContext: context
+    )
   }
 
   /// Ask a question about the episode using cloud AI
@@ -2044,8 +2073,27 @@ final class EpisodeDetailViewModel {
       return
     }
 
+    // Snapshot transcript/language (see generateCloudAnalysis for rationale).
+    let transcriptSnapshot = transcriptText
+    let podcastLanguageSnapshot = podcastLanguage
+
     cloudQuestionTask?.cancel()
     cloudQuestionTask = Task {
+      #if os(iOS)
+      var bgTaskID: UIBackgroundTaskIdentifier = .invalid
+      bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "CloudQA") {
+        if bgTaskID != .invalid {
+          UIApplication.shared.endBackgroundTask(bgTaskID)
+          bgTaskID = .invalid
+        }
+      }
+      defer {
+        if bgTaskID != .invalid {
+          UIApplication.shared.endBackgroundTask(bgTaskID)
+        }
+      }
+      #endif
+
       do {
         cloudQuestionState = .analyzing(progress: 0, message: "Processing question...")
 
@@ -2053,9 +2101,9 @@ final class EpisodeDetailViewModel {
 
         let result = try await service.askQuestion(
           question,
-          transcript: transcriptText,
+          transcript: transcriptSnapshot,
           episodeTitle: episode.title,
-          podcastLanguage: podcastLanguage,
+          podcastLanguage: podcastLanguageSnapshot,
           progressCallback: { [weak self] message, progress in
             Task { @MainActor in
               self?.cloudQuestionState = .analyzing(progress: progress, message: message)
@@ -2083,6 +2131,9 @@ final class EpisodeDetailViewModel {
     case .analysis:
       cloudAnalysisCache.analysis = nil
     }
+    // Cancel any running coordinator job so the snapshot doesn't keep the
+    // computed `cloudAnalysisState` stuck on .analyzing after a clear.
+    CloudAnalysisJobCoordinator.shared.cancel(audioURL: cloudJobKey)
     cloudAnalysisState = .idle
   }
 
@@ -2091,6 +2142,7 @@ final class EpisodeDetailViewModel {
     quickTagsCache.clear()
     quickTagsState = .idle
     cloudAnalysisCache.clearAll()
+    CloudAnalysisJobCoordinator.shared.cancel(audioURL: cloudJobKey)
     cloudAnalysisState = .idle
     cloudQuestionState = .idle
   }
@@ -2375,11 +2427,15 @@ final class EpisodeDetailViewModel {
     briefSummaryTask?.cancel()
     briefSummaryTask = nil
 
-    cloudAnalysisTask?.cancel()
-    cloudAnalysisTask = nil
-
-    cloudQuestionTask?.cancel()
-    cloudQuestionTask = nil
+    // Cloud analysis is owned by `CloudAnalysisJobCoordinator.shared` — it
+    // survives view tear-down by design and saves its result to SwiftData on
+    // completion, so a re-opened episode shows the result via
+    // `loadAIAnalysisFromSwiftData()`. Q&A still runs on the view model, but
+    // we intentionally do not cancel it here so an in-flight answer can finish
+    // and persist; its background-task wrapping in askCloudQuestion bounds
+    // suspension on iOS.
+    cloudJobObserverTask?.cancel()
+    cloudJobObserverTask = nil
 
     // Release large transcript data
     transcriptText = ""
