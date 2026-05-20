@@ -30,7 +30,12 @@ struct EpisodeTranscriptView: View {
     @State private var showSearchSheet = false
     @State private var showCopySuccess = false
 
-    private var subtitleSettings: SubtitleSettingsManager { .shared }
+    /// Search query cached for the lifetime of this view so reopening the
+    /// search sheet recalls the last text. Cleared on view deinit (it's
+    /// @State on a per-push view-model page), and the active query that
+    /// drives the in-transcript highlights is wiped whenever the sheet
+    /// closes — only the cached string survives.
+    @State private var lastSearchQuery: String = ""
 
     /// Reading audioManager.currentTime here registers @Observable observation,
     /// so the view re-evaluates as playback advances.
@@ -64,7 +69,9 @@ struct EpisodeTranscriptView: View {
             if viewModel.hasTranscript && !viewModel.isTranscriptProcessing {
                 TranscriptStatusStrip(
                     viewModel: viewModel,
-                    autoScrollEnabled: $autoScrollEnabled
+                    autoScrollEnabled: $autoScrollEnabled,
+                    onShowTranslationPicker: onShowTranslationPicker,
+                    onShowSubtitleSettings: onShowSubtitleSettings
                 )
                 Divider()
                 transcriptScrollContent
@@ -73,7 +80,14 @@ struct EpisodeTranscriptView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .toolbar { transcriptToolbarContent }
+        .toolbar {
+            TranscriptNavToolbar(
+                viewModel: viewModel,
+                showSearchSheet: $showSearchSheet,
+                showCopySuccess: $showCopySuccess,
+                onShowRegenerateConfirmation: onShowRegenerateConfirmation
+            )
+        }
         .onChange(of: showRegenerateConfirmation) { _, isShowing in
             if isShowing {
                 onShowRegenerateConfirmation()
@@ -82,6 +96,18 @@ struct EpisodeTranscriptView: View {
         }
         .onChange(of: viewModel.transcriptSearchQuery) { _, newQuery in
             viewModel.updateSearchMatches(query: newQuery)
+        }
+        .onChange(of: showSearchSheet) { _, isShowing in
+            if isShowing {
+                // Reopen: restore the previously typed query so the input
+                // field is pre-filled and highlights re-appear.
+                viewModel.transcriptSearchQuery = lastSearchQuery
+            } else {
+                // Dismiss: stash the query for the next reopen, then clear
+                // the active query so transcript highlights disappear.
+                lastSearchQuery = viewModel.transcriptSearchQuery
+                viewModel.transcriptSearchQuery = ""
+            }
         }
         .sheet(isPresented: $showSearchSheet) {
             TranscriptSearchSheet(viewModel: viewModel) { _ in }
@@ -153,95 +179,4 @@ struct EpisodeTranscriptView: View {
             .padding()
     }
 
-    // MARK: - Toolbar
-
-    @ToolbarContentBuilder
-    private var transcriptToolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                showSearchSheet = true
-            } label: {
-                Image(systemName: viewModel.transcriptSearchQuery.isEmpty
-                      ? "magnifyingglass"
-                      : "magnifyingglass.circle.fill")
-            }
-            .accessibilityLabel("Search transcript")
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            if viewModel.hasExistingTranslation {
-                Menu {
-                    ForEach(SubtitleDisplayMode.allCases, id: \.self) { mode in
-                        Button {
-                            subtitleSettings.displayMode = mode
-                        } label: {
-                            if subtitleSettings.displayMode == mode {
-                                Label(mode.displayName, systemImage: "checkmark")
-                            } else {
-                                Label(mode.displayName, systemImage: mode.icon)
-                            }
-                        }
-                        .disabled(mode.requiresTranslation && !viewModel.hasExistingTranslation)
-                    }
-                    Divider()
-                    Button {
-                        onShowSubtitleSettings()
-                    } label: {
-                        Label("More Settings...", systemImage: "gearshape")
-                    }
-                } label: {
-                    Image(systemName: "textformat.alt")
-                }
-                .accessibilityLabel("Display mode")
-            } else {
-                Button {
-                    onShowSubtitleSettings()
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel("Subtitle settings")
-            }
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                Section {
-                    if let date = viewModel.cachedTranscriptDate {
-                        Label(
-                            "Generated \(date.formatted(date: .abbreviated, time: .shortened))",
-                            systemImage: "clock"
-                        )
-                    }
-                    Label(
-                        "\(viewModel.transcriptSegments.count) segments",
-                        systemImage: "text.alignleft"
-                    )
-                }
-
-                Section("Copy") {
-                    Button {
-                        viewModel.copyTranscriptToClipboard()
-                        showCopySuccess = true
-                    } label: {
-                        Label("Copy All (with timestamps)", systemImage: "doc.on.doc")
-                    }
-                    Button {
-                        PlatformClipboard.string = viewModel.cleanTranscriptText
-                        showCopySuccess = true
-                    } label: {
-                        Label("Copy Text Only", systemImage: "text.alignleft")
-                    }
-                }
-
-                Button(role: .destructive) {
-                    onShowRegenerateConfirmation()
-                } label: {
-                    Label("Regenerate", systemImage: "arrow.clockwise")
-                }
-            } label: {
-                Image(systemName: "doc.text")
-            }
-            .accessibilityLabel("Transcript actions")
-        }
-    }
 }

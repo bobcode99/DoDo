@@ -50,16 +50,6 @@ struct MacEpisodeTranscriptView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Transcript")
         .navigationSubtitle(viewModel.title)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                EpisodeDetailToolbarItems(
-                    viewModel: viewModel,
-                    selectedTab: 1, // Transcript — translate button shows
-                    showTranslationLanguagePicker: $showTranslationLanguagePicker,
-                    showDeleteConfirmation: $showDeleteConfirmation
-                )
-            }
-        }
         .episodeDetailSheetsAndAlerts(
             viewModel: viewModel,
             showDeleteConfirmation: $showDeleteConfirmation,

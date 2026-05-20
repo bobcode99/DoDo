@@ -240,24 +240,37 @@ struct EpisodeTranscriptStatusView: View {
     // MARK: - Progress
 
     private func progressView(label: String, progress: Double) -> some View {
-        ContentUnavailableView {
-            VStack(spacing: 16) {
+        VStack(spacing: 18) {
+            Image(systemName: "waveform.badge.mic")
+                .font(.system(size: 44))
+                .foregroundStyle(.blue)
+                .symbolEffect(.variableColor.iterative, options: .repeat(.continuous))
+
+            VStack(spacing: 8) {
+                Text(label)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
-                    .frame(maxWidth: 240)
-                Text(label)
-                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: 260)
+
                 Text("\(Int(progress * 100))%")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-        } description: {
-            EmptyView()
-        } actions: {
+
             Button("Cancel", role: .cancel) { viewModel.cancelTranscript() }
                 .buttonStyle(.bordered)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .padding(.horizontal, 24)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(label), \(Int(progress * 100)) percent"))
     }
 
     // MARK: - Completed

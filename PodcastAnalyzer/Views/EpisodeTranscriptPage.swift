@@ -48,16 +48,6 @@ struct EpisodeTranscriptPage: View {
         }
         .navigationTitle("Transcript")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                EpisodeDetailToolbarItems(
-                    viewModel: viewModel,
-                    selectedTab: 1, // Transcript — translate button shown
-                    showTranslationLanguagePicker: $showTranslationLanguagePicker,
-                    showDeleteConfirmation: $showDeleteConfirmation
-                )
-            }
-        }
         .episodeDetailSheetsAndAlerts(
             viewModel: viewModel,
             showDeleteConfirmation: $showDeleteConfirmation,
