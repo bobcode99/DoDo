@@ -657,6 +657,18 @@ struct EpisodeAIAnalysisView: View {
             .font(.caption)
         }
         .buttonStyle(.bordered)
+
+        Spacer(minLength: 0)
+
+        if viewModel.hasTranscript {
+          Button {
+            showPromptPreview = true
+          } label: {
+            Label("Copy Prompt", systemImage: "doc.on.doc")
+              .font(.caption)
+          }
+          .buttonStyle(.bordered)
+        }
       }
     }
     .padding()
@@ -1103,6 +1115,21 @@ struct EpisodeAIAnalysisView: View {
         Text(settings.currentModel)
           .font(.caption)
           .foregroundStyle(.secondary)
+      }
+
+      if viewModel.hasTranscript {
+        Button {
+          showPromptPreview = true
+        } label: {
+          Label("Copy Prompt for External LLM", systemImage: "doc.on.doc")
+            .font(.caption)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(Color.blue.opacity(0.1))
+            .foregroundStyle(.blue)
+            .clipShape(.rect(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
       }
     }
     .padding()

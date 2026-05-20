@@ -453,40 +453,6 @@ struct AISettingsView: View {
                 Text("Controls the language of AI-generated summaries, highlights, and other analysis results.")
             }
 
-            // MARK: - Transcript Format
-            Section {
-                Picker("Transcript Format", selection: $settings.transcriptFormat) {
-                    ForEach(TranscriptFormatForAI.allCases, id: \.self) { format in
-                        Label {
-                            VStack(alignment: .leading) {
-                                Text(format.displayName)
-                            }
-                        } icon: {
-                            Image(systemName: format.icon)
-                        }
-                        .tag(format)
-                    }
-                }
-                #if os(iOS)
-                .pickerStyle(.navigationLink)
-                #else
-                .pickerStyle(.menu)
-                #endif
-
-                // Show format description
-                HStack(alignment: .top) {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.blue)
-                    Text(settings.transcriptFormat.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Transcript Format")
-            } footer: {
-                Text("Sentence-based format is recommended for better AI analysis quality and lower token costs.")
-            }
-
             // MARK: - Other Provider Keys (Collapsed)
             Section {
                 DisclosureGroup("Configure Other Providers") {

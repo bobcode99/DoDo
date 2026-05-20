@@ -2043,9 +2043,14 @@ final class EpisodeDetailViewModel {
     // computed property returns from here on.
     _localCloudAnalysisState = .idle
 
+    let segments = transcriptSegments.map { segment in
+      QuotesFinder.Segment(startTime: segment.startTime, text: segment.text)
+    }
+
     CloudAnalysisJobCoordinator.shared.startAnalysis(
       audioURL: audioURL,
       transcript: transcriptText,
+      transcriptSegments: segments,
       episodeTitle: episode.title,
       podcastTitle: podcastTitle,
       type: type,

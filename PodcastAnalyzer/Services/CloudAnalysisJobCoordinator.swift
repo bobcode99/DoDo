@@ -68,6 +68,7 @@ final class CloudAnalysisJobCoordinator {
     func startAnalysis(
         audioURL: String,
         transcript: String,
+        transcriptSegments: [QuotesFinder.Segment],
         episodeTitle: String,
         podcastTitle: String,
         type: CloudAnalysisType,
@@ -110,6 +111,7 @@ final class CloudAnalysisJobCoordinator {
                     analysisType: type,
                     podcastLanguage: podcastLanguage,
                     formatHint: formatHint,
+                    transcriptSegments: transcriptSegments,
                     onChunk: { [weak self] text in
                         Task { @MainActor in
                             self?.jobs[audioURL]?.streamingText = text

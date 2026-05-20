@@ -303,13 +303,10 @@ final class CloudAIService {
             formatHintLine = "\n\nNote: If the transcript contains sponsored or advertisement segments, ignore them — do not include ads in topics, takeaways, highlights, or quotes."
         }
 
-        let useTimestamps = settings.transcriptFormat == .segmentBased
-        let quotesSchema = useTimestamps
-            ? #""notableQuotes": [{"text": "quote 1", "timestamp": "MM:SS"}, {"text": "quote 2", "timestamp": "MM:SS"}]"#
-            : #""notableQuotes": ["quote 1", "quote 2"]"#
-        let quotesNote = useTimestamps
-            ? "\nFor each notable quote, include the timestamp where it appears in the transcript. Use MM:SS or H:MM:SS format."
-            : ""
+        // Analyze always uses sentence-based transcripts — QuotesFinder
+        // reattaches timestamps after parsing.
+        let quotesSchema = #""notableQuotes": ["quote 1", "quote 2"]"#
+        let quotesNote = ""
         return """
         You are an expert podcast analyst. Provide a single comprehensive analysis of this podcast episode.
 
@@ -353,7 +350,14 @@ final class CloudAIService {
 
     // MARK: - Streaming Transcript Analysis
 
-    /// Analyze transcript with streaming response
+    /// Analyze transcript with streaming response.
+    ///
+    /// The analyze path always sends a sentence-based (timestamp-free)
+    /// transcript to the model — timestamps are reattached post-hoc by
+    /// `QuotesFinder` using `transcriptSegments`, which keeps prompt tokens
+    /// down without losing the per-quote playback affordance. The user's
+    /// saved `settings.transcriptFormat` is only honoured by the "Copy
+    /// Prompt" preview path (`buildPrompt`).
     func analyzeTranscriptStreaming(
         _ transcript: String,
         episodeTitle: String,
@@ -361,6 +365,7 @@ final class CloudAIService {
         analysisType: CloudAnalysisType,
         podcastLanguage: String? = nil,
         formatHint: String? = nil,
+        transcriptSegments: [QuotesFinder.Segment] = [],
         onChunk: @escaping @Sendable (String) -> Void,
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
     ) async throws -> CloudAnalysisResult {
@@ -368,14 +373,15 @@ final class CloudAIService {
         let apiKey = settings.currentAPIKey
         let model = settings.currentModel
 
-        // Format transcript based on user's preference (segment-based vs sentence-based)
-        let formattedTranscript = settings.transcriptFormat.formatTranscript(transcript)
-        logger.info("Transcript formatted using \(self.settings.transcriptFormat.rawValue) format")
+        // Always sentence-based for AI analysis to minimise prompt tokens.
+        let analyzeFormat: TranscriptFormatForAI = .sentenceBased
+        let formattedTranscript = analyzeFormat.formatTranscript(transcript)
+        logger.info("Analyze using forced \(analyzeFormat.rawValue) format")
 
         // Handle Apple PCC via Shortcuts
         if provider == .applePCC {
             progressCallback?("Preparing for Shortcuts...", 0.2)
-            return try await analyzeWithShortcuts(
+            let result = try await analyzeWithShortcuts(
                 transcript: formattedTranscript,
                 episodeTitle: episodeTitle,
                 podcastTitle: podcastTitle,
@@ -384,6 +390,7 @@ final class CloudAIService {
                 formatHint: formatHint,
                 progressCallback: progressCallback
             )
+            return Self.enrichQuotes(in: result, segments: transcriptSegments)
         }
 
         if provider.requiresAPIKey {
@@ -398,13 +405,19 @@ final class CloudAIService {
         let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         logger.info("Streaming Analysis Request - Provider: \(provider.displayName), Type: \(analysisType.rawValue), Language setting: \(self.settings.analysisLanguage.rawValue), Instruction: \(languageInstruction.isEmpty ? "None" : languageInstruction)")
 
-        let systemPrompt = buildSystemPrompt(for: analysisType, podcastLanguage: podcastLanguage, formatHint: formatHint)
+        let systemPrompt = buildSystemPrompt(
+            for: analysisType,
+            podcastLanguage: podcastLanguage,
+            formatHint: formatHint,
+            transcriptFormatOverride: analyzeFormat
+        )
         let userPrompt = buildUserPrompt(
             transcript: formattedTranscript,
             episodeTitle: episodeTitle,
             podcastTitle: podcastTitle,
             analysisType: analysisType,
-            formatHint: formatHint
+            formatHint: formatHint,
+            transcriptFormatOverride: analyzeFormat
         )
 
         progressCallback?("Connecting to \(provider.displayName)...", 0.15)
@@ -433,13 +446,60 @@ final class CloudAIService {
 
         progressCallback?("Done", 1.0)
 
-        return CloudAnalysisResult(
+        let result = CloudAnalysisResult(
             type: analysisType,
             content: fullResponse,
             parsedAnalysis: parsedAnalysis,
             provider: provider,
             model: model,
             timestamp: Date()
+        )
+        return Self.enrichQuotes(in: result, segments: transcriptSegments)
+    }
+
+    // MARK: - Quote Enrichment
+
+    /// Replace `parsedAnalysis.notableQuotes` with timestamp-enriched copies
+    /// produced by `QuotesFinder`, leaving the rest of the result untouched.
+    private static func enrichQuotes(
+        in result: CloudAnalysisResult,
+        segments: [QuotesFinder.Segment]
+    ) -> CloudAnalysisResult {
+        guard !segments.isEmpty,
+              let parsed = result.parsedAnalysis,
+              !parsed.notableQuotes.isEmpty else {
+            return result
+        }
+
+        let enriched = QuotesFinder.enrich(quotes: parsed.notableQuotes, segments: segments)
+        let updatedParsed = ParsedEpisodeAnalysisResponse(
+            overview: parsed.overview,
+            mainTopics: parsed.mainTopics,
+            keyTakeaways: parsed.keyTakeaways,
+            keyInsights: parsed.keyInsights,
+            targetAudience: parsed.targetAudience,
+            engagementLevel: parsed.engagementLevel,
+            people: parsed.people,
+            organizations: parsed.organizations,
+            products: parsed.products,
+            locations: parsed.locations,
+            resources: parsed.resources,
+            highlights: parsed.highlights,
+            notableQuotes: enriched,
+            actionItems: parsed.actionItems,
+            controversialPoints: parsed.controversialPoints,
+            entertainingMoments: parsed.entertainingMoments,
+            qaHighlights: parsed.qaHighlights,
+            conclusion: parsed.conclusion
+        )
+        return CloudAnalysisResult(
+            type: result.type,
+            content: result.content,
+            parsedAnalysis: updatedParsed,
+            provider: result.provider,
+            model: result.model,
+            timestamp: result.timestamp,
+            jsonParseWarning: result.jsonParseWarning
         )
     }
 
