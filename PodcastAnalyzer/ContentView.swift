@@ -299,6 +299,24 @@ extension View {
           podcastLanguage: route.podcastLanguage ?? "en"
         )
       }
+      #if os(iOS)
+      .navigationDestination(for: EpisodeTranscriptRoute.self) { route in
+        EpisodeTranscriptPage(
+          episode: route.episode,
+          podcastTitle: route.podcastTitle,
+          fallbackImageURL: route.fallbackImageURL,
+          podcastLanguage: route.podcastLanguage ?? "en"
+        )
+      }
+      .navigationDestination(for: EpisodeAIAnalysisRoute.self) { route in
+        EpisodeAIAnalysisPage(
+          episode: route.episode,
+          podcastTitle: route.podcastTitle,
+          fallbackImageURL: route.fallbackImageURL,
+          podcastLanguage: route.podcastLanguage ?? "en"
+        )
+      }
+      #endif
       .navigationDestination(for: PodcastBrowseRoute.self) { route in
         if let model = route.podcastModel {
           EpisodeListView(podcastModel: model, initialFilter: route.initialFilter)

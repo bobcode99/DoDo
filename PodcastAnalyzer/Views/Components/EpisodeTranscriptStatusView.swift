@@ -81,26 +81,29 @@ struct EpisodeTranscriptStatusView: View {
     }
 
     private var rssAvailableView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "captions.bubble")
-                .font(.system(size: 50))
-                .foregroundStyle(.blue)
-            Text("Transcript Available").font(.headline)
+        ContentUnavailableView {
+            Label("Transcript Available", systemImage: "captions.bubble")
+        } description: {
             Text("This episode has a transcript from the podcast feed.")
-                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button(action: { viewModel.downloadRSSTranscript() }) {
+        } actions: {
+            Button {
+                viewModel.downloadRSSTranscript()
+            } label: {
                 Label("Download Transcript", systemImage: "arrow.down.circle")
-                    .font(.subheadline)
-                    .padding(.horizontal, 20).padding(.vertical, 10)
             }
             .buttonStyle(.borderedProminent)
         }
     }
 
     private var rssDownloadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView().scaleEffect(1.5)
-            Text("Downloading Transcript").font(.headline).padding(.top, 8)
+        ContentUnavailableView {
+            VStack(spacing: 12) {
+                ProgressView().controlSize(.large)
+                Text("Downloading Transcript")
+                    .font(.headline)
+            }
+        } description: {
+            Text("Fetching the transcript from the podcast feed.")
         }
     }
 
@@ -237,13 +240,21 @@ struct EpisodeTranscriptStatusView: View {
     // MARK: - Progress
 
     private func progressView(label: String, progress: Double) -> some View {
-        VStack(spacing: 12) {
-            ProgressView(value: progress) {
-                Text(label).font(.caption)
+        ContentUnavailableView {
+            VStack(spacing: 16) {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: 240)
+                Text(label)
+                    .font(.subheadline.weight(.semibold))
+                Text("\(Int(progress * 100))%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
-            .progressViewStyle(.linear)
-            .frame(width: 200)
-            Text("\(Int(progress * 100))%").font(.caption).foregroundStyle(.secondary)
+        } description: {
+            EmptyView()
+        } actions: {
             Button("Cancel", role: .cancel) { viewModel.cancelTranscript() }
                 .buttonStyle(.bordered)
         }
@@ -252,23 +263,29 @@ struct EpisodeTranscriptStatusView: View {
     // MARK: - Completed
 
     private var completedView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 50)).foregroundStyle(.green)
-            Text("Transcript Ready").font(.headline)
+        ContentUnavailableView {
+            Label("Transcript Ready", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        } description: {
+            Text("Tap a sentence to seek playback.")
         }
     }
 
     // MARK: - Error
 
     private func errorView(message: String) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 50)).foregroundStyle(.red)
-            Text("Transcription Failed").font(.headline)
-            Text(message).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("Try Again") { viewModel.generateTranscript() }
-                .buttonStyle(.bordered)
+        ContentUnavailableView {
+            Label("Transcription Failed", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+        } description: {
+            Text(message)
+        } actions: {
+            Button {
+                viewModel.generateTranscript()
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
         }
     }
 }

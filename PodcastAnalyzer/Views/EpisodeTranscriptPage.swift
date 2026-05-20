@@ -1,20 +1,20 @@
 //
-//  MacEpisodeAIAnalysisView.swift
+//  EpisodeTranscriptPage.swift
 //  PodcastAnalyzer
 //
-//  Standalone AI Analysis page on macOS. Pushed from MacEpisodeDetailView via
-//  EpisodeAIAnalysisRoute. Reuses EpisodeAIAnalysisView verbatim with a small
-//  EpisodeMiniHeader on top for context.
+//  Standalone iOS page that hosts EpisodeTranscriptView. Pushed onto the
+//  NavigationStack from EpisodeDetailView (summary landing) via
+//  EpisodeTranscriptRoute. Owns its own EpisodeDetailViewModel + the four
+//  sheet/alert flags consumed by `episodeDetailSheetsAndAlerts`.
 //
 
-#if os(macOS)
+#if os(iOS)
 import SwiftData
 import SwiftUI
 
-struct MacEpisodeAIAnalysisView: View {
+struct EpisodeTranscriptPage: View {
     @State private var viewModel: EpisodeDetailViewModel
 
-    // Sheets / alerts state.
     @State private var showDeleteConfirmation = false
     @State private var showSubtitleSettings = false
     @State private var showTranslationLanguagePicker = false
@@ -37,19 +37,22 @@ struct MacEpisodeAIAnalysisView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            EpisodeMiniHeader(viewModel: viewModel)
-            Divider()
-            EpisodeAIAnalysisView(viewModel: viewModel)
+        EpisodeTranscriptView(
+            viewModel: viewModel,
+            onShowTranslationPicker: { showTranslationLanguagePicker = true },
+            onShowSubtitleSettings: { showSubtitleSettings = true },
+            onShowRegenerateConfirmation: { showRegenerateConfirmation = true }
+        )
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 80)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .navigationTitle("AI Analysis")
-        .navigationSubtitle(viewModel.title)
+        .navigationTitle("Transcript")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem(placement: .topBarTrailing) {
                 EpisodeDetailToolbarItems(
                     viewModel: viewModel,
-                    selectedTab: 2, // AI tab — translate button is hidden
+                    selectedTab: 1, // Transcript — translate button shown
                     showTranslationLanguagePicker: $showTranslationLanguagePicker,
                     showDeleteConfirmation: $showDeleteConfirmation
                 )

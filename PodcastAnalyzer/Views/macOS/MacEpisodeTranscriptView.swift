@@ -3,7 +3,7 @@
 //  PodcastAnalyzer
 //
 //  Standalone Transcript page on macOS. Pushed from MacEpisodeDetailView via
-//  EpisodeTranscriptRoute. Reuses TranscriptContentView verbatim with a small
+//  EpisodeTranscriptRoute. Reuses EpisodeTranscriptView verbatim with a small
 //  EpisodeMiniHeader on top for context.
 //
 
@@ -19,14 +19,6 @@ struct MacEpisodeTranscriptView: View {
     @State private var showSubtitleSettings = false
     @State private var showTranslationLanguagePicker = false
     @State private var showRegenerateConfirmation = false
-
-    // Scroll bindings required by TranscriptContentView. macOS has no
-    // collapsing header so `isHeaderVisible` stays true and the other
-    // values are unused but kept satisfied for the API.
-    @State private var isHeaderVisible = true
-    @State private var lastScrollOffset: CGFloat = 0
-    @State private var isUserScrolling = false
-    @State private var scrollToTopTrigger = false
 
     init(
         episode: PodcastEpisodeInfo,
@@ -48,12 +40,8 @@ struct MacEpisodeTranscriptView: View {
         VStack(spacing: 0) {
             EpisodeMiniHeader(viewModel: viewModel)
             Divider()
-            TranscriptContentView(
+            EpisodeTranscriptView(
                 viewModel: viewModel,
-                isHeaderVisible: $isHeaderVisible,
-                lastScrollOffset: $lastScrollOffset,
-                isUserScrolling: $isUserScrolling,
-                scrollToTopTrigger: $scrollToTopTrigger,
                 onShowTranslationPicker: { showTranslationLanguagePicker = true },
                 onShowSubtitleSettings: { showSubtitleSettings = true },
                 onShowRegenerateConfirmation: { showRegenerateConfirmation = true }

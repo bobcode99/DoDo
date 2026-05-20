@@ -8678,6 +8678,7 @@
       }
     },
     "Unknown tab: %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {

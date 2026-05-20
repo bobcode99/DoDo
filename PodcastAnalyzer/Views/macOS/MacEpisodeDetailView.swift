@@ -54,14 +54,29 @@ struct MacEpisodeDetailView: View {
 
                 Divider()
 
-                descriptionContent
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
+                EpisodeSummaryView(
+                    viewModel: viewModel,
+                    tappedTimestampSeconds: $tappedTimestampSeconds
+                )
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onEnded {
+                    timestampTapX = $0.location.x
+                    timestampTapY = $0.location.y
+                }
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .overlay { timestampPopupOverlay }
+        .timestampPopup(
+            viewModel: viewModel,
+            tappedSeconds: $tappedTimestampSeconds,
+            tapX: timestampTapX,
+            tapY: timestampTapY
+        )
         .navigationTitle(viewModel.title)
         .navigationSubtitle(viewModel.podcastTitle)
         .toolbar {
@@ -120,98 +135,6 @@ struct MacEpisodeDetailView: View {
         .padding(.horizontal, 24)
     }
 
-    // MARK: - Description
-
-    @ViewBuilder
-    private var descriptionContent: some View {
-        if let translated = viewModel.translatedDescription {
-            VStack(alignment: .leading, spacing: 12) {
-                HTMLTextView(
-                    attributedString: NSAttributedString(
-                        TimestampUtils.attributedStringWithTimestampLinks(translated)
-                    )
-                )
-                .textSelection(.enabled)
-
-                Divider()
-
-                DisclosureGroup("Original") {
-                    descriptionView
-                        .textSelection(.enabled)
-                }
-                .foregroundStyle(.secondary)
-            }
-        } else {
-            descriptionView
-                .textSelection(.enabled)
-        }
-    }
-
-    @ViewBuilder
-    private var descriptionView: some View {
-        switch viewModel.descriptionContent {
-        case .loading:
-            Text("Loading...")
-                .foregroundStyle(.secondary)
-        case .empty:
-            Text("No description available.")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .parsed(let attributedString):
-            HTMLTextView(attributedString: attributedString, linkTimestamps: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .environment(\.openURL, OpenURLAction { url in
-                    if let seconds = TimestampUtils.parseTimestampURL(url) {
-                        tappedTimestampSeconds = seconds
-                        return .handled
-                    }
-                    return .systemAction
-                })
-        }
-    }
-
-    // MARK: - Timestamp popup
-
-    @ViewBuilder
-    private var timestampPopupOverlay: some View {
-        if let seconds = tappedTimestampSeconds {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { tappedTimestampSeconds = nil }
-                .overlay {
-                    GeometryReader { geo in
-                        let popupWidth: CGFloat = 240
-                        let popupHeight: CGFloat = 110
-                        let x = min(
-                            max(timestampTapX, popupWidth / 2 + 16),
-                            geo.size.width - popupWidth / 2 - 16
-                        )
-                        let showAbove = timestampTapY > geo.size.height - popupHeight - 60
-                        let y = showAbove
-                            ? timestampTapY - popupHeight / 2 - 10
-                            : timestampTapY + popupHeight / 2 + 10
-
-                        TimestampPopup(
-                            seconds: seconds,
-                            onPlay: {
-                                viewModel.seekToTime(seconds)
-                                tappedTimestampSeconds = nil
-                            },
-                            onShare: {
-                                viewModel.shareTimestampedLink(seconds: seconds)
-                                tappedTimestampSeconds = nil
-                            }
-                        )
-                        .position(x: x, y: y)
-                        .transition(
-                            .scale(scale: 0.88, anchor: showAbove ? .bottom : .top)
-                            .combined(with: .opacity)
-                        )
-                    }
-                }
-                .animation(.spring(response: 0.22, dampingFraction: 0.75), value: tappedTimestampSeconds != nil)
-        }
-    }
 }
 
 #endif

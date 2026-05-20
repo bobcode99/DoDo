@@ -24,11 +24,6 @@ struct EpisodeAIAnalysisView: View {
     #endif
   }
   @Bindable var viewModel: EpisodeDetailViewModel
-  var embedsOwnScroll: Bool = true  // When false, parent provides scrolling (for embedded mode)
-  @Binding var isHeaderVisible: Bool
-  @Binding var lastScrollOffset: CGFloat
-  @Binding var isUserScrolling: Bool
-  @Binding var scrollToTopTrigger: Bool
 
   @State private var selectedTab: CloudAnalysisTab = .analysis
   @State private var questionInput: String = ""
@@ -61,29 +56,7 @@ struct EpisodeAIAnalysisView: View {
 
       Divider()
 
-      // Content area - conditionally wrap in ScrollView based on embedsOwnScroll
-      if embedsOwnScroll {
-        ScrollViewReader { proxy in
-          ScrollView {
-            Color.clear.frame(height: 0).id("aiTop")
-            aiContentView
-          }
-          .trackScrollForHeaderCollapse(
-              isHeaderVisible: $isHeaderVisible,
-              lastOffset: $lastScrollOffset,
-              isUserScrolling: isUserScrolling
-          )
-          .onScrollPhaseChange { _, newPhase in
-              isUserScrolling = newPhase == .interacting || newPhase == .decelerating
-          }
-          .onChange(of: scrollToTopTrigger) { _, _ in
-              withAnimation(.easeInOut(duration: 0.3)) {
-                  proxy.scrollTo("aiTop", anchor: .top)
-              }
-              isHeaderVisible = true
-          }
-        }
-      } else {
+      ScrollView {
         aiContentView
       }
     }
