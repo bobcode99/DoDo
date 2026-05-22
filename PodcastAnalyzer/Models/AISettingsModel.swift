@@ -394,6 +394,13 @@ final class AISettingsManager {
         didSet { saveToKeychain(key: groqKey, for: .groq) }
     }
 
+    /// Optional Bearer token for LM Studio when its "Manage Tokens" auth is on
+    /// (LM Studio 0.4.0+). Empty string disables the Authorization header.
+    /// Stored in Keychain like other provider keys.
+    var lmstudioKey: String {
+        didSet { saveToKeychain(key: lmstudioKey, for: .lmstudio) }
+    }
+
     var selectedOpenAIModel: String {
         didSet { saveSettings() }
     }
@@ -551,6 +558,7 @@ final class AISettingsManager {
         self.geminiKey = Self.loadKeyFromKeychain(for: .gemini)
         self.grokKey = Self.loadKeyFromKeychain(for: .grok)
         self.groqKey = Self.loadKeyFromKeychain(for: .groq)
+        self.lmstudioKey = Self.loadKeyFromKeychain(for: .lmstudio)
     }
 
     // MARK: - Computed Properties
@@ -564,7 +572,8 @@ final class AISettingsManager {
 
     var currentAPIKey: String {
         switch selectedProvider {
-        case .applePCC, .lmstudio, .ollama: return ""
+        case .applePCC, .ollama: return ""
+        case .lmstudio: return lmstudioKey  // optional Bearer token
         case .openai: return openAIKey
         case .claude: return claudeKey
         case .gemini: return geminiKey
@@ -588,7 +597,8 @@ final class AISettingsManager {
 
     func apiKey(for provider: CloudAIProvider) -> String {
         switch provider {
-        case .applePCC, .lmstudio, .ollama: return ""
+        case .applePCC, .ollama: return ""
+        case .lmstudio: return lmstudioKey
         case .openai: return openAIKey
         case .claude: return claudeKey
         case .gemini: return geminiKey
@@ -599,7 +609,8 @@ final class AISettingsManager {
 
     func setAPIKey(_ key: String, for provider: CloudAIProvider) {
         switch provider {
-        case .applePCC, .lmstudio, .ollama: break
+        case .applePCC, .ollama: break
+        case .lmstudio: lmstudioKey = key
         case .openai: openAIKey = key
         case .claude: claudeKey = key
         case .gemini: geminiKey = key

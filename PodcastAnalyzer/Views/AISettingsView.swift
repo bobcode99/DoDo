@@ -190,6 +190,14 @@ struct AISettingsView: View {
                             #endif
                     }
 
+                    // Optional Bearer token — LM Studio 0.4.0+ supports an
+                    // optional auth toggle under Server Settings > Manage Tokens.
+                    // Leave blank if the server doesn't require it.
+                    if settings.selectedProvider == .lmstudio {
+                        apiKeyField(for: .lmstudio)
+                            .help("Optional. Create one in LM Studio › Developer › Server Settings › Manage Tokens.")
+                    }
+
                     // Model selection with refresh button
                     HStack {
                         modelPicker(for: settings.selectedProvider)
@@ -668,14 +676,20 @@ struct AISettingsView: View {
             get: { settings.apiKey(for: provider) },
             set: { newValue in
                 settings.setAPIKey(newValue, for: provider)
-                // Auto-fetch models when API key is entered
-                if !newValue.isEmpty && provider == settings.selectedProvider {
+                // Auto-fetch models when API key is entered (or cleared) — the
+                // models endpoint may itself require the new token on LM Studio.
+                if provider == settings.selectedProvider {
                     fetchModels(for: provider)
                 }
             }
         )
 
-        SecureField("\(provider.displayName) API Key", text: binding)
+        // LM Studio's token is optional, so flag it as such in the placeholder.
+        let placeholder = provider == .lmstudio
+            ? "LM Studio API Token (Optional)"
+            : "\(provider.displayName) API Key"
+
+        SecureField(placeholder, text: binding)
             .textContentType(.password)
             .autocorrectionDisabled()
             #if os(iOS)
@@ -706,8 +720,21 @@ struct AISettingsView: View {
             }
         }()
 
-        // Use fetched models if available, otherwise use hardcoded defaults
-        let models = fetchedModels[provider] ?? provider.availableModels
+        // Use fetched models if available, otherwise use hardcoded defaults.
+        // For local servers, surface the saved model in the picker even when
+        // it didn't come back from /v1/models — LM Studio's JIT loader can
+        // still bring it up on demand, and the user shouldn't lose their
+        // selection just because the model isn't currently loaded.
+        let fetched = fetchedModels[provider] ?? provider.availableModels
+        let savedSelection = binding.wrappedValue
+        let models: [String] = {
+            if provider.usesLocalServer
+                && !savedSelection.isEmpty
+                && !fetched.contains(savedSelection) {
+                return [savedSelection] + fetched
+            }
+            return fetched
+        }()
 
         if models.isEmpty && provider.usesLocalServer {
             HStack {
@@ -773,7 +800,16 @@ struct AISettingsView: View {
                 case .ollama: currentModel = settings.selectedOllamaModel
                 }
 
-                if !models.contains(currentModel), let firstModel = models.first {
+                // Only auto-pick a model when none was saved yet. For local
+                // servers we deliberately preserve the saved selection even if
+                // the model isn't in the current /v1/models list — JIT loaders
+                // can still resolve it, and clobbering it surprises the user.
+                let shouldAutoSelect: Bool = {
+                    if currentModel.isEmpty { return true }
+                    if provider.usesLocalServer { return false }
+                    return !models.contains(currentModel)
+                }()
+                if shouldAutoSelect, let firstModel = models.first {
                     switch provider {
                     case .applePCC: break
                     case .openai: settings.selectedOpenAIModel = firstModel

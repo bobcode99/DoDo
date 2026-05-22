@@ -93,7 +93,8 @@ nonisolated struct OllamaClient: AIProviderClient {
             requiresAPIKey: false,
             pingModel: "",
             modelFilter: nil,
-            modelSorter: nil
+            modelSorter: nil,
+            modelLimit: nil
         )
     }
 

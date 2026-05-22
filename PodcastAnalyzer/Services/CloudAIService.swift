@@ -53,7 +53,7 @@ final class CloudAIService {
     private func client(for provider: CloudAIProvider) -> any AIProviderClient {
         switch provider {
         case .lmstudio:
-            return OpenAICompatibleClient.lmStudio(baseURL: settings.lmstudioBaseURL)
+            return LMStudioClient(provider: .lmstudio, baseURL: settings.lmstudioBaseURL)
         case .ollama:
             return OllamaClient(provider: .ollama, baseURL: settings.ollamaBaseURL)
         default:

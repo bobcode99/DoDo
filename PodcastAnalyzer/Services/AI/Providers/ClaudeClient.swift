@@ -187,6 +187,13 @@ nonisolated struct ClaudeClient: AIProviderClient {
                 continue
             }
 
+            // Claude sends explicit `event: error` SSE frames mid-stream (e.g.,
+            // overloaded_error). Surface them instead of silently dropping the
+            // event and returning an empty response.
+            if let message = AIProviderHelpers.extractStreamError(from: json) {
+                throw CloudAIError.apiError(statusCode: 200, message: message)
+            }
+
             if let type = json["type"] as? String,
                type == "content_block_delta",
                let delta = json["delta"] as? [String: Any],
@@ -194,6 +201,13 @@ nonisolated struct ClaudeClient: AIProviderClient {
                 fullContent += text
                 await MainActor.run { onChunk(fullContent) }
             }
+        }
+
+        if fullContent.isEmpty {
+            throw CloudAIError.apiError(
+                statusCode: 200,
+                message: "Claude returned an empty response. The prompt may exceed the model's context window — try a shorter episode or a model with a larger context."
+            )
         }
 
         return fullContent
