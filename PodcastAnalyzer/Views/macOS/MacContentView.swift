@@ -20,6 +20,7 @@ enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
   case librarySaved = "Library.Saved"
   case libraryDownloaded = "Library.Downloaded"
   case libraryLatest = "Library.Latest"
+  case libraryTranscribing = "Library.Transcribing"
 
   var id: String { rawValue }
 
@@ -32,6 +33,7 @@ enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
     case .librarySaved: return "star.fill"
     case .libraryDownloaded: return "arrow.down.circle.fill"
     case .libraryLatest: return "clock.fill"
+    case .libraryTranscribing: return "waveform.badge.plus"
     }
   }
 
@@ -179,6 +181,11 @@ struct MacContentView: View {
             .foregroundStyle(.blue)
         }
         .tag(MacSidebarItem.libraryLatest)
+
+        // Shows live counts from TranscriptManager.shared.activeJobs.
+        // Isolated subview so progress ticks don't invalidate the whole sidebar.
+        TranscribingSidebarLabel()
+          .tag(MacSidebarItem.libraryTranscribing)
       }
 
       Section("Discover") {
@@ -225,6 +232,8 @@ struct MacContentView: View {
           MacLibraryDownloadedView()
         case .libraryLatest:
           MacLibraryLatestView()
+        case .libraryTranscribing:
+          TranscriptGenerationProgressOverallView(embedNavigationStack: false)
         case .library:
           // Fallback to podcasts if somehow .library is selected
           MacLibraryPodcastsView()
@@ -290,10 +299,55 @@ struct MacContentView: View {
           fallbackImageURL: dest.podcastArtworkUrl
         )
       }
+      // Lets rows inside the Transcribing destination push into the host stack.
+      .navigationDestination(for: TranscriptJobRoute.self) { route in
+        TranscriptJobEpisodeBridgeView(route: route)
+      }
     }
   }
 
   // MARK: - Notification Navigation
+
+  // Sidebar label for the Transcribing destination. Observes TranscriptManager
+  // in isolation so progress ticks don't invalidate the entire sidebar List.
+  // The label is always present (so the row is consistently selectable) but
+  // its trailing badge only appears when there are jobs to surface.
+  private struct TranscribingSidebarLabel: View {
+    @State private var manager = TranscriptManager.shared
+
+    private var activeCount: Int {
+      var count = 0
+      for job in manager.activeJobs.values {
+        switch job.status {
+        case .queued, .downloadingModel, .transcribing: count += 1
+        case .completed, .failed: break
+        }
+      }
+      return count
+    }
+
+    var body: some View {
+      let count = activeCount
+      Label {
+        HStack {
+          Text("Transcribing")
+          Spacer()
+          if count > 0 {
+            Text("\(count)")
+              .font(.caption2.monospacedDigit())
+              .padding(.horizontal, 6)
+              .padding(.vertical, 1)
+              .background(Color.accentColor, in: .capsule)
+              .foregroundStyle(.white)
+          }
+        }
+      } icon: {
+        Image(systemName: "waveform.badge.plus")
+          .foregroundStyle(count > 0 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+          .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: count > 0)
+      }
+    }
+  }
 
   private func handleNotificationNavigation(target: NotificationNavigationTarget) {
     if let result = notificationManager.findEpisode(

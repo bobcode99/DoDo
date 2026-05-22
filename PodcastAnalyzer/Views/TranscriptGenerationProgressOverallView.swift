@@ -15,6 +15,11 @@ import SwiftData
 import SwiftUI
 
 struct TranscriptGenerationProgressOverallView: View {
+  /// Wrap the contents in a NavigationStack? iOS presents this as a sheet so
+  /// it needs its own stack; macOS embeds it as a sidebar destination inside
+  /// the host stack and supplies the route registration itself.
+  var embedNavigationStack: Bool = true
+
   @Environment(\.dismiss) private var dismiss
   @State private var manager = TranscriptManager.shared
 
@@ -49,59 +54,70 @@ struct TranscriptGenerationProgressOverallView: View {
   }
 
   var body: some View {
-    NavigationStack {
-      List {
-        if !active.isEmpty {
-          Section("Active") {
-            ForEach(active) { job in
-              TranscriptJobRow(jobID: job.id, action: .cancel)
-            }
+    if embedNavigationStack {
+      NavigationStack {
+        listContent
+          .navigationDestination(for: TranscriptJobRoute.self) { route in
+            TranscriptJobEpisodeDestination(route: route, onNavigated: { dismiss() })
           }
-        }
-        if !queued.isEmpty {
-          Section("Queued") {
-            ForEach(queued) { job in
-              TranscriptJobRow(jobID: job.id, action: .cancel)
-            }
+      }
+    } else {
+      listContent
+    }
+  }
+
+  @ViewBuilder
+  private var listContent: some View {
+    List {
+      if !active.isEmpty {
+        Section("Active") {
+          ForEach(active) { job in
+            TranscriptJobRow(jobID: job.id, action: .cancel)
           }
-        }
-        if !failed.isEmpty {
-          Section("Failed") {
-            ForEach(failed) { job in
-              TranscriptJobRow(jobID: job.id, action: .retry)
-            }
-          }
-        }
-        if !completed.isEmpty {
-          Section("Completed") {
-            ForEach(completed) { job in
-              TranscriptJobRow(jobID: job.id, action: .none)
-            }
-          }
-        }
-        if manager.activeJobs.isEmpty {
-          ContentUnavailableView(
-            "Nothing in the queue",
-            systemImage: "waveform",
-            description: Text("Transcript jobs you start will appear here with live progress.")
-          )
         }
       }
-      .navigationTitle("Transcription")
-      .toolbar {
+      if !queued.isEmpty {
+        Section("Queued") {
+          ForEach(queued) { job in
+            TranscriptJobRow(jobID: job.id, action: .cancel)
+          }
+        }
+      }
+      if !failed.isEmpty {
+        Section("Failed") {
+          ForEach(failed) { job in
+            TranscriptJobRow(jobID: job.id, action: .retry)
+          }
+        }
+      }
+      if !completed.isEmpty {
+        Section("Completed") {
+          ForEach(completed) { job in
+            TranscriptJobRow(jobID: job.id, action: .none)
+          }
+        }
+      }
+      if manager.activeJobs.isEmpty {
+        ContentUnavailableView(
+          "Nothing in the queue",
+          systemImage: "waveform",
+          description: Text("Transcript jobs you start will appear here with live progress.")
+        )
+      }
+    }
+    .navigationTitle("Transcription")
+    .toolbar {
+      if embedNavigationStack {
         ToolbarItem(placement: .cancellationAction) {
           Button("Done") { dismiss() }
         }
-        if !active.isEmpty || !queued.isEmpty {
-          ToolbarItem(placement: .primaryAction) {
-            Button("Cancel All", role: .destructive) {
-              manager.cancelAll()
-            }
+      }
+      if !active.isEmpty || !queued.isEmpty {
+        ToolbarItem(placement: .primaryAction) {
+          Button("Cancel All", role: .destructive) {
+            manager.cancelAll()
           }
         }
-      }
-      .navigationDestination(for: TranscriptJobRoute.self) { route in
-        TranscriptJobEpisodeDestination(route: route, onNavigated: { dismiss() })
       }
     }
   }
@@ -220,6 +236,13 @@ struct TranscriptJobRoute: Hashable {
 /// Resolves a TranscriptJobRoute into the matching PodcastEpisodeInfo and
 /// presents EpisodeDetailView. Falls back to a placeholder if the podcast or
 /// episode can't be found (e.g., user unsubscribed mid-job).
+struct TranscriptJobEpisodeBridgeView: View {
+  let route: TranscriptJobRoute
+  var body: some View {
+    TranscriptJobEpisodeDestination(route: route)
+  }
+}
+
 private struct TranscriptJobEpisodeDestination: View {
   let route: TranscriptJobRoute
   var onNavigated: (() -> Void)? = nil
@@ -238,12 +261,22 @@ private struct TranscriptJobEpisodeDestination: View {
   var body: some View {
     if let podcast = podcasts.first,
        let episode = podcast.podcastInfo.episodes.first(where: { $0.title == route.episodeTitle }) {
+      let lang = podcast.podcastInfo.language.isEmpty ? "en" : podcast.podcastInfo.language
+      #if os(macOS)
+      MacEpisodeDetailView(
+        episode: episode,
+        podcastTitle: podcast.podcastInfo.title,
+        fallbackImageURL: podcast.podcastInfo.imageURL,
+        podcastLanguage: lang
+      )
+      #else
       EpisodeDetailView(
         episode: episode,
         podcastTitle: podcast.podcastInfo.title,
         fallbackImageURL: podcast.podcastInfo.imageURL,
-        podcastLanguage: podcast.podcastInfo.language.isEmpty ? "en" : podcast.podcastInfo.language
+        podcastLanguage: lang
       )
+      #endif
     } else {
       ContentUnavailableView(
         "Episode unavailable",
