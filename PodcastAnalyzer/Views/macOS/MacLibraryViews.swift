@@ -226,6 +226,15 @@ struct MacLibraryLatestView: View {
   @Environment(\.modelContext) private var modelContext
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
 
+  // Latest Episodes derives its rows from the subscribed podcasts' episode
+  // arrays. Without injecting them via @Query → setPodcasts, the view model's
+  // podcastInfoModelList stays empty and the list renders the empty state.
+  @Query(
+    filter: #Predicate<PodcastInfoModel> { $0.isSubscribed },
+    sort: \.lastUpdated,
+    order: .reverse
+  ) private var subscribedPodcasts: [PodcastInfoModel]
+
   private var audioManager: EnhancedAudioManager { .shared }
 
   var body: some View {
@@ -277,10 +286,14 @@ struct MacLibraryLatestView: View {
     .navigationTitle("Latest Episodes")
     .onAppear {
       viewModel.setModelContext(modelContext)
+      viewModel.setPodcasts(subscribedPodcasts)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
     }
     .onDisappear {
       viewModel.cleanup()
+    }
+    .onChange(of: subscribedPodcasts) { _, newPodcasts in
+      viewModel.setPodcasts(newPodcasts)
     }
   }
 }
