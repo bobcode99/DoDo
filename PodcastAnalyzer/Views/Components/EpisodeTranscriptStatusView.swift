@@ -294,7 +294,7 @@ struct EpisodeTranscriptStatusView: View {
             Text(message)
         } actions: {
             Button {
-                viewModel.generateTranscript()
+                viewModel.transcriptState = .idle
             } label: {
                 Label("Try Again", systemImage: "arrow.clockwise")
             }
