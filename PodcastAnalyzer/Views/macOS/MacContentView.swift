@@ -14,6 +14,7 @@ import SwiftUI
 enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
   case home = "Home"
   case library = "Library"
+  case analysis = "Analysis"
   case search = "Search"
   // Library sub-items with unique identifiers
   case libraryPodcasts = "Library.Podcasts"
@@ -28,6 +29,7 @@ enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
     switch self {
     case .home: return "house"
     case .library: return "books.vertical"
+    case .analysis: return "sparkles"
     case .search: return "magnifyingglass"
     case .libraryPodcasts: return "square.stack"
     case .librarySaved: return "star.fill"
@@ -189,6 +191,14 @@ struct MacContentView: View {
       }
 
       Section("Discover") {
+        Label {
+          Text("Analysis")
+        } icon: {
+          Image(systemName: "sparkles")
+            .foregroundStyle(.purple)
+        }
+        .tag(MacSidebarItem.analysis)
+
         Label("Search", systemImage: "magnifyingglass")
           .tag(MacSidebarItem.search)
       }
@@ -240,6 +250,9 @@ struct MacContentView: View {
 
         case .search:
           MacSearchView()
+
+        case .analysis:
+          AnalysisView()
 
         case .none:
           MacHomeContentView()

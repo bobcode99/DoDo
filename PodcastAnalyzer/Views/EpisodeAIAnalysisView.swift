@@ -56,8 +56,16 @@ struct EpisodeAIAnalysisView: View {
 
       Divider()
 
-      ScrollView {
-        aiContentView
+      ScrollViewReader { proxy in
+        ScrollView {
+          aiContentView
+        }
+        .onChange(of: viewModel.cloudAnalysisCache.questionAnswers.count) { _, _ in
+          scrollChatToBottom(proxy: proxy)
+        }
+        .onChange(of: cloudQuestionIsAnalyzing) { _, isAnalyzing in
+          if isAnalyzing { scrollChatToBottom(proxy: proxy) }
+        }
       }
     }
     .onAppear {
@@ -428,11 +436,17 @@ struct EpisodeAIAnalysisView: View {
       // Question input with X button and Enter to send
       HStack(spacing: 8) {
         HStack {
-          TextField("Enter your question...", text: $questionInput)
-            .textFieldStyle(.plain)
-            .onSubmit {
-              submitQuestion()
-            }
+          TextField(
+            viewModel.hasTranscript
+              ? "Enter your question..."
+              : "Transcribe this episode first to ask questions",
+            text: $questionInput
+          )
+          .textFieldStyle(.plain)
+          .disabled(!viewModel.hasTranscript)
+          .onSubmit {
+            submitQuestion()
+          }
 
           // X button to clear input
           if !questionInput.isEmpty {
@@ -453,6 +467,7 @@ struct EpisodeAIAnalysisView: View {
         .padding(.vertical, 8)
         .background(Color.platformSystemGray6)
         .clipShape(.rect(cornerRadius: 10))
+        .opacity(viewModel.hasTranscript ? 1 : 0.55)
 
         Button(action: submitQuestion) {
           Image(systemName: "paperplane.fill")
@@ -492,25 +507,31 @@ struct EpisodeAIAnalysisView: View {
         )
       }
 
-      // Progress indicator while waiting for answer
-      if case .analyzing = viewModel.cloudQuestionState {
-        analysisStateView(for: viewModel.cloudQuestionState)
-      }
-
-      // Previous Q&A history
-      if !viewModel.cloudAnalysisCache.questionAnswers.isEmpty {
+      // Chat-style conversation: oldest at top, newest at bottom,
+      // followed by a typing indicator while a new answer is in flight.
+      let conversation = viewModel.cloudAnalysisCache.questionAnswers
+      if !conversation.isEmpty || cloudQuestionIsAnalyzing {
         VStack(alignment: .leading, spacing: 12) {
-          Text("Previous Questions")
-            .font(.headline)
+          if !conversation.isEmpty {
+            Text("Conversation")
+              .font(.headline)
+          }
 
-          ForEach(
-            Array(viewModel.cloudAnalysisCache.questionAnswers.enumerated().reversed()),
-            id: \.offset
-          ) { _, qa in
-            qaResultCard(qa)
+          ForEach(Array(conversation.enumerated()), id: \.offset) { _, qa in
+            userQuestionBubble(qa.question)
+            aiAnswerBubble(qa)
+          }
+
+          if cloudQuestionIsAnalyzing {
+            typingIndicatorBubble
           }
         }
       }
+
+      // Bottom anchor used by ScrollViewReader to auto-scroll on new messages.
+      Color.clear
+        .frame(height: 1)
+        .id("qa-bottom-anchor")
     }
   }
 
@@ -529,6 +550,17 @@ struct EpisodeAIAnalysisView: View {
 
   private var canAnalyze: Bool {
     settings.hasConfiguredProvider && viewModel.hasTranscript
+  }
+
+  private var cloudQuestionIsAnalyzing: Bool {
+    if case .analyzing = viewModel.cloudQuestionState { return true }
+    return false
+  }
+
+  private func scrollChatToBottom(proxy: ScrollViewProxy) {
+    withAnimation(.easeOut(duration: 0.25)) {
+      proxy.scrollTo("qa-bottom-anchor", anchor: .bottom)
+    }
   }
 
   private func submitQuestion() {
@@ -1143,167 +1175,178 @@ struct EpisodeAIAnalysisView: View {
     )
   }
 
-  /// Beautiful Q&A result card with all parsed fields
-  private func qaResultCard(_ result: CloudQAResult) -> some View {
-    VStack(alignment: .leading, spacing: 12) {
-      // Warning if JSON parsing failed
-      if let warning = result.jsonParseWarning {
-        HStack(spacing: 8) {
-          Image(systemName: "exclamationmark.triangle.fill")
-            .foregroundStyle(.orange)
-          Text(warning)
-            .font(.caption)
-            .foregroundStyle(.orange)
-        }
-        .padding(8)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(.rect(cornerRadius: 6))
-      }
-
-      // Question with enhanced styling
-      HStack(alignment: .top, spacing: 10) {
-        ZStack {
-          Circle()
-            .fill(Color.blue.opacity(0.15))
-            .frame(width: 32, height: 32)
-          Image(systemName: "bubble.left.fill")
-            .font(.system(size: 14))
-            .foregroundStyle(.blue)
-        }
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Question")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-          Text(result.question)
-            .font(.subheadline)
-            .fontWeight(.medium)
-        }
-      }
-
-      // Answer with enhanced styling and context menu
-      HStack(alignment: .top, spacing: 10) {
-        ZStack {
-          Circle()
-            .fill(Color.green.opacity(0.15))
-            .frame(width: 32, height: 32)
-          Image(systemName: "text.bubble.fill")
-            .font(.system(size: 14))
-            .foregroundStyle(.green)
-        }
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Answer")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-          Text(result.answer)
-            .font(.body)
-            .textSelection(.enabled)
-            .contextMenu {
-              Button {
-                PlatformClipboard.string = result.answer
-              } label: {
-                Label("Copy Answer", systemImage: "doc.on.doc")
-              }
-
-              Button {
-                if let query = result.answer.prefix(100).addingPercentEncoding(
-                  withAllowedCharacters: .urlQueryAllowed),
-                  let url = URL(string: "https://www.google.com/search?q=\(query)")
-                {
-                  #if os(iOS)
-                  UIApplication.shared.open(url)
-                  #else
-                  NSWorkspace.shared.open(url)
-                  #endif
-                }
-              } label: {
-                Label("Search Web", systemImage: "safari")
-              }
-
-              ShareLink(item: result.answer) {
-                Label("Share", systemImage: "square.and.arrow.up")
-              }
-            }
-        }
-      }
-
-      // Confidence badge
-      if result.confidence != "unknown" {
-        HStack(spacing: 6) {
-          Image(systemName: confidenceIcon(result.confidence))
-            .foregroundStyle(confidenceColor(result.confidence))
-          Text("Confidence: \(result.confidence.capitalized)")
-            .font(.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(confidenceColor(result.confidence))
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(confidenceColor(result.confidence).opacity(0.1))
-        .clipShape(.rect(cornerRadius: 16))
-      }
-
-      // Related topics as chips
-      if let topics = result.relatedTopics, !topics.isEmpty {
-        VStack(alignment: .leading, spacing: 6) {
-          Text("Related Topics")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-          FlowLayout(spacing: 6) {
-            ForEach(topics, id: \.self) { topic in
-              Text(topic)
-                .font(.caption2)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.purple.opacity(0.1))
-                .foregroundStyle(.purple)
-                .clipShape(.rect(cornerRadius: 12))
-            }
-          }
-        }
-      }
-
-      // Sources from transcript
-      if let sources = result.sources, !sources.isEmpty {
-        VStack(alignment: .leading, spacing: 6) {
-          Label("Sources from Transcript", systemImage: "quote.bubble")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-          ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-            Text("\"\(source)\"")
-              .font(.caption)
-              .italic()
-              .foregroundStyle(.secondary)
-              .padding(8)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(Color.platformSystemGray5)
-              .clipShape(.rect(cornerRadius: 6))
-          }
-        }
-      }
-
-      Divider()
-
-      // Metadata footer
-      HStack {
-        Label(result.provider.displayName, systemImage: result.provider.iconName)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-        Spacer()
-        Text(result.model)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-        Text(result.timestamp.formatted(date: .abbreviated, time: .shortened))
-          .font(.caption2)
-          .foregroundStyle(.secondary)
+  /// Right-aligned user question bubble.
+  private func userQuestionBubble(_ question: String) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Spacer(minLength: 40)
+      Text(question)
+        .font(.subheadline)
+        .fontWeight(.medium)
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.accentColor, in: .rect(cornerRadius: 16))
+        .textSelection(.enabled)
+      ZStack {
+        Circle()
+          .fill(Color.accentColor.opacity(0.15))
+          .frame(width: 28, height: 28)
+        Image(systemName: "person.fill")
+          .font(.system(size: 13))
+          .foregroundStyle(Color.accentColor)
       }
     }
-    .padding()
-    .background(Color.platformSystemGray6)
-    .clipShape(.rect(cornerRadius: 12))
+  }
+
+  /// Left-aligned AI answer bubble with confidence, topics, sources, and footer.
+  private func aiAnswerBubble(_ result: CloudQAResult) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      ZStack {
+        Circle()
+          .fill(Color.green.opacity(0.15))
+          .frame(width: 28, height: 28)
+        Image(systemName: "sparkles")
+          .font(.system(size: 13))
+          .foregroundStyle(.green)
+      }
+
+      VStack(alignment: .leading, spacing: 10) {
+        if let warning = result.jsonParseWarning {
+          HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.orange)
+            Text(warning)
+              .font(.caption)
+              .foregroundStyle(.orange)
+          }
+          .padding(8)
+          .background(Color.orange.opacity(0.1))
+          .clipShape(.rect(cornerRadius: 6))
+        }
+
+        Text(result.answer)
+          .font(.body)
+          .textSelection(.enabled)
+          .contextMenu {
+            Button {
+              PlatformClipboard.string = result.answer
+            } label: {
+              Label("Copy Answer", systemImage: "doc.on.doc")
+            }
+
+            Button {
+              if let query = result.answer.prefix(100).addingPercentEncoding(
+                withAllowedCharacters: .urlQueryAllowed),
+                let url = URL(string: "https://www.google.com/search?q=\(query)")
+              {
+                #if os(iOS)
+                UIApplication.shared.open(url)
+                #else
+                NSWorkspace.shared.open(url)
+                #endif
+              }
+            } label: {
+              Label("Search Web", systemImage: "safari")
+            }
+
+            ShareLink(item: result.answer) {
+              Label("Share", systemImage: "square.and.arrow.up")
+            }
+          }
+
+        if result.confidence != "unknown" {
+          HStack(spacing: 6) {
+            Image(systemName: confidenceIcon(result.confidence))
+              .foregroundStyle(confidenceColor(result.confidence))
+            Text("Confidence: \(result.confidence.capitalized)")
+              .font(.caption)
+              .fontWeight(.medium)
+              .foregroundStyle(confidenceColor(result.confidence))
+          }
+          .padding(.horizontal, 10)
+          .padding(.vertical, 6)
+          .background(confidenceColor(result.confidence).opacity(0.1))
+          .clipShape(.rect(cornerRadius: 16))
+        }
+
+        if let topics = result.relatedTopics, !topics.isEmpty {
+          VStack(alignment: .leading, spacing: 6) {
+            Text("Related Topics")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+
+            FlowLayout(spacing: 6) {
+              ForEach(topics, id: \.self) { topic in
+                Text(topic)
+                  .font(.caption2)
+                  .padding(.horizontal, 8)
+                  .padding(.vertical, 4)
+                  .background(Color.purple.opacity(0.1))
+                  .foregroundStyle(.purple)
+                  .clipShape(.rect(cornerRadius: 12))
+              }
+            }
+          }
+        }
+
+        if let sources = result.sources, !sources.isEmpty {
+          VStack(alignment: .leading, spacing: 6) {
+            Label("Sources from Transcript", systemImage: "quote.bubble")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+
+            ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
+              Text("\"\(source)\"")
+                .font(.caption)
+                .italic()
+                .foregroundStyle(.secondary)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.platformSystemGray5)
+                .clipShape(.rect(cornerRadius: 6))
+            }
+          }
+        }
+
+        Divider()
+
+        HStack {
+          Label(result.provider.displayName, systemImage: result.provider.iconName)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+          Spacer()
+          Text(result.model)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+          Text(result.timestamp.formatted(date: .abbreviated, time: .shortened))
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .padding(14)
+      .background(Color.platformSystemGray6, in: .rect(cornerRadius: 16))
+
+      Spacer(minLength: 40)
+    }
+  }
+
+  /// Animated three-dot "typing" indicator shown while an answer is in flight.
+  private var typingIndicatorBubble: some View {
+    HStack(alignment: .top, spacing: 8) {
+      ZStack {
+        Circle()
+          .fill(Color.green.opacity(0.15))
+          .frame(width: 28, height: 28)
+        Image(systemName: "sparkles")
+          .font(.system(size: 13))
+          .foregroundStyle(.green)
+      }
+      TypingDotsView()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.platformSystemGray6, in: .rect(cornerRadius: 16))
+      Spacer(minLength: 40)
+    }
   }
 
   /// Get icon for confidence level
@@ -1711,5 +1754,30 @@ private struct PromptPreviewSheet: View {
       try? await Task.sleep(for: .seconds(2))
       didCopy = false
     }
+  }
+}
+
+// MARK: - Typing Indicator
+
+/// Three dots that fade in/out in sequence, used to indicate an answer is in flight.
+private struct TypingDotsView: View {
+  @State private var animate = false
+
+  var body: some View {
+    HStack(spacing: 6) {
+      ForEach(0..<3, id: \.self) { index in
+        Circle()
+          .fill(Color.secondary)
+          .frame(width: 6, height: 6)
+          .opacity(animate ? 1 : 0.3)
+          .animation(
+            .easeInOut(duration: 0.6)
+              .repeatForever(autoreverses: true)
+              .delay(Double(index) * 0.15),
+            value: animate
+          )
+      }
+    }
+    .onAppear { animate = true }
   }
 }

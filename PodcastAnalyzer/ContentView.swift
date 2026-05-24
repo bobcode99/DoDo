@@ -50,6 +50,14 @@ struct iOSContentView: View {
         }
       }
 
+      Tab(Constants.analysisString, systemImage: Constants.analysisIconName) {
+        NavigationStack(path: $coordinator.analysisRouter.path) {
+          AnalysisView()
+            .navigationDestinations()
+            .onAppear { coordinator.visibleTab = .analysis }
+        }
+      }
+
       Tab(Constants.settingsString, systemImage: Constants.settingsIconName) {
         NavigationStack(path: $coordinator.settingsRouter.path) {
           SettingsView()

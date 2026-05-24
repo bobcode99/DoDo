@@ -11,11 +11,13 @@ struct Constants {
 
   static let homeString = "Home"
   static let libraryString = "Library"
+  static let analysisString = "Analysis"
   static let settingsString = "Settings"
   static let searchString = "Search"
 
   static let homeIconName = "house.fill"
   static let libraryIconName = "books.vertical.fill"
+  static let analysisIconName = "sparkles"
   static let settingsIconName = "gearshape.fill"
   static let searchIconName = "magnifyingglass.circle.fill"
 
