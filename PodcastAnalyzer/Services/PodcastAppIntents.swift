@@ -294,27 +294,23 @@ struct SaveAnalysisResultIntent: AppIntent {
     @Parameter(title: "Analysis Result", description: "The AI-generated analysis text")
     var analysisResult: String
 
-    @Parameter(title: "Episode Audio URL", description: "The episode identifier (audio URL)")
-    var episodeAudioURL: String
-
     @Parameter(title: "Analysis Type", description: "Type of analysis performed")
     var analysisType: AnalysisTypeEntity
 
     func perform() async throws -> some IntentResult {
         // Save the result to the shared cache or notify the app
-        await saveAnalysisResult(analysisResult, for: episodeAudioURL, type: analysisType.type)
+        await saveAnalysisResult(analysisResult, type: analysisType.type)
         return .result()
     }
 
     @MainActor
-    private func saveAnalysisResult(_ result: String, for episodeURL: String, type: ShortcutAnalysisType) {
+    private func saveAnalysisResult(_ result: String, type: ShortcutAnalysisType) {
         // Post notification with the result
         NotificationCenter.default.post(
             name: .shortcutsAnalysisCompleted,
             object: nil,
             userInfo: [
                 "result": result,
-                "episodeURL": episodeURL,
                 "analysisType": type.rawValue
             ]
         )

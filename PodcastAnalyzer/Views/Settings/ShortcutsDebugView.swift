@@ -180,10 +180,9 @@ struct ShortcutsDebugView: View {
       queue: .main
     ) { notification in
       let result = (notification.userInfo?["result"] as? String) ?? "<no result>"
-      let episodeURL = (notification.userInfo?["episodeURL"] as? String) ?? ""
       let type = (notification.userInfo?["analysisType"] as? String) ?? ""
       Task { @MainActor in
-        let preview = "result \(result.count) chars • episodeURL=\(episodeURL.isEmpty ? "(empty)" : episodeURL) • type=\(type)\n\(result.prefix(200))"
+        let preview = "result \(result.count) chars • type=\(type)\n\(result.prefix(200))"
         events.insert(
           DebugEvent(
             title: ".shortcutsAnalysisCompleted",
@@ -215,7 +214,6 @@ struct ShortcutsDebugView: View {
       do {
         let intent = SaveAnalysisResultIntent()
         intent.analysisResult = payload
-        intent.episodeAudioURL = "debug://local-test"
         intent.analysisType = AnalysisTypeEntity(type: .summary)
         _ = try await intent.perform()
         await MainActor.run {
