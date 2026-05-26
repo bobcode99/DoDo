@@ -489,6 +489,13 @@ final class LibraryViewModel {
 
   /// Receive updated podcast list from View's @Query.
   func setPodcasts(_ podcasts: [PodcastInfoModel]) {
+    // Skip the reload if the id-set is unchanged. Prevents cancellation +
+    // restart of the latest-episodes refresh task on every Library appearance
+    // (the @Query emits a new array on every SwiftData write).
+    if podcasts.map(\.id) == podcastInfoModelList.map(\.id) {
+      self.podcastInfoModelList = podcasts  // refresh references but no reload
+      return
+    }
     self.podcastInfoModelList = podcasts
     // Cancel previous refresh; latest episodes depend on the updated podcast list.
     refreshTask?.cancel()

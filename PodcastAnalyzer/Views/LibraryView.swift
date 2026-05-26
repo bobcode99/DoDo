@@ -23,12 +23,13 @@ struct LibraryView: View {
   ) private var subscribedPodcasts: [PodcastInfoModel]
 
   @State private var sortedPodcasts: [PodcastGridItem] = []
+  @State private var podcastModelByID: [PodcastInfoModel.ID: PodcastInfoModel] = [:]
+  /// Last podcast id-set we processed. Lets us skip re-sorting and re-mapping
+  /// on the second+ time the user enters the tab when nothing has changed —
+  /// the @Query emits a new array on every SwiftData write, even unrelated ones.
+  @State private var lastProcessedPodcastIds: [PodcastInfoModel.ID] = []
   @State private var errorMessage: String?
   @State private var showError = false
-
-  private var podcastModelByID: [PodcastInfoModel.ID: PodcastInfoModel] {
-    Dictionary(uniqueKeysWithValues: subscribedPodcasts.map { ($0.id, $0) })
-  }
 
   var body: some View {
     ZStack {
@@ -114,8 +115,7 @@ struct LibraryView: View {
     }
     .onAppear {
       viewModel.setModelContext(modelContext)
-      viewModel.setPodcasts(subscribedPodcasts)
-      updateSortedPodcasts()
+      applyPodcastsIfChanged(subscribedPodcasts)
       // Re-fetch saved/starred episodes on every appearance so stars set from
       // Home/Search/Trending (outside the Library tab) surface immediately and
       // the ContentUnavailableView clears once content exists.
@@ -141,9 +141,8 @@ struct LibraryView: View {
       showError = newValue != nil
     }
     .onChange(of: subscribedPodcasts) { _, newPodcasts in
-      viewModel.setPodcasts(newPodcasts)
       withAnimation(.easeInOut(duration: 0.3)) {
-        updateSortedPodcasts()
+        applyPodcastsIfChanged(newPodcasts)
       }
     }
 
@@ -159,8 +158,16 @@ struct LibraryView: View {
 
   // MARK: - Helper Methods
 
-  private func updateSortedPodcasts() {
-    sortedPodcasts = subscribedPodcasts
+  /// Apply a new subscribed-podcasts snapshot only if the id-set actually
+  /// changed. Cheap identity check that skips the expensive map+sort, the
+  /// dictionary rebuild, and the viewModel refresh on every body re-eval.
+  private func applyPodcastsIfChanged(_ podcasts: [PodcastInfoModel]) {
+    let currentIds = podcasts.map(\.id)
+    guard currentIds != lastProcessedPodcastIds else { return }
+    lastProcessedPodcastIds = currentIds
+    podcastModelByID = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0) })
+    viewModel.setPodcasts(podcasts)
+    sortedPodcasts = podcasts
       .map { PodcastGridItem(from: $0) }
       .sorted {
         switch ($0.latestEpisodeDate, $1.latestEpisodeDate) {

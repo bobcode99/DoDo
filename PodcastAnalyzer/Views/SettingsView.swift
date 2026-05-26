@@ -585,6 +585,26 @@ struct SettingsView: View {
           Text("About")
         }
 
+        #if DEBUG
+        // MARK: - Debug Section
+        Section {
+          NavigationLink {
+            ShortcutsDebugView()
+          } label: {
+            HStack {
+              Image(systemName: "ladybug.fill")
+                .foregroundStyle(.red)
+                .frame(width: 24)
+              Text("Shortcuts Debug")
+            }
+          }
+        } header: {
+          Text("Debug")
+        } footer: {
+          Text("Validate the SaveAnalysisResultIntent App Intent and observe the notification flow.")
+        }
+        #endif
+
         // MARK: - Language Section
         Section {
           Picker(selection: Binding(

@@ -28,6 +28,11 @@ import AppKit
 // MARK: - Playback State Notification
 extension Notification.Name {
   static let playbackPositionDidUpdate = Notification.Name("playbackPositionDidUpdate")
+  /// Posted when the audio manager refuses to start playback. userInfo["message"]
+  /// holds a user-facing string the UI should surface (toast/alert). Currently
+  /// fires when a remote URL is requested with no network connection and no
+  /// local copy is available.
+  static let audioPlaybackUnavailable = Notification.Name("audioPlaybackUnavailable")
 }
 
 struct PlaybackPositionUpdate: Sendable {
@@ -115,6 +120,11 @@ class EnhancedAudioManager: NSObject {
 
   // Audio interruption handling - track if we should resume after interruption ends
   private var wasPlayingBeforeInterruption: Bool = false
+
+  // True between handlePlaybackEnded (no-next branch) and the seek-to-zero
+  // completion. Stops the periodic time observer from overwriting the
+  // currentTime we just reset to 0 with a stale player position.
+  private var suppressTimeObserverUntilSeekLands = false
 
   // Track last values pushed to widget to avoid burning WidgetKit reload budget
   private var lastWidgetAudioURL: String?
@@ -318,6 +328,8 @@ private func handleAudioInterruption(_ notification: Notification) {
     commandCenter.pauseCommand.removeTarget(nil)
     commandCenter.skipForwardCommand.removeTarget(nil)
     commandCenter.skipBackwardCommand.removeTarget(nil)
+    commandCenter.nextTrackCommand.removeTarget(nil)
+    commandCenter.previousTrackCommand.removeTarget(nil)
     commandCenter.changePlaybackPositionCommand.removeTarget(nil)
 
     // Remote command handlers run on arbitrary queues, so dispatch to MainActor
@@ -347,6 +359,26 @@ private func handleAudioInterruption(_ notification: Notification) {
       return .success
     }
 
+    // AirPods physical-button gestures:
+    //   • Double-press / double-tap → nextTrackCommand
+    //   • Triple-press / triple-tap → previousTrackCommand
+    // iOS consumes these events and dispatches ONLY to the next/previous-track
+    // handlers — they don't fall through to skipForward/skipBackward — so
+    // without registering here, AirPods clicks silently do nothing. Route them
+    // through our skip handlers so the gestures behave the same way as the
+    // lock-screen skip buttons.
+    commandCenter.nextTrackCommand.isEnabled = true
+    commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+      Task { @MainActor in self?.skipForward() }
+      return .success
+    }
+
+    commandCenter.previousTrackCommand.isEnabled = true
+    commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+      Task { @MainActor in self?.skipBackward() }
+      return .success
+    }
+
     commandCenter.changePlaybackPositionCommand.isEnabled = true
     commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
       guard let event = event as? MPChangePlaybackPositionCommandEvent else {
@@ -363,11 +395,42 @@ private func handleAudioInterruption(_ notification: Notification) {
     episode: PlaybackEpisode, audioURL: String, startTime: TimeInterval = 0,
     imageURL: String? = nil, useDefaultSpeed: Bool = false
   ) {
-    guard let url = URL(string: audioURL) else { return }
+    guard let initialURL = URL(string: audioURL) else { return }
 
     if currentEpisode?.id == episode.id, player != nil {
       if isPlaying { pause() } else { resume() }
       return
+    }
+
+    // Resolve the URL we will actually play. If the caller passed a remote URL
+    // but the episode is already downloaded, prefer the local file. Only block
+    // on "no network" if NWPathMonitor has actually reported back at least
+    // once and confirmed we're offline — otherwise the default `isConnected =
+    // false` would falsely refuse playback during the ~200ms window between
+    // NetworkMonitor init and the first path update.
+    let url: URL
+    if initialURL.isFileURL {
+      url = initialURL
+    } else if case .downloaded(let localPath) = DownloadManager.shared
+      .getDownloadState(episodeTitle: episode.title, podcastTitle: episode.podcastTitle),
+      FileManager.default.fileExists(atPath: localPath)
+    {
+      url = URL(fileURLWithPath: localPath)
+      logger.info("Using downloaded copy for \(episode.title)")
+    } else {
+      let monitor = NetworkMonitor.shared
+      if monitor.hasReceivedFirstUpdate && !monitor.isConnected {
+        let message =
+          "Can't reach the internet right now. Download \"\(episode.title)\" while you're on Wi-Fi to listen offline."
+        logger.warning(
+          "Refusing playback: NWPathMonitor reports offline and no local copy for \(episode.title)")
+        NotificationCenter.default.post(
+          name: .audioPlaybackUnavailable,
+          object: nil,
+          userInfo: ["message": message, "episodeTitle": episode.title])
+        return
+      }
+      url = initialURL
     }
 
     cleanup()
@@ -446,6 +509,19 @@ private func handleAudioInterruption(_ notification: Notification) {
 
     // Ensure audio session is active when resuming
     activateAudioSession()
+
+    // If the player is parked at the end of the item, AVPlayer.play() is a
+    // no-op. Seek to zero first so Replay actually starts over.
+    if let item = player?.currentItem {
+      let itemTime = item.currentTime().seconds
+      let itemDuration = item.duration.seconds
+      if itemTime.isFinite, itemDuration.isFinite, itemDuration > 0,
+        itemTime >= itemDuration - 0.5
+      {
+        player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+        currentTime = 0
+      }
+    }
 
     player?.play()
     player?.rate = playbackRate
@@ -961,6 +1037,10 @@ private func handleAudioInterruption(_ notification: Notification) {
     nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
     nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
     nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? playbackRate : 0.0
+    // Tell the system this is a podcast — lock screen / Control Center will
+    // prefer the skipForward/skipBackward 15/30s buttons over next/previous
+    // arrows, even though we register all four for AirPods gesture routing.
+    nowPlayingInfo[MPMediaItemPropertyMediaType] = MPMediaType.podcast.rawValue
 
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
 
@@ -1231,12 +1311,9 @@ private func handleAudioInterruption(_ notification: Notification) {
       Task { @MainActor in
         guard let self = self else { return }
 
-        // Throttle currentTime writes — only update when changed by >0.2s
         let newTime = time.seconds
-        if abs(newTime - self.currentTime) > 0.2 {
-          self.currentTime = newTime
-        }
 
+        // Duration updates can happen regardless of play state.
         if let newDuration = self.player?.currentItem?.duration.seconds,
           newDuration.isFinite, newDuration > 0
         {
@@ -1253,6 +1330,16 @@ private func handleAudioInterruption(_ notification: Notification) {
             self.savePlaybackState()
             self.updateWidgetPlaybackData()
           }
+        }
+
+        // Skip currentTime/caption writes while paused. After
+        // handlePlaybackEnded resets to 0 the periodic observer can still fire
+        // once with the player's pre-reset time and clobber the 0.
+        guard self.isPlaying, !self.suppressTimeObserverUntilSeekLands else { return }
+
+        // Throttle currentTime writes — only update when changed by >0.2s
+        if abs(newTime - self.currentTime) > 0.2 {
+          self.currentTime = newTime
         }
 
         // Update current caption
@@ -1305,7 +1392,6 @@ private func handleAudioInterruption(_ notification: Notification) {
   private func handlePlaybackEnded() {
     logger.info("Playback ended")
     isPlaying = false
-    currentTime = 0
 
     // Remove current episode from auto-play candidates (it's been fully played)
     if let currentId = currentEpisode?.id {
@@ -1317,6 +1403,7 @@ private func handleAudioInterruption(_ notification: Notification) {
       logger.info("Sleep timer: end of episode reached - stopping playback")
       sleepTimerOption = .off
       sleepTimerRemaining = 0
+      currentTime = 0
       clearPlaybackState()
       return
     }
@@ -1324,29 +1411,52 @@ private func handleAudioInterruption(_ notification: Notification) {
     // Check if there's a next episode in queue
     if !queue.isEmpty {
       logger.info("Playing next episode from queue")
+      currentTime = 0
       playNextInQueue()
-    } else {
-      // Check auto-play setting and try to play random unplayed episode
-      let autoPlayEnabled = UserDefaults.standard.bool(forKey: Keys.autoPlayNextEpisode)
-      if autoPlayEnabled, !autoPlayCandidates.isEmpty {
-        // Pick the top-scored episode (candidates are kept in Up Next order)
-        let nextEpisode = autoPlayCandidates[0]
-        let savedPosition = PlaybackStateCoordinator.savedPlaybackPosition(
-          podcastTitle: nextEpisode.podcastTitle,
-          episodeTitle: nextEpisode.title
-        )
-        logger.info("Auto-playing next episode: \(nextEpisode.title) at \(Int(savedPosition))s")
-        play(
-          episode: nextEpisode,
-          audioURL: nextEpisode.audioURL,
-          startTime: savedPosition,
-          imageURL: nextEpisode.imageURL,
-          useDefaultSpeed: savedPosition == 0
-        )
-      } else {
-        clearPlaybackState()
+      return
+    }
+
+    // Check auto-play setting and try to play random unplayed episode
+    let autoPlayEnabled = UserDefaults.standard.bool(forKey: Keys.autoPlayNextEpisode)
+    if autoPlayEnabled, !autoPlayCandidates.isEmpty {
+      // Pick the top-scored episode (candidates are kept in Up Next order)
+      let nextEpisode = autoPlayCandidates[0]
+      let savedPosition = PlaybackStateCoordinator.savedPlaybackPosition(
+        podcastTitle: nextEpisode.podcastTitle,
+        episodeTitle: nextEpisode.title
+      )
+      logger.info("Auto-playing next episode: \(nextEpisode.title) at \(Int(savedPosition))s")
+      currentTime = 0
+      play(
+        episode: nextEpisode,
+        audioURL: nextEpisode.audioURL,
+        startTime: savedPosition,
+        imageURL: nextEpisode.imageURL,
+        useDefaultSpeed: savedPosition == 0
+      )
+      return
+    }
+
+    // No follow-up — leave the episode loaded but rewind the player to zero so
+    // tapping Play actually replays from the start instead of sitting at the
+    // end of the item (where AVPlayer.play() is a no-op). The suppress flag
+    // keeps the periodic time observer from clobbering currentTime with the
+    // pre-seek position before the seek completes.
+    suppressTimeObserverUntilSeekLands = true
+    currentTime = 0
+    updateNowPlayingCurrentTime()
+    updateNowPlayingPlaybackRate()
+    player?.pause()
+    player?.seek(
+      to: .zero,
+      toleranceBefore: .zero,
+      toleranceAfter: .zero
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.suppressTimeObserverUntilSeekLands = false
       }
     }
+    clearPlaybackState()
   }
 
   // MARK: - Cleanup

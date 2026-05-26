@@ -52,6 +52,12 @@ struct PodcastAnalyzerApp: App {
     // Register background task for episode sync
     BackgroundSyncManager.registerBackgroundTask()
 
+    // Eagerly start NWPathMonitor at launch. NetworkMonitor.shared is lazy
+    // (singleton), and its `isConnected` defaults to false until the first
+    // path update fires — touching it here kicks off monitoring during init
+    // so playback gating later sees an accurate value.
+    _ = NetworkMonitor.shared
+
     // Export previous session's os.log entries to Documents/Logs
     PersistentLogService.shared.exportLogsInBackground()
   }

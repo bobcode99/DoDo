@@ -113,10 +113,10 @@ struct EpisodeTranscriptStatusView: View {
         VStack(spacing: 16) {
             // Icon + status
             VStack(spacing: 8) {
-                Image(systemName: canGenerate ? "waveform" : "arrow.down.circle")
+                Image(systemName: headerIconName)
                     .font(.system(size: 48))
-                    .foregroundStyle(canGenerate ? .blue : .secondary)
-                Text(canGenerate ? "Ready to Generate" : "Download Required")
+                    .foregroundStyle(headerIconColor)
+                Text(headerTitle)
                     .font(.headline)
                 Text(statusDescription)
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -134,21 +134,49 @@ struct EpisodeTranscriptStatusView: View {
             Divider()
 
             // Primary action
-            if canGenerate {
-                Button(action: { viewModel.generateTranscript() }) {
-                    Label("Generate Transcript", systemImage: "text.bubble")
-                        .font(.subheadline)
-                        .padding(.horizontal, 20).padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                Button(action: { viewModel.startDownload() }) {
-                    Label("Download Episode", systemImage: "arrow.down.circle")
-                        .font(.subheadline)
-                        .padding(.horizontal, 20).padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
+            primaryActionView
+        }
+    }
+
+    @ViewBuilder
+    private var primaryActionView: some View {
+        if canGenerate {
+            Button(action: { viewModel.generateTranscript() }) {
+                Label("Generate Transcript", systemImage: "text.bubble")
+                    .font(.subheadline)
+                    .padding(.horizontal, 20).padding(.vertical, 10)
             }
+            .buttonStyle(.borderedProminent)
+        } else {
+            DownloadActionView(viewModel: viewModel)
+        }
+    }
+
+    private var headerIconName: String {
+        if canGenerate { return "waveform" }
+        switch viewModel.downloadState {
+        case .failed: return "exclamationmark.triangle.fill"
+        case .downloading, .finishing: return "arrow.down.circle.fill"
+        case .notDownloaded, .downloaded: return "arrow.down.circle"
+        }
+    }
+
+    private var headerIconColor: Color {
+        if canGenerate { return .blue }
+        switch viewModel.downloadState {
+        case .failed: return .red
+        case .downloading, .finishing: return .blue
+        case .notDownloaded, .downloaded: return .secondary
+        }
+    }
+
+    private var headerTitle: String {
+        if canGenerate { return "Ready to Generate" }
+        switch viewModel.downloadState {
+        case .downloading: return "Downloading Episode"
+        case .finishing: return "Finalizing Download"
+        case .failed: return "Download Failed"
+        case .notDownloaded, .downloaded: return "Download Required"
         }
     }
 
@@ -162,7 +190,16 @@ struct EpisodeTranscriptStatusView: View {
             }
             return "Select an engine and language, then tap Generate."
         }
-        return "Download the episode audio to generate a transcript locally, or switch to Yap Server to stream instead."
+        switch viewModel.downloadState {
+        case .downloading:
+            return "Downloading episode audio. You can generate the transcript once this finishes."
+        case .finishing:
+            return "Finalizing the downloaded file…"
+        case .failed:
+            return "Download failed. Retry, or switch to Yap Server to stream instead."
+        case .notDownloaded, .downloaded:
+            return "Download the episode audio to generate a transcript locally, or switch to Yap Server to stream instead."
+        }
     }
 
     private var enginePicker: some View {
@@ -299,6 +336,75 @@ struct EpisodeTranscriptStatusView: View {
                 Label("Try Again", systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
+        }
+    }
+}
+
+/// Isolated subview so that the high-frequency `downloadState` observation only
+/// invalidates this small block — not the engine/language pickers above it.
+private struct DownloadActionView: View {
+    @Bindable var viewModel: EpisodeDetailViewModel
+
+    var body: some View {
+        switch viewModel.downloadState {
+        case .downloading(let progress):
+            progressRow(progress: progress)
+        case .finishing:
+            finishingRow
+        case .failed(let error):
+            failedRow(error: error)
+        case .notDownloaded, .downloaded:
+            Button(action: { viewModel.startDownload() }) {
+                Label("Download Episode", systemImage: "arrow.down.circle")
+                    .font(.subheadline)
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private func progressRow(progress: Double) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Text("Downloading…")
+                    .font(.subheadline)
+                Spacer(minLength: 8)
+                Text("\(Int(progress * 100))%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            ProgressView(value: progress)
+                .progressViewStyle(.linear)
+            Button("Cancel", role: .cancel) { viewModel.cancelDownload() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .frame(maxWidth: 320)
+    }
+
+    private var finishingRow: some View {
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            Text("Finalizing download…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func failedRow(error: String) -> some View {
+        VStack(spacing: 8) {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+            Button(action: { viewModel.startDownload() }) {
+                Label("Retry Download", systemImage: "arrow.clockwise")
+                    .font(.subheadline)
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 }

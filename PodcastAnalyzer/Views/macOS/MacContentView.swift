@@ -95,6 +95,9 @@ struct MacContentView: View {
   @State private var notificationLanguage: String = "en"
   @State private var showNotificationEpisode: Bool = false
 
+  // Friendly playback-blocked alert (offline + no local copy)
+  @State private var playbackAlertMessage: String?
+
   // Track if there's a current episode for mini player
   private var hasCurrentEpisode: Bool {
     audioManager.currentEpisode != nil
@@ -138,6 +141,26 @@ struct MacContentView: View {
       if shouldNavigate, let target = notificationManager.navigationTarget {
         handleNotificationNavigation(target: target)
       }
+    }
+    .task {
+      for await notification in NotificationCenter.default.notifications(
+        named: .audioPlaybackUnavailable)
+      {
+        if let message = notification.userInfo?["message"] as? String {
+          playbackAlertMessage = message
+        }
+      }
+    }
+    .alert(
+      "Can't Play Offline",
+      isPresented: Binding(
+        get: { playbackAlertMessage != nil },
+        set: { if !$0 { playbackAlertMessage = nil } }
+      )
+    ) {
+      Button("OK", role: .cancel) { playbackAlertMessage = nil }
+    } message: {
+      Text(playbackAlertMessage ?? "")
     }
   }
 

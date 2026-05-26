@@ -28,6 +28,12 @@ final class NetworkMonitor {
   /// `true` when the device is on cellular (not Wi-Fi or Ethernet).
   private(set) var isCellular: Bool = false
 
+  /// `true` once NWPathMonitor has fired its first update. Until this flips,
+  /// `isConnected` is just the default `false` — callers that gate behavior
+  /// on connectivity (e.g. refusing offline playback) MUST consult this flag
+  /// so they don't act on stale defaults during the first ~200ms after init.
+  private(set) var hasReceivedFirstUpdate: Bool = false
+
   private init() {
     monitor.pathUpdateHandler = { [weak self] path in
       let wifi = path.usesInterfaceType(.wifi)
@@ -40,6 +46,7 @@ final class NetworkMonitor {
         self.isOnWiFiOrEthernet = wifi || ethernet
         self.isConnected = connected
         self.isCellular = cellular && !wifi && !ethernet
+        self.hasReceivedFirstUpdate = true
         // Trigger coordinator when network becomes eligible (transition from not-eligible).
         if !wasEligible && self.isOnWiFiOrEthernet {
           Task { await AutoDownloadCoordinator.shared.run(reason: .networkBecameEligible) }

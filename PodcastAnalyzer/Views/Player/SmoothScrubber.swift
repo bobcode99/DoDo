@@ -12,6 +12,11 @@ struct SmoothScrubber: View {
 
     @State private var scrubTime: TimeInterval = 0
     @State private var isInteracting = false
+    // Target written by the user's last seek. While set, ignore stale
+    // currentTime updates from the periodic time observer (which can briefly
+    // report the pre-seek position before the seek lands), so the thumb
+    // doesn't snap back to the old spot and then jump to the new one.
+    @State private var pendingSeekTarget: TimeInterval?
 
     private var effectiveDuration: TimeInterval { max(duration, 0.001) }
 
@@ -26,6 +31,15 @@ struct SmoothScrubber: View {
                 .opacity(isDurationLoading ? 0.5 : 1.0)
                 .onChange(of: currentTime) {
                     guard !isInteracting else { return }
+                    if let target = pendingSeekTarget {
+                        // Wait until the player time gets close to where we seeked.
+                        // Anything further away is a stale observer tick — ignore it.
+                        if abs(currentTime - target) < 0.75 {
+                            pendingSeekTarget = nil
+                            scrubTime = currentTime
+                        }
+                        return
+                    }
                     scrubTime = currentTime
                 }
                 .onAppear {
@@ -66,7 +80,12 @@ struct SmoothScrubber: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             isInteracting = editing
         }
-        if !editing {
+        if editing {
+            // User grabbed the slider — drop any pending seek guard so the
+            // next release isn't gated by an obsolete target.
+            pendingSeekTarget = nil
+        } else {
+            pendingSeekTarget = scrubTime
             onSeek(scrubTime / effectiveDuration)
         }
     }
