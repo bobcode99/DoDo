@@ -55,6 +55,16 @@ struct AnalysisView: View {
                 )
               }
               .buttonStyle(.plain)
+              .contextMenu {
+                NavigationLink(value: episodeDetailRoute(for: analysis)) {
+                  Label("View Episode", systemImage: "doc.text")
+                }
+                if let podcast = podcastByTitle[analysis.podcastTitle] {
+                  NavigationLink(value: PodcastBrowseRoute(podcastModel: podcast)) {
+                    Label("View Show", systemImage: "list.bullet")
+                  }
+                }
+              }
             }
           }
           .padding(16)
@@ -70,15 +80,45 @@ struct AnalysisView: View {
 
   private func route(for analysis: EpisodeAIAnalysis) -> EpisodeAIAnalysisRoute {
     let podcast = podcastByTitle[analysis.podcastTitle]
-    let episode = PodcastEpisodeInfo(
-      title: analysis.episodeTitle,
-      audioURL: analysis.episodeAudioURL.isEmpty ? nil : analysis.episodeAudioURL
-    )
     return EpisodeAIAnalysisRoute(
-      episode: episode,
+      episode: enrichedEpisode(for: analysis, podcast: podcast),
       podcastTitle: analysis.podcastTitle,
       fallbackImageURL: podcast?.podcastInfo.imageURL,
       podcastLanguage: podcast?.podcastInfo.language
+    )
+  }
+
+  private func episodeDetailRoute(for analysis: EpisodeAIAnalysis) -> EpisodeDetailRoute {
+    let podcast = podcastByTitle[analysis.podcastTitle]
+    return EpisodeDetailRoute(
+      episode: enrichedEpisode(for: analysis, podcast: podcast),
+      podcastTitle: analysis.podcastTitle,
+      fallbackImageURL: podcast?.podcastInfo.imageURL,
+      podcastLanguage: podcast?.podcastInfo.language
+    )
+  }
+
+  /// Returns the full `PodcastEpisodeInfo` from the subscribed podcast's feed
+  /// (with description, pubDate, duration, etc.) when available. Falls back
+  /// to a minimal stub if the podcast isn't subscribed or the episode is gone
+  /// from the feed — without this, EpisodeDetailView's summary is blank.
+  private func enrichedEpisode(
+    for analysis: EpisodeAIAnalysis,
+    podcast: PodcastInfoModel?
+  ) -> PodcastEpisodeInfo {
+    let storedAudioURL = analysis.episodeAudioURL.isEmpty ? nil : analysis.episodeAudioURL
+    if let episodes = podcast?.podcastInfo.episodes,
+       let match = episodes.first(where: { episode in
+         if let storedAudioURL, let url = episode.audioURL, url == storedAudioURL {
+           return true
+         }
+         return episode.title == analysis.episodeTitle
+       }) {
+      return match
+    }
+    return PodcastEpisodeInfo(
+      title: analysis.episodeTitle,
+      audioURL: storedAudioURL
     )
   }
 }
