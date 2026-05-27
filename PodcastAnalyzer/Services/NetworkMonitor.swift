@@ -47,9 +47,12 @@ final class NetworkMonitor {
         self.isConnected = connected
         self.isCellular = cellular && !wifi && !ethernet
         self.hasReceivedFirstUpdate = true
-        // Trigger coordinator when network becomes eligible (transition from not-eligible).
+        // Trigger coordinator when network becomes eligible (transition from
+        // not-eligible). NWPathMonitor spawns a new Task on every path update,
+        // so awaiting run() here doesn't block subsequent updates — they
+        // arrive on their own Tasks.
         if !wasEligible && self.isOnWiFiOrEthernet {
-          Task { await AutoDownloadCoordinator.shared.run(reason: .networkBecameEligible) }
+          await AutoDownloadCoordinator.shared.run(reason: .networkBecameEligible)
         }
       }
     }
