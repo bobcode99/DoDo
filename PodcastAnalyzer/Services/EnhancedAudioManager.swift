@@ -126,6 +126,12 @@ class EnhancedAudioManager: NSObject {
   // currentTime we just reset to 0 with a stale player position.
   private var suppressTimeObserverUntilSeekLands = false
 
+  // Generation token incremented on every user-initiated playback state change
+  // (pause/play/stop/seek/play(...)). The delayed interruption-resume retry
+  // captures the token at start and bails if it changed, so a manual pause
+  // during the retry window can't be overridden by the resume retry firing.
+  private var playbackStateGeneration: UInt64 = 0
+
   // Track last values pushed to widget to avoid burning WidgetKit reload budget
   private var lastWidgetAudioURL: String?
   private var lastWidgetIsPlaying: Bool?
@@ -298,8 +304,18 @@ private func handleAudioInterruption(_ notification: Notification) {
                     guard let self, !Task.isCancelled else { return }
                     self.resume()
                     self.wasPlayingBeforeInterruption = false
-                    // Verify playback actually started; retry once if not
+                    // Snapshot the generation token AFTER our resume() so any
+                    // user-initiated pause/play during the 0.5s verification
+                    // window bumps the token and aborts the retry.
+                    let tokenAtRetryStart = self.playbackStateGeneration
                     try? await Task.sleep(for: .seconds(0.5))
+                    guard !Task.isCancelled,
+                          self.playbackStateGeneration == tokenAtRetryStart
+                    else {
+                        self.logger.info(
+                            "Interruption retry aborted: user changed playback state during window")
+                        return
+                    }
                     if !self.isPlaying, self.player?.rate == 0 {
                         self.logger.warning("Interruption resume failed, retrying once")
                         self.resume()
@@ -402,6 +418,10 @@ private func handleAudioInterruption(_ notification: Notification) {
       return
     }
 
+    // Starting a new episode invalidates any pending interruption-resume retry
+    // for the previous one.
+    playbackStateGeneration &+= 1
+
     // Resolve the URL we will actually play. If the caller passed a remote URL
     // but the episode is already downloaded, prefer the local file. Only block
     // on "no network" if NWPathMonitor has actually reported back at least
@@ -486,6 +506,7 @@ private func handleAudioInterruption(_ notification: Notification) {
 
   // MARK: - Controls – always update Now Playing
   func pause() {
+    playbackStateGeneration &+= 1
     player?.pause()
     isPlaying = false
     updateNowPlayingPlaybackRate()
@@ -495,6 +516,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func resume() {
+    playbackStateGeneration &+= 1
     // If we have a restored episode but no player, start playback
     if player == nil, let episode = currentEpisode {
       play(
@@ -531,6 +553,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func stop() {
+    playbackStateGeneration &+= 1
     cleanup()
     currentEpisode = nil
     currentTime = 0
