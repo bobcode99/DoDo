@@ -309,6 +309,7 @@ struct SentenceBasedTranscriptView: View {
                 .id(sentence.id)
             }
         }
+        .scrollTargetLayout()
     }
 }
 

@@ -30,6 +30,14 @@ struct EpisodeTranscriptView: View {
     @State private var showSearchSheet = false
     @State private var showCopySuccess = false
 
+    /// Tracks the topmost visible sentence so the floating scrub-time pill can
+    /// show its timestamp. Updated by `.scrollPosition(id:anchor:.top)`.
+    @State private var topVisibleSentenceID: Int?
+
+    /// Pill visibility — only true while the user is actively swiping or the
+    /// scroll is decelerating. Returns to `false` on `.idle`.
+    @State private var showScrollTimestamp = false
+
     /// Search query cached for the lifetime of this view so reopening the
     /// search sheet recalls the last text. Cleared on view deinit (it's
     /// @State on a per-push view-model page), and the active query that
@@ -55,6 +63,13 @@ struct EpisodeTranscriptView: View {
         !autoScrollEnabled
             && activeSentenceID != nil
             && viewModel.transcriptSearchQuery.isEmpty
+    }
+
+    /// Formatted start time of the topmost visible sentence, surfaced by the
+    /// floating scrub pill while scrolling.
+    private var topVisibleTimestamp: String? {
+        guard let id = topVisibleSentenceID else { return nil }
+        return viewModel.transcriptSentences.first { $0.id == id }?.formattedStartTime
     }
 
     var body: some View {
@@ -124,24 +139,29 @@ struct EpisodeTranscriptView: View {
     private var transcriptScrollContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
-                    SentenceBasedTranscriptView(
-                        sentences: viewModel.transcriptSentences,
-                        currentTime: currentTime,
-                        searchQuery: viewModel.transcriptSearchQuery,
-                        onSegmentTap: viewModel.seekToSegment,
-                        subtitleMode: viewModel.effectiveDisplayMode,
-                        searchMatchIds: Set(viewModel.searchMatchIds),
-                        currentSearchMatchId: viewModel.searchMatchIds.isEmpty
-                            ? nil
-                            : viewModel.searchMatchIds[viewModel.currentMatchIndex]
-                    )
-                }
+                SentenceBasedTranscriptView(
+                    sentences: viewModel.transcriptSentences,
+                    currentTime: currentTime,
+                    searchQuery: viewModel.transcriptSearchQuery,
+                    onSegmentTap: viewModel.seekToSegment,
+                    subtitleMode: viewModel.effectiveDisplayMode,
+                    searchMatchIds: Set(viewModel.searchMatchIds),
+                    currentSearchMatchId: viewModel.searchMatchIds.isEmpty
+                        ? nil
+                        : viewModel.searchMatchIds[viewModel.currentMatchIndex]
+                )
                 .padding(.horizontal, 20)
                 .padding(.vertical, 24)
             }
+            .scrollPosition(id: $topVisibleSentenceID, anchor: .top)
             .onScrollPhaseChange { _, newPhase in
                 if newPhase == .interacting { autoScrollEnabled = false }
+                let inMotion = newPhase == .interacting || newPhase == .decelerating
+                if inMotion != showScrollTimestamp {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showScrollTimestamp = inMotion
+                    }
+                }
             }
             .onChange(of: activeSentenceID) { _, newID in
                 guard autoScrollEnabled,
@@ -156,6 +176,21 @@ struct EpisodeTranscriptView: View {
                 let matchId = viewModel.searchMatchIds[viewModel.currentMatchIndex]
                 withAnimation(.easeInOut(duration: 0.3)) {
                     proxy.scrollTo(matchId, anchor: .center)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if showScrollTimestamp, let stamp = topVisibleTimestamp {
+                    Text(stamp)
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.regularMaterial, in: .capsule)
+                        .padding(.leading, 12)
+                        .padding(.top, 8)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
             .overlay(alignment: .bottomTrailing) {
