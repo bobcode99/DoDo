@@ -438,7 +438,7 @@ class ShortcutsAIService {
 
             // Set timeout
             self.timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                try? await Task.sleep(for: .seconds(timeout))
                 if self.pendingContinuation != nil {
                     self.isProcessing = false
                     self.pendingContinuation?.resume(throwing: ShortcutsError.timeout)
