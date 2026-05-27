@@ -5,6 +5,7 @@
 //  Dedicated full-screen transcript search. Replaces the inline-toolbar search
 //  field. Tap a result row → dismiss + scroll the transcript to that sentence
 //  (the parent's onChange(of: viewModel.currentMatchIndex) drives the scroll).
+//  Does NOT touch audio playback — selection is navigate-only by design.
 //
 
 import SwiftUI
@@ -156,7 +157,7 @@ struct TranscriptSearchSheet: View {
                         )
                         .contentShape(.rect)
                         .onTapGesture {
-                            handleSelect(matchIndex: index, sentenceID: sentenceID, sentence: sentence)
+                            handleSelect(matchIndex: index, sentenceID: sentenceID)
                         }
                         Divider().padding(.leading, 16)
                     }
@@ -170,11 +171,12 @@ struct TranscriptSearchSheet: View {
         Dictionary(uniqueKeysWithValues: viewModel.groupedSentences.map { ($0.id, $0) })
     }
 
-    private func handleSelect(matchIndex: Int, sentenceID: TranscriptSentence.ID, sentence: TranscriptSentence) {
+    private func handleSelect(matchIndex: Int, sentenceID: TranscriptSentence.ID) {
+        // Navigate-only: setting currentMatchIndex drives the transcript scroll
+        // via the parent's onChange handler. We intentionally do NOT call
+        // seekToSegment here — that would start audio playback, which users
+        // don't want when they're just searching for a passage.
         viewModel.currentMatchIndex = matchIndex
-        if let firstSegment = sentence.segments.first {
-            viewModel.seekToSegment(firstSegment)
-        }
         onSelect(sentenceID)
         dismiss()
     }
