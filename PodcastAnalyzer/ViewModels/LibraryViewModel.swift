@@ -563,12 +563,14 @@ final class LibraryViewModel {
     guard !hasSyncedDownloads else { return }
     hasSyncedDownloads = true
 
-    // Then sync with disk in background (slow, but doesn't block UI)
-    Task.detached(priority: .background) { [weak self] in
-      guard let self else { return }
-      await self.syncDownloadedFilesWithSwiftData()
+    // Sync with disk in the background. Both methods are @MainActor but each
+    // performs its own off-main disk I/O via inner Task.detached blocks, so
+    // a plain Task here is correct — Task.detached would have only renamed
+    // the priority hint without moving any of the heavy work off MainActor.
+    Task { [weak self] in
+      await self?.syncDownloadedFilesWithSwiftData()
       // Reload to pick up any newly synced episodes
-      await self.loadDownloadedEpisodesQuick()
+      await self?.loadDownloadedEpisodesQuick()
     }
   }
 
