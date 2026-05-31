@@ -13,17 +13,22 @@ import Nuke
 
 /// Call once at app launch to configure Nuke's image pipeline with a persistent data cache.
 func configureImagePipeline() {
-  let dataCache = try? DataCache(name: "com.podcast.analyzer.images")
   var config = ImagePipeline.Configuration()
-  if let dataCache {
+
+  if let dataCache = try? DataCache(name: "com.podcast.analyzer.images") {
     dataCache.sizeLimit = 200 * 1024 * 1024
-  }
-  if let dataCache {
     config.dataCache = dataCache
   }
+
+  // `.storeAll` persists both the original bytes *and* the encoded resized
+  // variant (CachedArtworkImage adds a Resize processor). With the default
+  // `.automatic` policy the processed thumbnail wasn't always rehydrated on
+  // cold launch — every grid cell would re-decode from the original, so the
+  // Library tab visibly re-loaded its artwork on every relaunch.
+  config.dataCachePolicy = .storeAll
+
   let imageCache = ImageCache()
   #if os(macOS)
-  // The default shared cache can grow very large on desktop-class RAM.
   imageCache.costLimit = 80 * 1024 * 1024
   imageCache.countLimit = 200
   #else
@@ -31,6 +36,7 @@ func configureImagePipeline() {
   imageCache.countLimit = 300
   #endif
   config.imageCache = imageCache
+
   ImagePipeline.shared = ImagePipeline(configuration: config)
 }
 
