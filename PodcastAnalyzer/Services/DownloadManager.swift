@@ -273,6 +273,12 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
           let manager = DownloadManager.shared
           manager.inFlightProgress.removeValue(forKey: episodeKey)
           manager.downloadStates[episodeKey] = .downloaded(localPath: destinationURL.path)
+          manager.persistCompletedDownload(
+            episodeTitle: episodeTitle,
+            podcastTitle: podcastTitle,
+            localPath: destinationURL.path,
+            audioURL: originalURL?.absoluteString
+          )
 
           // AntennaPod pattern: disable per-episode auto-download after successful download
           // so the coordinator never re-downloads the same episode automatically.
@@ -471,6 +477,55 @@ final class DownloadManager {
   var hasActiveDownloads: Bool { !inFlightProgress.isEmpty }
 
   private init() {}
+
+  func persistCompletedDownload(
+    episodeTitle: String,
+    podcastTitle: String,
+    localPath: String,
+    audioURL: String?
+  ) {
+    guard let container = modelContainer else { return }
+
+    let context = ModelContext(container)
+    let episodeKey = sessionDelegate.makeKey(episode: episodeTitle, podcast: podcastTitle)
+    let descriptor = FetchDescriptor<EpisodeDownloadModel>(
+      predicate: #Predicate { $0.id == episodeKey }
+    )
+
+    let model: EpisodeDownloadModel
+    if let existingModel = try? context.fetch(descriptor).first {
+      model = existingModel
+    } else {
+      let podcastDescriptor = FetchDescriptor<PodcastInfoModel>(
+        predicate: #Predicate { $0.title == podcastTitle }
+      )
+      let podcast = try? context.fetch(podcastDescriptor).first
+      let episode = podcast?.podcastInfo.episodes.first { $0.title == episodeTitle }
+      model = EpisodeDownloadModel(
+        episodeTitle: episodeTitle,
+        podcastTitle: podcastTitle,
+        audioURL: episode?.audioURL ?? audioURL ?? "",
+        localAudioPath: localPath,
+        downloadedDate: Date(),
+        imageURL: episode?.imageURL ?? podcast?.podcastInfo.imageURL,
+        pubDate: episode?.pubDate
+      )
+      context.insert(model)
+    }
+
+    model.localAudioPath = localPath
+    model.downloadedDate = Date()
+    model.autoDownloadEnabled = false
+    if model.audioURL.isEmpty, let audioURL {
+      model.audioURL = audioURL
+    }
+    if let attrs = try? FileManager.default.attributesOfItem(atPath: localPath),
+       let size = attrs[.size] as? Int64 {
+      model.fileSize = size
+    }
+
+    try? context.save()
+  }
 
   // MARK: - State Restoration
 

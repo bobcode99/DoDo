@@ -134,10 +134,18 @@ actor AutoDownloadCoordinator {
       case .inheritGlobal: if !globalEnabled { continue }
       }
 
-      // Episode filter.
+      // Find the PodcastEpisodeInfo struct first so the filter can see the
+      // episode's actual duration. Without this we'd always evaluate the
+      // duration gate with `0` (unknown), so the user's minimum-duration
+      // filter never took effect.
+      guard let episode = podcast.podcastInfo.episodes.first(where: { $0.title == episodeTitle }),
+            let audioURL = episode.audioURL, !audioURL.isEmpty
+      else { continue }
+
+      // Episode filter (include / exclude / minimum duration).
       guard EpisodeFilterEvaluator.shouldAutoDownload(
         episodeTitle: episodeTitle,
-        durationSeconds: 0,  // unknown at this stage
+        durationSeconds: TimeInterval(episode.duration ?? 0),
         includeFilter: podcast.episodeFilterInclude,
         excludeFilter: podcast.episodeFilterExclude,
         minDurationSeconds: podcast.episodeFilterMinDuration
@@ -152,11 +160,6 @@ actor AutoDownloadCoordinator {
         logger.debug("Skipping \(episodeTitle): autoDownloadEnabled is false")
         continue
       }
-
-      // Find the PodcastEpisodeInfo struct to pass to DownloadManager.
-      guard let episode = podcast.podcastInfo.episodes.first(where: { $0.title == episodeTitle }),
-            let audioURL = episode.audioURL, !audioURL.isEmpty
-      else { continue }
 
       // Enqueue on MainActor.
       await MainActor.run {
