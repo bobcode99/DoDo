@@ -20,6 +20,20 @@ nonisolated enum MusicDetectionService {
     category: "MusicDetection"
   )
 
+  // MARK: - Marker
+
+  /// The note glyph used to identify a music marker segment. Centralized so
+  /// the SRT annotator and the sentence grouper agree on the single token.
+  static let markerGlyph: Character = "\u{266A}"
+
+  /// Canonical text injected into the SRT in place of music ranges.
+  static let markerText = "[\(markerGlyph) Music]"
+
+  /// True if `text` is (or contains) a music marker.
+  static func isMarker(_ text: String) -> Bool {
+    text.contains(markerGlyph)
+  }
+
   // MARK: - Types
 
   /// Inclusive-start, exclusive-end time range in seconds along the original

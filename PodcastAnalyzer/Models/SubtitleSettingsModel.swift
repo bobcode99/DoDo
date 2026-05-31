@@ -172,6 +172,14 @@ final class SubtitleSettingsManager {
     didSet { saveSettings() }
   }
 
+  /// Run the SoundAnalysis music classifier during chunked Apple Speech
+  /// transcription and inject `[♪ Music]` markers in place of music ranges.
+  /// Default on; users with voice-over-heavy content can disable when the
+  /// classifier mis-flags speech as music.
+  var enableMusicDetection: Bool = true {
+    didSet { saveSettings() }
+  }
+
   // MARK: - UserDefaults Keys
 
   private enum Keys {
@@ -180,6 +188,7 @@ final class SubtitleSettingsManager {
     static let autoTranslate = "subtitle_auto_translate"
     static let autoDownloadTranscripts = "subtitle_auto_download_transcripts"
     static let autoGenerateTranscripts = "subtitle_auto_generate_transcripts"
+    static let enableMusicDetection = "subtitle_enable_music_detection"
   }
 
   // MARK: - Initialization
@@ -215,6 +224,11 @@ final class SubtitleSettingsManager {
     if defaults.object(forKey: Keys.autoGenerateTranscripts) != nil {
       autoGenerateTranscripts = defaults.bool(forKey: Keys.autoGenerateTranscripts)
     }
+
+    // Default to true if not previously set.
+    if defaults.object(forKey: Keys.enableMusicDetection) != nil {
+      enableMusicDetection = defaults.bool(forKey: Keys.enableMusicDetection)
+    }
   }
 
   private func saveSettings() {
@@ -224,6 +238,7 @@ final class SubtitleSettingsManager {
     defaults.set(autoTranslateOnLoad, forKey: Keys.autoTranslate)
     defaults.set(autoDownloadTranscripts, forKey: Keys.autoDownloadTranscripts)
     defaults.set(autoGenerateTranscripts, forKey: Keys.autoGenerateTranscripts)
+    defaults.set(enableMusicDetection, forKey: Keys.enableMusicDetection)
   }
 
   // MARK: - Translation Availability

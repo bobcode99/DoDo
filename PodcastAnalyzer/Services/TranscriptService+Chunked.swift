@@ -59,11 +59,15 @@ extension TranscriptService {
           totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil
         ))
 
-        // Detect music in parallel with chunk export. SoundAnalysis is
-        // read-only, AVAssetExportSession writes to temp files — they don't
-        // contend for the same resource. Music detection typically finishes
-        // well before transcription, so this overlap is essentially free.
-        async let musicRangesTask = MusicDetectionService.detectMusicRanges(in: audioURL)
+        // Detect music in parallel with chunk export when the global toggle
+        // is on. SoundAnalysis is read-only, AVAssetExportSession writes to
+        // temp files — they don't contend for the same resource. Music
+        // detection typically finishes well before transcription, so the
+        // overlap is essentially free.
+        let musicDetectionEnabled = await SubtitleSettingsManager.shared.enableMusicDetection
+        async let musicRangesTask = Self.detectMusicIfEnabled(
+          audioURL: audioURL, enabled: musicDetectionEnabled
+        )
 
         self.logger.info("Exporting audio chunks (chunkDuration: \(chunkDuration)s)")
         let overlap: TimeInterval = 2.0
@@ -138,7 +142,7 @@ extension TranscriptService {
           }
 
         let mergedSegments = ChunkedTranscriptionService.mergeChunkSegments(
-          allChunkResults, overlap: overlap)
+          allChunkResults, chunks: chunks)
 
         // Await the music-detection result (started in parallel above) and
         // splice `[♪ Music]` markers in place of any transcribed segments that
@@ -172,5 +176,16 @@ extension TranscriptService {
     }
     continuation.onTermination = { _ in task.cancel() }
     return stream
+  }
+
+  /// Runs `MusicDetectionService.detectMusicRanges` only when the global
+  /// setting is enabled. Lets the caller use a single `async let` regardless
+  /// of the toggle state.
+  private static func detectMusicIfEnabled(
+    audioURL: URL,
+    enabled: Bool
+  ) async -> [MusicDetectionService.TimeRange] {
+    guard enabled else { return [] }
+    return await MusicDetectionService.detectMusicRanges(in: audioURL)
   }
 }

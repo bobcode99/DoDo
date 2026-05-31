@@ -1749,16 +1749,6 @@ final class EpisodeDetailViewModel {
     return result
   }
 
-  /// Returns the currently playing segment based on playback time
-  var currentSegmentId: Int? {
-    guard isPlayingThisEpisode else { return nil }
-    let time = audioManager.currentTime
-
-    return transcriptSegments.first { segment in
-      time >= segment.startTime && time <= segment.endTime
-    }?.id
-  }
-
   /// Returns true if transcript is currently being processed (downloading model or transcribing)
   var isTranscriptProcessing: Bool {
     switch transcriptState {

@@ -51,10 +51,12 @@ struct EpisodeTranscriptView: View {
         viewModel.isCurrentEpisode ? viewModel.audioManager.currentTime : nil
     }
 
-    /// The sentence that should be highlighted (last-started semantics).
+    /// Id of the sentence to highlight + auto-scroll to. Uses the shared
+    /// `activeID(at:)` helper so the parent's auto-scroll trigger and the
+    /// child's visual highlight read from the exact same algorithm.
     private var activeSentenceID: Int? {
         guard let time = currentTime else { return nil }
-        return viewModel.transcriptSentences.last { $0.startTime <= time }?.id
+        return viewModel.transcriptSentences.activeID(at: time)
     }
 
     /// Pill is shown when the user has paused auto-scroll while the episode

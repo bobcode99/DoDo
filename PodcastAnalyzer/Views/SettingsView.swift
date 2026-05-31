@@ -483,6 +483,23 @@ struct SettingsView: View {
               }
             }
           }
+
+          Toggle(isOn: Binding(
+            get: { SubtitleSettingsManager.shared.enableMusicDetection },
+            set: { SubtitleSettingsManager.shared.enableMusicDetection = $0 }
+          )) {
+            HStack {
+              Image(systemName: "music.note")
+                .foregroundStyle(.pink)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Detect Music")
+                Text("Mark music ranges as [♪ Music] instead of transcribing them")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
         } header: {
           Text("Transcript")
         } footer: {

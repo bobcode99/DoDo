@@ -108,8 +108,14 @@ enum TranscriptGrouping {
         }
 
         for (i, segment) in segments.enumerated() {
-            if let last = group.last,
-               segment.startTime - last.endTime > gapThreshold {
+            let isMarker = MusicDetectionService.isMarker(segment.text)
+            let hasTimeGap = group.last.map {
+                segment.startTime - $0.endTime > gapThreshold
+            } ?? false
+
+            // Music markers always stand alone; flush any in-progress
+            // sentence before appending the marker.
+            if hasTimeGap || (isMarker && !group.isEmpty) {
                 flush()
             }
 
@@ -117,6 +123,13 @@ enum TranscriptGrouping {
             group.append(segment)
             charCount += trimmed.count
             if !groupIsCJK { groupIsCJK = CJKTextUtils.containsCJK(trimmed) }
+
+            // After appending a marker, close it out so it forms a
+            // single-segment "sentence" on its own line.
+            if isMarker {
+                flush()
+                continue
+            }
 
             let softCap = groupIsCJK ? cjkSoftCap : latinSoftCap
             let hardCap = groupIsCJK ? cjkHardCap : latinHardCap
@@ -133,12 +146,13 @@ enum TranscriptGrouping {
     }
 }
 
-// MARK: - Binary-Search Helpers
+// MARK: - Active-Sentence Lookup
 
 extension Array where Element == TranscriptSentence {
-    /// Last sentence whose `startTime ≤ time`, found via binary search. O(log n).
-    /// Mirrors AntennaPod's `Transcript.findSegmentIndexBefore`.
-    func index(at time: TimeInterval) -> Int? {
+    /// Id of the last sentence whose `startTime ≤ time`. O(log n) binary search.
+    /// Returns nil when `time` precedes the first sentence's start.
+    /// This is the single source of truth for "which sentence is playing".
+    func activeID(at time: TimeInterval) -> Int? {
         guard !isEmpty, self[0].startTime <= time else { return nil }
         var lo = 0
         var hi = count - 1
@@ -150,12 +164,7 @@ extension Array where Element == TranscriptSentence {
                 lo = mid
             }
         }
-        return lo
-    }
-
-    /// Convenience: id of the active sentence at `time`, or nil.
-    func activeID(at time: TimeInterval) -> Int? {
-        index(at: time).map { self[$0].id }
+        return self[lo].id
     }
 }
 
@@ -181,14 +190,6 @@ nonisolated enum CJKTextUtils {
             }
         }
         return false
-    }
-
-    static func tokenize(_ text: String) -> [String] {
-        if containsCJK(text) {
-            return text.map { String($0) }.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        } else {
-            return text.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        }
     }
 
     static func isCJKScalar(_ scalar: Unicode.Scalar) -> Bool {

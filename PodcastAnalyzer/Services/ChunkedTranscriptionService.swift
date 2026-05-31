@@ -211,11 +211,21 @@ nonisolated enum ChunkedTranscriptionService {
     return terminators.contains(char)
   }
 
-  /// Merges segment results from multiple chunks, de-duplicating overlap regions.
-  /// Segments from the earlier chunk are preferred in overlap regions.
+  /// Merges segment results from multiple chunks, de-duplicating the
+  /// overlap-region audio (which both chunks transcribed).
+  ///
+  /// Earlier chunks own the overlap region: for chunk N+1, anything whose
+  /// startTime is before `chunks[N].endTime` (the previous chunk's nominal
+  /// end) was already produced by chunk N and is discarded here.
+  ///
+  /// Why nominal end and not last-segment end: a previous version used the
+  /// last segment's `endTime`, which is well below the chunk boundary when
+  /// speech ends mid-chunk and right at it when speech runs into the
+  /// overlap. The latter case let duplicate boundary segments survive,
+  /// producing repeated words with offset timestamps.
   static func mergeChunkSegments(
     _ chunkResults: [[ChunkSegment]],
-    overlap: TimeInterval = 2.0
+    chunks: [AudioChunk]
   ) -> [ChunkSegment] {
     guard !chunkResults.isEmpty else { return [] }
     guard chunkResults.count > 1 else { return chunkResults[0] }
@@ -226,14 +236,8 @@ nonisolated enum ChunkedTranscriptionService {
       if chunkIndex == 0 {
         merged.append(contentsOf: segments)
       } else {
-        // Skip segments that fall within the overlap region of the previous chunk
-        let previousChunkNominalEnd = chunkResults[chunkIndex - 1].last?.endTime ?? 0
-        let overlapThreshold = previousChunkNominalEnd - 1.0
-
-        for segment in segments {
-          if segment.startTime < overlapThreshold {
-            continue
-          }
+        let previousChunkEnd = chunks[chunkIndex - 1].endTime
+        for segment in segments where segment.startTime >= previousChunkEnd {
           merged.append(segment)
         }
       }
@@ -243,32 +247,33 @@ nonisolated enum ChunkedTranscriptionService {
     return merged
   }
 
-  /// Replaces any transcribed segments that fall inside detected music ranges
-  /// with explicit `[♪ Music]` marker segments. Apple Speech produces garbage
-  /// on music; this keeps the SRT honest by dropping those segments and
-  /// surfacing the music ranges directly.
+  /// Replaces transcribed segments that fall mostly inside detected music
+  /// ranges with explicit `[♪ Music]` marker segments. Apple Speech produces
+  /// garbage on pure music; this keeps the SRT honest by dropping those
+  /// segments and surfacing the music ranges directly.
   ///
-  /// A segment is considered to be "music" when its midpoint lies inside any
-  /// music range — using the midpoint avoids accidentally dropping speech
-  /// that runs up to a music boundary.
+  /// A segment is dropped when `musicOverlapRatio` (≥ 0.7 by default) of its
+  /// duration lies inside any music range. The previous midpoint-only check
+  /// dropped real speech that crossed a music boundary (e.g. host starting to
+  /// talk before the intro music tag fully ended).
   static func annotateMusicSegments(
     speechSegments: [ChunkSegment],
     musicRanges: [MusicDetectionService.TimeRange],
-    marker: String = "[\u{266A} Music]"
+    marker: String = MusicDetectionService.markerText,
+    musicOverlapRatio: Double = 0.7
   ) -> [ChunkSegment] {
     guard !musicRanges.isEmpty else { return speechSegments }
 
     let speechOnly = speechSegments.filter { segment in
-      let midpoint = (segment.startTime + segment.endTime) / 2
-      return !musicRanges.contains { $0.contains(midpoint) }
+      let duration = max(segment.endTime - segment.startTime, 0.001)
+      let overlap = musicRanges.reduce(0.0) { acc, range in
+        acc + max(0, min(segment.endTime, range.end) - max(segment.startTime, range.start))
+      }
+      return overlap / duration < musicOverlapRatio
     }
 
     let markers = musicRanges.map { range in
-      ChunkSegment(
-        startTime: range.start,
-        endTime: range.end,
-        text: marker
-      )
+      ChunkSegment(startTime: range.start, endTime: range.end, text: marker)
     }
 
     return (speechOnly + markers).sorted { $0.startTime < $1.startTime }
