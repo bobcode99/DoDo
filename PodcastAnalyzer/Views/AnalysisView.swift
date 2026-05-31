@@ -51,7 +51,7 @@ struct AnalysisView: View {
               NavigationLink(value: route(for: analysis)) {
                 AnalysisRowCard(
                   analysis: analysis,
-                  artworkURL: podcastByTitle[analysis.podcastTitle]?.podcastInfo.imageURL
+                  artworkURL: artworkURL(for: analysis)
                 )
               }
               .buttonStyle(.plain)
@@ -76,6 +76,15 @@ struct AnalysisView: View {
     .navigationBarTitleDisplayMode(.large)
     #endif
     .searchable(text: $searchText, prompt: "Search analyses")
+  }
+
+  /// Episode artwork URL, with podcast-level fallback. When the podcast is
+  /// still subscribed we look up the episode's own image; otherwise we fall
+  /// back to the podcast art (or nil, which yields the placeholder).
+  private func artworkURL(for analysis: EpisodeAIAnalysis) -> String? {
+    let podcast = podcastByTitle[analysis.podcastTitle]
+    let enriched = enrichedEpisode(for: analysis, podcast: podcast)
+    return enriched.imageURL ?? podcast?.podcastInfo.imageURL
   }
 
   private func route(for analysis: EpisodeAIAnalysis) -> EpisodeAIAnalysisRoute {
