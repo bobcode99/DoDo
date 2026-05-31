@@ -11,6 +11,13 @@ import SwiftUI
 struct PodcastEpisodeFilterView: View {
   let podcast: PodcastInfoModel
   let modelContext: ModelContext
+  /// Optional callback fired after the user taps Done and the filter values
+  /// have been persisted. `EpisodeListView` uses it to auto-select the
+  /// `.custom` chip so the configured filter is immediately visible — without
+  /// this, the list reverts to whichever chip was selected before the sheet
+  /// opened (almost always `.all`) and the configured terms appear to do
+  /// nothing.
+  var onSave: (() -> Void)? = nil
   @Environment(\.dismiss) private var dismiss
 
   @State private var includeTerms: String = ""
@@ -57,6 +64,7 @@ struct PodcastEpisodeFilterView: View {
             podcast.episodeFilterExclude = excludeTerms.trimmingCharacters(in: .whitespaces)
             podcast.episodeFilterMinDuration = minDurationMinutes * 60
             try? modelContext.save()
+            onSave?()
             dismiss()
           }
         }

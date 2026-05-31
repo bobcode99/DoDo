@@ -20,6 +20,10 @@ enum EpisodeFilter: String, CaseIterable {
   case played = "Played"
   case starred = "Starred"
   case downloaded = "Downloaded"
+  /// User-defined per-podcast filter (include/exclude terms + min-duration)
+  /// configured via `PodcastEpisodeFilterView`. Falls back to "show
+  /// everything" semantics when no filter fields are set.
+  case custom = "Custom"
 
   var icon: String {
     switch self {
@@ -28,6 +32,7 @@ enum EpisodeFilter: String, CaseIterable {
     case .played: return "checkmark.circle"
     case .starred: return "star.fill"
     case .downloaded: return "arrow.down.circle.fill"
+    case .custom: return "line.3.horizontal.decrease.circle"
     }
   }
 }
@@ -511,7 +516,16 @@ struct EpisodeListView: View {
     }
     .sheet(isPresented: $showEpisodeFilterSheet) {
       if let model = podcastModel {
-        PodcastEpisodeFilterView(podcast: model, modelContext: modelContext)
+        PodcastEpisodeFilterView(podcast: model, modelContext: modelContext) {
+          // Promote the user's freshly-saved filter into a visible result —
+          // switch the chip row to .custom so the list updates immediately.
+          // Always assigning (even when already .custom) is intentional:
+          // didSet fires unconditionally, so the filter re-evaluates against
+          // the new include/exclude/min-duration values.
+          withAnimation(.easeInOut(duration: 0.2)) {
+            viewModel.selectedFilter = .custom
+          }
+        }
       }
     }
     .sheet(isPresented: $showTranscribeBackfillSheet) {

@@ -132,6 +132,23 @@ final class EpisodeListViewModel {
         if case .downloaded = state { return true }
         return false
       }
+    case .custom:
+      // Reuses the auto-download evaluator — same include/exclude/min-duration
+      // semantics, so the chip surfaces exactly the set that auto-download
+      // would pick. Falls through to "show all" when no filter fields are set,
+      // matching the evaluator's "no filters = accept" behavior.
+      let include = podcastModel.episodeFilterInclude
+      let exclude = podcastModel.episodeFilterExclude
+      let minDur = podcastModel.episodeFilterMinDuration
+      episodes = episodes.filter { episode in
+        EpisodeFilterEvaluator.shouldAutoDownload(
+          episodeTitle: episode.title,
+          durationSeconds: TimeInterval(episode.duration ?? 0),
+          includeFilter: include,
+          excludeFilter: exclude,
+          minDurationSeconds: minDur
+        )
+      }
     }
 
     // Apply sort
