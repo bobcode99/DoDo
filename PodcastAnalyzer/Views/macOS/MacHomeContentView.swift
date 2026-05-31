@@ -37,9 +37,11 @@ struct MacHomeContentView: View {
     .navigationDestination(for: PopularShowsDestination.self) { _ in
       PopularShowsListView(podcasts: viewModel.topPodcasts, viewModel: viewModel)
     }
-    .navigationDestination(for: UpNextListRoute.self) { route in
+    .navigationDestination(for: UpNextListRoute.self) { _ in
+      // Bind to the live VM array (not the route's frozen snapshot) so
+      // dismiss / play / completion updates immediately reflect on this page.
       UpNextListView(
-        episodes: route.episodes,
+        episodes: viewModel.upNextEpisodes,
         onToggleStar: { viewModel.toggleStar(for: $0) },
         onTogglePlayed: { viewModel.togglePlayed(for: $0) },
         onDownload: {

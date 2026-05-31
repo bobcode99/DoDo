@@ -96,9 +96,11 @@ struct HomeView: View {
       }
       .padding(.vertical)
     }
-    .navigationDestination(for: UpNextListRoute.self) { route in
+    .navigationDestination(for: UpNextListRoute.self) { _ in
+      // Bind to the live VM array (not the route's frozen snapshot) so
+      // dismiss / play / completion updates immediately reflect on this page.
       UpNextListView(
-        episodes: route.episodes,
+        episodes: viewModel.upNextEpisodes,
         onToggleStar: { viewModel.toggleStar(for: $0) },
         onTogglePlayed: { viewModel.togglePlayed(for: $0) },
         onDownload: {

@@ -75,6 +75,7 @@ struct UpNextListRoute: Hashable {
 enum LibrarySubpageRoute: Hashable {
   case saved
   case downloaded
+  case downloadedPodcast(String)
   case latest
   case downloadingEpisodes
 }

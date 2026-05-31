@@ -624,10 +624,10 @@ struct EpisodeListView: View {
             }
             .font(.subheadline)
             .fontWeight(.medium)
-            .foregroundStyle(.white)
+            .foregroundStyle(isSubscribed ? Color.primary : Color.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(isSubscribed ? Color.green : Color.blue)
+            .background(isSubscribed ? Color.gray.opacity(0.25) : Color.blue)
             .clipShape(.rect(cornerRadius: 16))
           }
           .buttonStyle(.plain)

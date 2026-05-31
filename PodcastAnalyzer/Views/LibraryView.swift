@@ -104,6 +104,12 @@ struct LibraryView: View {
         SavedEpisodesView(viewModel: viewModel, showEpisodeArtwork: showEpisodeArtwork)
       case .downloaded:
         DownloadedPodcastsGridView(viewModel: viewModel)
+      case .downloadedPodcast(let podcastTitle):
+        DownloadedEpisodesView(
+          viewModel: viewModel,
+          showEpisodeArtwork: showEpisodeArtwork,
+          podcastTitleFilter: podcastTitle
+        )
       case .latest:
         LatestEpisodesView(viewModel: viewModel, showEpisodeArtwork: showEpisodeArtwork)
       case .downloadingEpisodes:
