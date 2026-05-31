@@ -4,6 +4,10 @@ import SwiftUI
 
 struct EpisodeDetailHeaderView: View {
     @Bindable var viewModel: EpisodeDetailViewModel
+    /// Hosts that present their own combined action row (e.g. iOS detail page
+    /// with merged Play / Download / Transcript / AI Analysis) pass `false`
+    /// to suppress the in-header Play + Download row.
+    var showsPlaybackButtons: Bool = true
     @Environment(\.modelContext) private var modelContext
     @State private var cachedPodcastModel: PodcastInfoModel?
     @State private var browseCollectionId: String?
@@ -72,7 +76,9 @@ struct EpisodeDetailHeaderView: View {
                 metadataColumn
                 Spacer()
             }
-            playbackRow
+            if showsPlaybackButtons {
+                playbackRow
+            }
             streamingIndicator
         }
     }
@@ -85,7 +91,9 @@ struct EpisodeDetailHeaderView: View {
             artwork
             VStack(alignment: .leading, spacing: 10) {
                 metadataColumn
-                playbackRow
+                if showsPlaybackButtons {
+                    playbackRow
+                }
                 streamingIndicator
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -2,10 +2,9 @@
 //  EpisodeDetailView.swift
 //  PodcastAnalyzer
 //
-//  iOS episode landing page. Shows the episode header, two action buttons
-//  to push the Transcript and AI Analysis sub-pages, and the description
-//  (summary). Mirrors the macOS pattern (MacEpisodeDetailView): each tab is
-//  now an independent NavigationStack destination, not a shared tab host.
+//  iOS episode landing page. Single ScrollView containing the episode
+//  header, a merged action row (Play / Download / Transcript / AI Analysis),
+//  and the episode summary — the header scrolls with the content.
 //
 //  Aliased to MacEpisodeDetailView on macOS so shared iOS-leaning files
 //  (HomeView, SearchView, etc.) keep compiling on macOS even though they
@@ -27,12 +26,6 @@ struct EpisodeDetailView: View {
     @State private var showSubtitleSettings = false
     @State private var showTranslationLanguagePicker = false
     @State private var showRegenerateConfirmation = false
-
-    // Header collapse state
-    @State private var isHeaderVisible: Bool = true
-    @State private var lastScrollOffset: CGFloat = 0
-    @State private var isUserScrolling: Bool = false
-    @State private var scrollToTopTrigger: Bool = false
 
     // Inline timestamp tap handling (description timestamp links).
     @State private var tappedTimestampSeconds: TimeInterval?
@@ -56,41 +49,37 @@ struct EpisodeDetailView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            EpisodeDetailHeaderView(viewModel: viewModel)
-                .frame(height: isHeaderVisible ? nil : 0)
-                .clipped()
-                .opacity(isHeaderVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
-            Divider()
-                .opacity(isHeaderVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
-
-            summaryScrollContent
-                .overlay(alignment: .topTrailing) {
-                    if !isHeaderVisible {
-                        Button {
-                            scrollToTopTrigger.toggle()
-                        } label: {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 32, height: 32)
-                                .glassEffect(.regular, in: .circle)
-                        }
-                        .padding(.trailing, 12)
-                        .padding(.top, 8)
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .timestampPopup(
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                EpisodeDetailHeaderView(
                     viewModel: viewModel,
-                    tappedSeconds: $tappedTimestampSeconds,
-                    tapX: timestampTapX,
-                    tapY: timestampTapY
+                    showsPlaybackButtons: false
                 )
-                .animation(.easeInOut(duration: 0.25), value: isHeaderVisible)
+
+                actionRow
+                    .padding(.horizontal)
+
+                EpisodeSummaryView(
+                    viewModel: viewModel,
+                    tappedTimestampSeconds: $tappedTimestampSeconds
+                )
+                .padding(.horizontal)
+            }
+            .padding(.vertical)
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onEnded {
+                    timestampTapX = $0.location.x
+                    timestampTapY = $0.location.y
+                }
+        )
+        .timestampPopup(
+            viewModel: viewModel,
+            tappedSeconds: $tappedTimestampSeconds,
+            tapX: timestampTapX,
+            tapY: timestampTapY
+        )
         .safeAreaInset(edge: .bottom) {
             Color.clear.frame(height: 80)
         }
@@ -114,52 +103,25 @@ struct EpisodeDetailView: View {
         )
     }
 
-    // MARK: - Scrollable summary content
+    // MARK: - Action row (Play / Download / Transcript / AI Analysis)
 
-    private var summaryScrollContent: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Color.clear.frame(height: 0).id("summaryTop")
-
-                VStack(alignment: .leading, spacing: 16) {
-                    actionButtons
-
-                    EpisodeSummaryView(
-                        viewModel: viewModel,
-                        tappedTimestampSeconds: $tappedTimestampSeconds
-                    )
-                    .padding(.horizontal)
-                }
-                .padding(.vertical)
-            }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onEnded {
-                        timestampTapX = $0.location.x
-                        timestampTapY = $0.location.y
-                    }
+    private var actionRow: some View {
+        HStack(spacing: 10) {
+            LivePlaybackButton(
+                episodeTitle: viewModel.title,
+                podcastTitle: viewModel.podcastTitle,
+                duration: viewModel.savedDuration,
+                formattedDuration: viewModel.formattedDuration,
+                lastPlaybackPosition: viewModel.lastPlaybackPosition,
+                playbackProgress: viewModel.playbackProgress,
+                isCompleted: viewModel.isCompleted,
+                onPlay: { viewModel.playAction() },
+                style: .iconOnly,
+                isDisabled: viewModel.isPlayDisabled
             )
-            .onScrollPhaseChange { _, newPhase in
-                isUserScrolling = newPhase == .interacting || newPhase == .decelerating
-            }
-            .trackScrollForHeaderCollapse(
-                isHeaderVisible: $isHeaderVisible,
-                lastOffset: $lastScrollOffset,
-                isUserScrolling: isUserScrolling
-            )
-            .onChange(of: scrollToTopTrigger) { _, _ in
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    proxy.scrollTo("summaryTop", anchor: .top)
-                }
-                isHeaderVisible = true
-            }
-        }
-    }
 
-    // MARK: - Action buttons
+            EpisodeDownloadButton(viewModel: viewModel)
 
-    private var actionButtons: some View {
-        HStack(spacing: 12) {
             NavigationLink(
                 value: EpisodeTranscriptRoute(
                     episode: viewModel.episode,
@@ -168,10 +130,16 @@ struct EpisodeDetailView: View {
                     podcastLanguage: viewModel.podcastLanguage
                 )
             ) {
-                Label("Transcript", systemImage: "captions.bubble")
+                Image(systemName: "captions.bubble")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.purple)
+                    .clipShape(Capsule())
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Transcript")
             .accessibilityHint("Open the transcript for this episode")
 
             NavigationLink(
@@ -182,15 +150,20 @@ struct EpisodeDetailView: View {
                     podcastLanguage: viewModel.podcastLanguage
                 )
             ) {
-                Label("AI Analysis", systemImage: "sparkles")
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.orange)
+                    .clipShape(Capsule())
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.plain)
+            .accessibilityLabel("AI Analysis")
             .accessibilityHint("Open the AI analysis for this episode")
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal)
     }
 }
 
