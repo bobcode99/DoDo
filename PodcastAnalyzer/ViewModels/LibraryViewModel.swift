@@ -68,6 +68,19 @@ struct DownloadingEpisode: Identifiable {
   let state: DownloadState
 }
 
+// MARK: - Downloaded Podcast Group Model
+
+struct DownloadedPodcastGroup: Identifiable {
+  let title: String
+  let imageURL: String?
+  let podcast: PodcastInfoModel?
+  let downloadCount: Int
+
+  var id: String {
+    podcast?.id.uuidString ?? title
+  }
+}
+
 // MARK: - Library ViewModel
 
 @MainActor
@@ -166,21 +179,30 @@ final class LibraryViewModel {
   }
 
   /// Podcasts that have downloaded episodes, with download counts
-  var podcastsWithDownloads: [(podcast: PodcastInfoModel, downloadCount: Int)] {
+  var podcastsWithDownloads: [DownloadedPodcastGroup] {
     var countByTitle: [String: Int] = [:]
+    var imageByTitle: [String: String] = [:]
     for episode in downloadedEpisodes {
       countByTitle[episode.podcastTitle, default: 0] += 1
+      if imageByTitle[episode.podcastTitle] == nil, let imageURL = episode.imageURL {
+        imageByTitle[episode.podcastTitle] = imageURL
+      }
     }
 
-    return countByTitle.compactMap { (title, count) in
-      guard let podcast = podcastTitleMap[title] else { return nil }
-      return (podcast: podcast, downloadCount: count)
+    return countByTitle.map { (title, count) in
+      let podcast = podcastTitleMap[title]
+      return DownloadedPodcastGroup(
+        title: title,
+        imageURL: podcast?.podcastInfo.imageURL ?? imageByTitle[title],
+        podcast: podcast,
+        downloadCount: count
+      )
     }
     .sorted {
       if $0.downloadCount != $1.downloadCount {
         return $0.downloadCount > $1.downloadCount
       }
-      return $0.podcast.podcastInfo.title.localizedCaseInsensitiveCompare($1.podcast.podcastInfo.title) == .orderedAscending
+      return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
     }
   }
 
@@ -614,11 +636,10 @@ final class LibraryViewModel {
   }
 
   func refreshDownloadedEpisodes() async {
-    // Ensure the podcast title map is populated so that podcastsWithDownloads
-    // can look up PodcastInfoModel by title. This is a no-op if already loaded.
-    if podcastTitleMap.isEmpty {
-      await loadAllPodcasts()
-    }
+    // Downloaded podcasts can include browsed/unsubscribed shows. LibraryView's
+    // @Query only tracks subscribed podcasts, so refresh the full lookup here
+    // instead of relying on the subscribed snapshot to invalidate this map.
+    await loadAllPodcasts()
 
     // Only run the expensive disk scan once per session.  The scan is already triggered
     // by loadDownloadedSection() during initial load; calling it again on every
@@ -772,9 +793,26 @@ final class LibraryViewModel {
     }
   }
 
-  /// Syncs SwiftData with actual downloaded files on disk
-  /// 1. Verifies existing downloads still exist
-  /// 2. Discovers downloaded files that exist but aren't tracked in SwiftData
+  /// Reconciles `EpisodeDownloadModel.localAudioPath` against the audio
+  /// directory on disk. `EpisodeDownloadModel` is the single source of truth
+  /// for download state — this routine only ensures every row's `localAudioPath`
+  /// reflects reality.
+  ///
+  /// Three passes, all driven by the model (not by `PodcastInfoModel`), so
+  /// downloads belonging to unsubscribed or removed podcasts are reconciled
+  /// the same as subscribed ones — fixes the bug where files survived a
+  /// sandbox-container rotation but never reappeared in the Downloaded tab
+  /// because discovery only iterated subscribed podcasts.
+  ///
+  /// 1. De-dup `EpisodeDownloadModel` rows that share an id.
+  /// 2. For every row, align `localAudioPath` with what's on disk:
+  ///    - If the stored path still resolves: keep it.
+  ///    - Else look up by expected `sanitize("{podcastTitle}_{episodeTitle}")`.
+  ///    - Else clear (file truly gone).
+  /// 3. Discover audio files no row claims, match them back to a
+  ///    `PodcastInfoModel` episode, and create a new row. Files with no
+  ///    matching episode anywhere are left alone (can't be unambiguously
+  ///    reversed from their sanitized filename).
   private func syncDownloadedFilesWithSwiftData() async {
     #if DEBUG
     let signpostID = OSSignpostID(log: signpostLog)
@@ -784,7 +822,7 @@ final class LibraryViewModel {
 
     guard let context = modelContext else { return }
 
-    // 1. Get all EpisodeDownloadModel entries
+    // 1. Fetch every download row.
     let descriptor = FetchDescriptor<EpisodeDownloadModel>()
     let allModels: [EpisodeDownloadModel]
     do {
@@ -794,10 +832,8 @@ final class LibraryViewModel {
       return
     }
 
-    // Create lookup for existing models by ID (keep last occurrence on duplicates)
+    // 1b. De-duplicate rows that share an id.
     let modelsById = Dictionary(allModels.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
-
-    // 1b. Remove duplicate entries (keep the one in modelsById, delete others)
     if modelsById.count < allModels.count {
       let duplicateCount = allModels.count - modelsById.count
       let keptIds = Set(modelsById.values.map { ObjectIdentifier($0) })
@@ -808,41 +844,7 @@ final class LibraryViewModel {
       logger.warning("Removed \(duplicateCount) duplicate EpisodeDownloadModel entries")
     }
 
-    // 2. Verify existing downloads still exist
-    let modelsWithPaths = allModels.compactMap { model -> (String, String, EpisodeDownloadModel)? in
-      guard let path = model.localAudioPath, !path.isEmpty else { return nil }
-      return (model.id, path, model)
-    }
-
-    if !modelsWithPaths.isEmpty {
-      let pathsToCheck = modelsWithPaths.map { ($0.0, $0.1) }
-      // Detached to avoid blocking @MainActor with synchronous FileManager I/O
-      let missingFiles = await Task.detached(priority: .background) { () -> Set<String> in
-        let fm = FileManager.default
-        var missing = Set<String>()
-        for (id, path) in pathsToCheck {
-          if !fm.fileExists(atPath: path) {
-            missing.insert(id)
-          }
-        }
-        return missing
-      }.value
-
-      var clearedCount = 0
-      for (id, _, model) in modelsWithPaths {
-        if missingFiles.contains(id) {
-          model.localAudioPath = nil
-          clearedCount += 1
-        }
-      }
-
-      if clearedCount > 0 {
-        logger.info("Cleared \(clearedCount) stale download paths")
-      }
-    }
-
-    // 3. Discover downloaded files that aren't tracked
-    // Single directory scan — replaces N×7 per-episode file checks
+    // 2. Single off-MainActor scan of the audio directory.
     let audioFileIndex = await Task.detached(priority: .background) { () -> [String: String] in
       let fm = FileManager.default
 
@@ -854,11 +856,10 @@ final class LibraryViewModel {
       let audioDir = libraryDir.appendingPathComponent("Audio", isDirectory: true)
       #endif
 
-      var index: [String: String] = [:]  // lowercased base filename -> full path
+      var index: [String: String] = [:]  // lowercased basename → full path
       guard let contents = try? fm.contentsOfDirectory(
         at: audioDir, includingPropertiesForKeys: nil
       ) else { return index }
-
       for url in contents {
         let name = url.deletingPathExtension().lastPathComponent.lowercased()
         index[name] = url.path
@@ -866,52 +867,72 @@ final class LibraryViewModel {
       return index
     }.value
 
+    let pathsOnDisk = Set(audioFileIndex.values)
+
+    // 3. Reconcile every row's localAudioPath against disk reality.
+    //    Uses the row's own podcastTitle/episodeTitle, so podcasts whose
+    //    PodcastInfoModel was deleted are reconciled the same as subscribed.
+    var pathChanges = 0
+    var claimedBasenames = Set<String>()
+    for model in modelsById.values {
+      // Happy path: stored path still resolves.
+      if let existing = model.localAudioPath, pathsOnDisk.contains(existing) {
+        let basename = URL(fileURLWithPath: existing)
+          .deletingPathExtension().lastPathComponent.lowercased()
+        claimedBasenames.insert(basename)
+        continue
+      }
+
+      // Repair (sandbox rotation, manual relocation, etc.) via expected basename.
+      let expected = Self.sanitizeFileName("\(model.podcastTitle)_\(model.episodeTitle)").lowercased()
+      let repaired = audioFileIndex[expected]
+
+      if model.localAudioPath != repaired {
+        model.localAudioPath = repaired
+        if repaired != nil, model.downloadedDate == nil {
+          model.downloadedDate = Date()
+        }
+        pathChanges += 1
+      }
+      if repaired != nil { claimedBasenames.insert(expected) }
+    }
+
+    // 4. Discover audio files no row claims. Match each against an episode
+    //    in any podcast we know about, and create a row for it.
     let delimiter = Self.episodeKeyDelimiter
     var discoveredCount = 0
-
-    for podcast in allPodcasts {
-      let podcastTitle = podcast.podcastInfo.title
-      let podcastImageURL = podcast.podcastInfo.imageURL
-
-      for episode in podcast.podcastInfo.episodes {
-        let episodeKey = "\(podcastTitle)\(delimiter)\(episode.title)"
-
-        // Skip if already has localAudioPath
-        if let model = modelsById[episodeKey], model.hasLocalAudioFile {
-          continue
+    let orphans = audioFileIndex.filter { !claimedBasenames.contains($0.key) }
+    if !orphans.isEmpty {
+      var episodesByBasename: [String: (PodcastInfo, PodcastEpisodeInfo)] = [:]
+      for podcast in allPodcasts {
+        let info = podcast.podcastInfo
+        for episode in info.episodes {
+          let key = Self.sanitizeFileName("\(info.title)_\(episode.title)").lowercased()
+          episodesByBasename[key] = (info, episode)
         }
+      }
 
-        // O(1) dictionary lookup instead of 7× fileExists calls
-        let baseFileName = Self.sanitizeFileName("\(podcastTitle)_\(episode.title)").lowercased()
-        if let localPath = audioFileIndex[baseFileName] {
-          if let existingModel = modelsById[episodeKey] {
-            // Update existing model
-            existingModel.localAudioPath = localPath
-            existingModel.downloadedDate = Date()
-          } else {
-            // Create new model
-            guard let audioURL = episode.audioURL else { continue }
-            let newModel = EpisodeDownloadModel(
-              episodeTitle: episode.title,
-              podcastTitle: podcastTitle,
-              audioURL: audioURL,
-              localAudioPath: localPath,
-              downloadedDate: Date(),
-              imageURL: episode.imageURL ?? podcastImageURL,
-              pubDate: episode.pubDate
-            )
-            context.insert(newModel)
-          }
-          discoveredCount += 1
-        }
+      for (basename, fullPath) in orphans {
+        guard let (info, episode) = episodesByBasename[basename] else { continue }
+        let modelKey = "\(info.title)\(delimiter)\(episode.title)"
+        guard modelsById[modelKey] == nil, let audioURL = episode.audioURL else { continue }
+        let newModel = EpisodeDownloadModel(
+          episodeTitle: episode.title,
+          podcastTitle: info.title,
+          audioURL: audioURL,
+          localAudioPath: fullPath,
+          downloadedDate: Date(),
+          imageURL: episode.imageURL ?? info.imageURL,
+          pubDate: episode.pubDate
+        )
+        context.insert(newModel)
+        discoveredCount += 1
       }
     }
 
-    if discoveredCount > 0 {
+    if pathChanges > 0 || discoveredCount > 0 {
       try? context.save()
-      logger.info("Discovered \(discoveredCount) untracked downloads on disk")
-    } else {
-      logger.info("No untracked downloads found")
+      logger.info("Sync: updated \(pathChanges) paths, discovered \(discoveredCount) new models")
     }
   }
 
