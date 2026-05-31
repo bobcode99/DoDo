@@ -1799,9 +1799,10 @@ final class EpisodeDetailViewModel {
 
   /// Update search match IDs based on current query.
   ///
-  /// Matches single sentences, plus adjacent sentence pairs joined with
-  /// CJK-aware spacing — so a phrase that straddles a sentence boundary
-  /// (common in CJK content with no word spaces) still surfaces both rows.
+  /// Only includes sentences whose own text contains the query — the previous
+  /// cross-boundary heuristic surfaced adjacent sentence pairs whose
+  /// CJK-joined text matched, but that added rows to the result list that
+  /// didn't visibly contain the keyword, which read like a bug.
   func updateSearchMatches(query: String) {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else {
@@ -1810,29 +1811,9 @@ final class EpisodeDetailViewModel {
       return
     }
 
-    var matched = Set<TranscriptSentence.ID>()
     var ordered: [TranscriptSentence.ID] = []
-
     for sentence in groupedSentences where sentence.text.localizedStandardContains(trimmed) {
-      if matched.insert(sentence.id).inserted {
-        ordered.append(sentence.id)
-      }
-    }
-
-    if groupedSentences.count >= 2 {
-      for i in 0..<(groupedSentences.count - 1) {
-        let a = groupedSentences[i]
-        let b = groupedSentences[i + 1]
-        if matched.contains(a.id) && matched.contains(b.id) { continue }
-        let joined = CJKTextUtils.joinTexts([a.text, b.text])
-        guard joined.localizedStandardContains(trimmed) else { continue }
-        if !a.text.localizedStandardContains(trimmed) || !b.text.localizedStandardContains(trimmed) {
-          if matched.insert(a.id).inserted { ordered.append(a.id) }
-          if matched.insert(b.id).inserted { ordered.append(b.id) }
-        }
-      }
-      let position = Dictionary(uniqueKeysWithValues: groupedSentences.enumerated().map { ($1.id, $0) })
-      ordered.sort { (position[$0] ?? 0) < (position[$1] ?? 0) }
+      ordered.append(sentence.id)
     }
 
     searchMatchIds = ordered

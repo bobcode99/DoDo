@@ -269,8 +269,9 @@ struct SearchHighlightedText: View {
 
 // MARK: - Sentence-Based Transcript View
 
-/// Renders a list of sentence blocks. Computes the active sentence/segment
-/// from `currentTime` using last-started semantics.
+/// Renders a list of sentence blocks. Computes the active sentence from
+/// `currentTime` (last-started semantics) and paints the search-result
+/// flash overlay at this level so `SentenceView` itself stays static.
 struct SentenceBasedTranscriptView: View {
     let sentences: [TranscriptSentence]
     let currentTime: TimeInterval?
@@ -279,31 +280,43 @@ struct SentenceBasedTranscriptView: View {
 
     var showTimestamps: Bool = false
     var subtitleMode: SubtitleDisplayMode = .originalOnly
-    var searchMatchIds: Set<Int> = []
-    var currentSearchMatchId: Int?
+    /// Sentence picked from the search sheet — pulsed for ~1s so the user
+    /// can spot it after dismiss clears the active search query.
+    var flashedSentenceID: Int?
 
-    /// The single active sentence — the last one whose `startTime ≤ currentTime`.
     private var activeSentenceID: Int? {
         guard let t = currentTime else { return nil }
         return sentences.activeID(at: t)
     }
 
+    /// Active segment index *within* the given sentence, or nil if this is not
+    /// the active sentence (so non-active sentences don't have a "highlighted
+    /// word" — keeps karaoke confined to one row at a time).
+    ///
+    /// When the row IS active but `currentTime` resolves to a value before
+    /// this sentence's first segment (can happen when the sticky cache holds
+    /// a forward sentence id while the live time briefly rubber-bands back),
+    /// we still return `0` instead of `nil` — otherwise the user perceives
+    /// the karaoke as "broken" on the row they know is currently playing.
+    private func activeSegmentIndex(for sentence: TranscriptSentence, isActive: Bool) -> Int? {
+        guard isActive else { return nil }
+        guard let t = currentTime else { return 0 }
+        return sentence.activeSegmentIndex(at: t) ?? 0
+    }
+
     var body: some View {
+        let activeID = activeSentenceID
         LazyVStack(alignment: .leading, spacing: 6) {
             ForEach(sentences) { sentence in
-                let isActive = sentence.id == activeSentenceID
-                let activeIdx = isActive
-                    ? sentence.activeSegmentIndex(at: currentTime ?? 0)
-                    : nil
+                let isActive = sentence.id == activeID
                 SentenceView(
                     sentence: sentence,
                     isActive: isActive,
-                    activeSegmentIndex: activeIdx,
+                    activeSegmentIndex: activeSegmentIndex(for: sentence, isActive: isActive),
+                    isFlashing: sentence.id == flashedSentenceID,
                     searchQuery: searchQuery,
                     subtitleMode: subtitleMode,
                     showTimestamp: showTimestamps,
-                    isSearchMatch: searchMatchIds.contains(sentence.id),
-                    isCurrentSearchMatch: currentSearchMatchId == sentence.id,
                     onSegmentTap: onSegmentTap
                 )
                 .equatable()
@@ -316,188 +329,151 @@ struct SentenceBasedTranscriptView: View {
 
 // MARK: - Sentence View
 
-/// Displays one sentence block. Active segment within the active sentence is
-/// rendered blue + semibold; already-spoken segments fade to secondary; upcoming
-/// segments stay primary.
+/// One sentence block. Tap anywhere on the row to seek to its start.
+///
+/// Karaoke highlight (active word in blue) is rendered by attributing a
+/// `foregroundColor` range on an `AttributedString` — *only* the color
+/// attribute changes between frames, never the font or weight, so glyph
+/// metrics stay identical and the text never reflows.
 struct SentenceView: View, Equatable {
     let sentence: TranscriptSentence
     let isActive: Bool
+    /// Index of the active segment within `sentence.segments`. Nil for
+    /// non-active sentences or when the playhead is before this sentence.
     let activeSegmentIndex: Int?
+    /// Pulsed yellow tint when the user picks this sentence from search.
+    /// Parent drives the clear via `withAnimation`, which lets the fade-out
+    /// transition through this view's transaction without needing a row-level
+    /// `.animation(_:value:)` modifier — that modifier was the source of a
+    /// layout-shimmer bug because it swept up unrelated karaoke updates.
+    let isFlashing: Bool
     let searchQuery: String
     let subtitleMode: SubtitleDisplayMode
     var showTimestamp: Bool = false
-    var isSearchMatch: Bool = false
-    var isCurrentSearchMatch: Bool = false
     let onSegmentTap: (TranscriptSegment) -> Void
 
     static func == (lhs: SentenceView, rhs: SentenceView) -> Bool {
         lhs.sentence.id == rhs.sentence.id &&
+        lhs.sentence.endTime == rhs.sentence.endTime &&
         lhs.sentence.translatedText == rhs.sentence.translatedText &&
         lhs.isActive == rhs.isActive &&
         lhs.activeSegmentIndex == rhs.activeSegmentIndex &&
+        lhs.isFlashing == rhs.isFlashing &&
         lhs.searchQuery == rhs.searchQuery &&
         lhs.subtitleMode == rhs.subtitleMode &&
-        lhs.showTimestamp == rhs.showTimestamp &&
-        lhs.isSearchMatch == rhs.isSearchMatch &&
-        lhs.isCurrentSearchMatch == rhs.isCurrentSearchMatch
+        lhs.showTimestamp == rhs.showTimestamp
     }
 
-    private var supportsInlineSegmentLinks: Bool {
-        searchQuery.isEmpty && !primaryIsTranslated
+    private var primaryShowsOriginal: Bool {
+        switch subtitleMode {
+        case .originalOnly, .dualOriginalFirst: true
+        case .translatedOnly, .dualTranslatedFirst: false
+        }
     }
 
     private var primaryText: String {
-        switch subtitleMode {
-        case .originalOnly, .dualOriginalFirst:
-            return sentence.text
-        case .translatedOnly, .dualTranslatedFirst:
-            return sentence.translatedText ?? sentence.text
-        }
-    }
-
-    private var primaryIsTranslated: Bool {
-        switch subtitleMode {
-        case .originalOnly, .dualOriginalFirst:
-            return false
-        case .translatedOnly, .dualTranslatedFirst:
-            return sentence.translatedText != nil
-        }
+        primaryShowsOriginal ? sentence.text : (sentence.translatedText ?? sentence.text)
     }
 
     private var secondaryText: String? {
         switch subtitleMode {
         case .originalOnly, .translatedOnly:
-            return nil
+            nil
         case .dualOriginalFirst:
-            return sentence.translatedText
+            sentence.translatedText
         case .dualTranslatedFirst:
-            return sentence.translatedText != nil ? sentence.text : nil
+            sentence.translatedText != nil ? sentence.text : nil
         }
     }
 
     var body: some View {
-        Group {
-            if supportsInlineSegmentLinks {
-                sentenceRow
-                    .environment(\.openURL, OpenURLAction { url in
-                        guard let segmentID = TranscriptSegmentLink.segmentID(from: url),
-                              let segment = sentence.segments.first(where: { $0.id == segmentID }) else {
-                            return .systemAction
-                        }
-                        onSegmentTap(segment)
-                        return .handled
-                    })
-            } else {
-                Button {
-                    if let firstSegment = sentence.segments.first {
-                        onSegmentTap(firstSegment)
+        Button {
+            if let first = sentence.segments.first {
+                onSegmentTap(first)
+            }
+        } label: {
+            HStack(alignment: .top, spacing: showTimestamp ? 12 : 0) {
+                if showTimestamp {
+                    Text(sentence.formattedStartTime)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(isActive ? Color.blue : Color.secondary)
+                        .frame(width: 50, alignment: .leading)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    primaryTextView
+                    if let secondary = secondaryText {
+                        Text(secondary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                } label: {
-                    sentenceRow
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
         }
+        .buttonStyle(.plain)
         .background {
-            if isActive {
+            ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.blue.opacity(0.08))
+                    .fill(Color.blue.opacity(isActive ? 0.08 : 0))
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.yellow.opacity(isFlashing ? 0.35 : 0))
             }
         }
     }
 
     @ViewBuilder
-    private var sentenceRow: some View {
-        HStack(alignment: .top, spacing: showTimestamp ? 12 : 0) {
-            if showTimestamp {
-                Text(sentence.formattedStartTime)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(isActive ? .blue : .secondary)
-                    .frame(width: 50, alignment: .leading)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                buildSentenceText()
-                    .font(.system(size: 17, weight: .regular))
-                    .lineSpacing(4)
-
-                if let secondary = secondaryText {
-                    Text(secondary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(3)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 10)
-    }
-
-    @ViewBuilder
-    private func buildSentenceText() -> some View {
+    private var primaryTextView: some View {
         if !searchQuery.isEmpty {
             SearchHighlightedText(text: primaryText, query: searchQuery)
-        } else if primaryIsTranslated {
-            Text(buildPlainStyledText(primaryText))
+                .font(.system(size: 17))
+                .lineSpacing(4)
+                .foregroundStyle(isActive ? Color.blue : Color.primary)
+        } else if primaryShowsOriginal {
+            // Always render via AttributedString so flipping isActive doesn't
+            // swap between Text(String) and Text(AttributedString) variants.
+            Text(karaokeAttributedString())
+                .font(.system(size: 17))
+                .lineSpacing(4)
+                .foregroundStyle(Color.primary)
         } else {
-            Text(buildSegmentHighlightedAttributedString())
+            // Translation mode: no per-segment timing, so no karaoke.
+            Text(primaryText)
+                .font(.system(size: 17))
+                .lineSpacing(4)
+                .foregroundStyle(isActive ? Color.blue : Color.primary)
         }
     }
 
-    /// Translated text doesn't have segment-level timing — render as one styled block.
-    private func buildPlainStyledText(_ text: String) -> AttributedString {
-        var attrText = AttributedString(text)
-        if isActive {
-            attrText.foregroundColor = .blue
-            attrText.font = .system(size: 17, weight: .semibold)
-        } else {
-            attrText.foregroundColor = .primary
-            attrText.font = .system(size: 17, weight: .regular)
-        }
-        return attrText
-    }
-
-    /// Inline segment-level highlighting for the original text.
-    private func buildSegmentHighlightedAttributedString() -> AttributedString {
+    /// Builds the primary text as an `AttributedString` where only the
+    /// active segment range carries a `foregroundColor = .blue` attribute.
+    /// Character content matches `sentence.text` exactly, so toggling the
+    /// color attribute never reflows the line.
+    private func karaokeAttributedString() -> AttributedString {
         var result = AttributedString()
+        var first = true
+        var prevEndIsCJK = false
 
-        for (index, segment) in sentence.segments.enumerated() {
-            let segmentText = segment.text.trimmingCharacters(in: .whitespaces)
-            var attrText = AttributedString(segmentText)
-            if let url = TranscriptSegmentLink.url(for: segment) {
-                attrText.link = url
+        for (i, seg) in sentence.segments.enumerated() {
+            let raw = seg.text.trimmingCharacters(in: .whitespaces)
+            guard !raw.isEmpty else { continue }
+
+            let nextStartIsCJK = raw.unicodeScalars.first.map { CJKTextUtils.isCJKScalar($0) } ?? false
+            if !first && !prevEndIsCJK && !nextStartIsCJK {
+                result.append(AttributedString(" "))
             }
 
-            if isActive, let activeIdx = activeSegmentIndex {
-                if index == activeIdx {
-                    attrText.foregroundColor = .blue
-                    attrText.font = .system(size: 17, weight: .semibold)
-                } else if index < activeIdx {
-                    attrText.foregroundColor = .secondary
-                    attrText.font = .system(size: 17, weight: .regular)
-                } else {
-                    attrText.foregroundColor = .primary
-                    attrText.font = .system(size: 17, weight: .regular)
-                }
-            } else {
-                attrText.foregroundColor = .primary
-                attrText.font = .system(size: 17, weight: .regular)
+            var piece = AttributedString(raw)
+            if i == activeSegmentIndex {
+                piece.foregroundColor = .blue
             }
+            result.append(piece)
 
-            result.append(attrText)
-
-            if index < sentence.segments.count - 1 {
-                let nextText = sentence.segments[index + 1].text.trimmingCharacters(in: .whitespaces)
-                let endIsCJK = segmentText.unicodeScalars.last.map { CJKTextUtils.isCJKScalar($0) } ?? false
-                let startIsCJK = nextText.unicodeScalars.first.map { CJKTextUtils.isCJKScalar($0) } ?? false
-                if !endIsCJK && !startIsCJK {
-                    result.append(AttributedString(" "))
-                }
-            }
+            prevEndIsCJK = raw.unicodeScalars.last.map { CJKTextUtils.isCJKScalar($0) } ?? false
+            first = false
         }
-
         return result
     }
 }
@@ -649,9 +625,7 @@ struct FullTranscriptContent: View {
                             searchQuery: searchQuery,
                             onSegmentTap: onSegmentTap,
                             showTimestamps: false,
-                            subtitleMode: effectiveDisplayMode,
-                            searchMatchIds: Set(searchMatchIdsList),
-                            currentSearchMatchId: searchMatchIdsList.isEmpty ? nil : searchMatchIdsList[currentSearchIndex]
+                            subtitleMode: effectiveDisplayMode
                         )
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
