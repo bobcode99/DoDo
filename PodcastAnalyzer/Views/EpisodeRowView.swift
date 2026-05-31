@@ -94,14 +94,22 @@ struct EpisodeRowView: View {
   }
 
   @Environment(\.modelContext) private var modelContext
-  private var audioManager: EnhancedAudioManager {
-    EnhancedAudioManager.shared
-  }
+  /// Singleton accessor — only used inside action closures (playAction,
+  /// contextMenu.playNext). The reactive playing-indicator subview observes
+  /// `isPlaying` / `currentEpisode` itself, so reading `.shared` here does
+  /// not register the row as an audio-manager dependency.
+  private var audioManager: EnhancedAudioManager { .shared }
   private var transcriptManager: TranscriptManager { .shared }
   private let applePodcastService = ApplePodcastService()
   @State private var shareTask: Task<Void, Never>?
   @State private var cachedPlainDescription: String?
   @State private var hasAIAnalysis = false
+  /// Cached transcript-file existence. Computed once in `.onAppear` (and
+  /// refreshed when the transcript job for this row completes) so we don't
+  /// hit the filesystem on every body evaluation — which for a 50-row list
+  /// blocked the main thread during the Library → EpisodeList navigation
+  /// transition.
+  @State private var hasCaptions = false
 
   // MARK: - Download state
   //
@@ -140,61 +148,16 @@ struct EpisodeRowView: View {
     return episode.audioURL ?? ""
   }
 
-  private var hasCaptions: Bool {
-    EpisodeStatusChecker(
-      episodeTitle: episode.title,
-      podcastTitle: podcastTitle,
-      audioURL: episode.audioURL
-    ).hasTranscript
-  }
-
+  /// Used only by `.onChange` to refresh `hasCaptions` when the row's
+  /// transcript job finishes. The status chip itself is rendered by an
+  /// isolated subview that owns the manager subscription.
   private var transcriptJob: TranscriptJob? {
     transcriptManager.activeJobs[episodeKey]
-  }
-
-  private var isTranscribing: Bool {
-    guard let transcriptJob else { return false }
-    switch transcriptJob.status {
-    case .queued, .downloadingModel, .transcribing:
-      return true
-    case .completed, .failed:
-      return false
-    }
-  }
-
-  private var transcriptProgress: Double? {
-    guard let transcriptJob else { return nil }
-    switch transcriptJob.status {
-    case .downloadingModel(let progress), .transcribing(let progress):
-      return progress
-    case .queued:
-      return 0
-    case .completed:
-      return 1.0
-    case .failed:
-      return nil
-    }
-  }
-
-  private var isDownloadingModel: Bool {
-    guard let transcriptJob else { return false }
-    if case .downloadingModel = transcriptJob.status {
-      return true
-    }
-    return false
   }
 
   private var isStarred: Bool { episodeModel?.isStarred ?? false }
   private var isCompleted: Bool { episodeModel?.isCompleted ?? false }
   private var playbackProgress: Double { episodeModel?.progress ?? 0 }
-
-  private var isPlayingThisEpisode: Bool {
-    guard let currentEpisode = audioManager.currentEpisode else {
-      return false
-    }
-    return currentEpisode.title == episode.title
-      && currentEpisode.podcastTitle == podcastTitle
-  }
 
   private var episodeImageURL: String {
     episode.imageURL ?? fallbackImageURL ?? ""
@@ -252,13 +215,22 @@ struct EpisodeRowView: View {
       if cachedPlainDescription == nil {
         cachedPlainDescription = plainDescription
       }
-      if !hasAIAnalysis {
-        let checker = EpisodeStatusChecker(
-          episodeTitle: episode.title,
-          podcastTitle: podcastTitle,
-          audioURL: episode.audioURL
-        )
-        hasAIAnalysis = checker.hasAIAnalysis(in: modelContext)
+      let checker = EpisodeStatusChecker(
+        episodeTitle: episode.title,
+        podcastTitle: podcastTitle,
+        audioURL: episode.audioURL
+      )
+      // Cache disk-dependent status once per appearance rather than per body
+      // evaluation. Without this we hit the filesystem for every visible row
+      // every time SwiftUI re-renders the list.
+      hasCaptions = checker.hasTranscript
+      hasAIAnalysis = checker.hasAIAnalysis(in: modelContext)
+    }
+    .onChange(of: transcriptJob?.status) { _, status in
+      // When the transcript job for THIS row finishes, refresh the cached
+      // captions flag so the icon appears without needing to leave/return.
+      if case .completed = status {
+        hasCaptions = true
       }
     }
   }
@@ -269,18 +241,12 @@ struct EpisodeRowView: View {
       // Using CachedAsyncImage for better performance
       CachedArtworkImage(urlString: episodeImageURL, size: 90, cornerRadius: 8)
 
-      // Playing indicator overlay
-      if isPlayingThisEpisode {
-        Image(
-          systemName: audioManager.isPlaying
-            ? "waveform" : "pause.fill"
-        )
-        .font(.system(size: 12, weight: .bold))
-        .foregroundStyle(.white)
-        .padding(4)
-        .glassEffect(.regular.tint(.blue), in: .rect(cornerRadius: 4))
-        .padding(4)
-      }
+      // Audio-manager observation is isolated inside this subview so the
+      // whole row doesn't re-render on every isPlaying / currentTime tick.
+      EpisodeRowPlayingIndicator(
+        episodeTitle: episode.title,
+        podcastTitle: podcastTitle
+      )
     }
   }
 
@@ -382,20 +348,10 @@ struct EpisodeRowView: View {
           Image(systemName: "captions.bubble.fill")
             .font(.system(size: 10))
             .foregroundStyle(.purple)
-        } else if isTranscribing {
-          HStack(spacing: 2) {
-            ProgressView().scaleEffect(0.35)
-            if isDownloadingModel {
-              Text("Model")
-                .font(.system(size: 8))
-                .foregroundStyle(.purple)
-            }
-            if let progress = transcriptProgress {
-              Text("\(Int(progress * 100))%")
-                .font(.system(size: 8))
-                .foregroundStyle(.purple)
-            }
-          }
+        } else {
+          // Transcript-manager observation is isolated in this subview so
+          // the row body doesn't re-render on every transcript progress tick.
+          EpisodeRowTranscriptIndicator(episodeKey: episodeKey)
         }
 
         if hasAIAnalysis {
@@ -590,5 +546,81 @@ struct EpisodeRowView: View {
       return
     }
     PlatformShareSheet.share(url: url)
+  }
+}
+
+// MARK: - Transcript Indicator
+
+/// Small chip showing transcript generation progress for this row.
+/// Owns the `TranscriptManager.shared.activeJobs` subscription so transcript
+/// progress ticks only re-render this view, not the entire row.
+private struct EpisodeRowTranscriptIndicator: View {
+  let episodeKey: String
+
+  private var transcriptManager: TranscriptManager { .shared }
+
+  private var job: TranscriptJob? {
+    transcriptManager.activeJobs[episodeKey]
+  }
+
+  var body: some View {
+    if let job {
+      switch job.status {
+      case .downloadingModel(let progress):
+        HStack(spacing: 2) {
+          ProgressView().scaleEffect(0.35)
+          Text("Model")
+            .font(.system(size: 8))
+            .foregroundStyle(.purple)
+          Text("\(Int(progress * 100))%")
+            .font(.system(size: 8))
+            .foregroundStyle(.purple)
+        }
+      case .transcribing(let progress):
+        HStack(spacing: 2) {
+          ProgressView().scaleEffect(0.35)
+          Text("\(Int(progress * 100))%")
+            .font(.system(size: 8))
+            .foregroundStyle(.purple)
+        }
+      case .queued:
+        HStack(spacing: 2) {
+          ProgressView().scaleEffect(0.35)
+        }
+      case .completed, .failed:
+        EmptyView()
+      }
+    }
+  }
+}
+
+// MARK: - Playing Indicator
+
+/// Tiny overlay that shows the playing / paused glyph when this row's
+/// episode is the one loaded in `EnhancedAudioManager`. Extracting it from
+/// `EpisodeRowView` is a performance win: only this subview re-renders when
+/// `audioManager.isPlaying` or `audioManager.currentEpisode` change, instead
+/// of every visible row.
+private struct EpisodeRowPlayingIndicator: View {
+  let episodeTitle: String
+  let podcastTitle: String
+
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  private var isPlayingThisEpisode: Bool {
+    guard let currentEpisode = audioManager.currentEpisode else { return false }
+    return currentEpisode.title == episodeTitle
+      && currentEpisode.podcastTitle == podcastTitle
+  }
+
+  var body: some View {
+    if isPlayingThisEpisode {
+      Image(systemName: audioManager.isPlaying ? "waveform" : "pause.fill")
+        .font(.system(size: 12, weight: .bold))
+        .foregroundStyle(.white)
+        .padding(4)
+        .glassEffect(.regular.tint(.blue), in: .rect(cornerRadius: 4))
+        .padding(4)
+    }
   }
 }
