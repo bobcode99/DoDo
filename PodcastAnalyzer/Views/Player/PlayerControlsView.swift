@@ -110,11 +110,19 @@ struct PlayerControlsView: View {
                 Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: playSize))
                     .foregroundStyle(.primary)
+                    // SF Symbols' default `.replace` content transition runs a
+                    // ~0.25s crossfade between play and pause glyphs, which
+                    // makes the central button feel laggy on tap. `.identity`
+                    // swaps the glyph on the next frame instead.
+                    .contentTransition(.identity)
             }
             .buttonStyle(.plain)
             .frame(width: playFrame)
             .keyboardShortcut(.space, modifiers: [])
             .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
+            // Strip any animation inherited from the ExpandedPlayerView
+            // transition so the button doesn't crossfade its layout on tap.
+            .transaction { $0.animation = nil }
 
             Button(action: viewModel.skipForward) {
                 Image(systemName: "goforward.\(skipForwardInterval)")
