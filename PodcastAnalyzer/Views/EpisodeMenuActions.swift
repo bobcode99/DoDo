@@ -22,6 +22,10 @@ struct EpisodeMenuActions: View {
   let onDeleteDownload: () -> Void
   let onShare: () -> Void
   var onPlayNext: (() -> Void)? = nil
+  /// Apple-Podcasts-style "Remove from Up Next". When non-nil the menu appends
+  /// a destructive remove button after Share. Only the Up Next list passes
+  /// this closure — other call sites leave it nil.
+  var onRemoveFromUpNext: (() -> Void)? = nil
 
   // For Apple Podcast URL sharing
   var episodeTitle: String? = nil
@@ -64,6 +68,13 @@ struct EpisodeMenuActions: View {
     if audioURL != nil {
       Button(action: onShare) {
         Label("Share Episode", systemImage: "square.and.arrow.up")
+      }
+    }
+
+    if let onRemoveFromUpNext {
+      Divider()
+      Button(role: .destructive, action: onRemoveFromUpNext) {
+        Label("Remove from Up Next", systemImage: "text.badge.minus")
       }
     }
   }

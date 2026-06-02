@@ -420,7 +420,8 @@ struct EpisodeRowView: View {
           guid: episode.guid
         )
         audioManager.playNext(playbackEpisode)
-      }
+      },
+      onRemoveFromUpNext: onRemoveFromUpNext
     )
   }
 
