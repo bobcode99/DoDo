@@ -124,7 +124,10 @@ actor YapTranscriptService {
         audioURL: URL,
         locale: String?,
         baseURL: URL,
-        apiKey: String?
+        apiKey: String?,
+        name: String? = nil,
+        detectMusic: Bool? = nil,
+        musicSensitivity: String? = nil
     ) async throws -> String {
         let maxLen = maxLength(for: locale)
         var components = URLComponents(url: baseURL.appending(path: "transcriptions"), resolvingAgainstBaseURL: false)!
@@ -135,6 +138,15 @@ actor YapTranscriptService {
         ]
         if let loc = resolvedLocale {
             queryItems.append(URLQueryItem(name: "locale", value: loc))
+        }
+        if let name {
+            queryItems.append(URLQueryItem(name: "name", value: name))
+        }
+        if let detectMusic {
+            queryItems.append(URLQueryItem(name: "detect_music", value: detectMusic ? "true" : "false"))
+        }
+        if let musicSensitivity {
+            queryItems.append(URLQueryItem(name: "music_sensitivity", value: musicSensitivity))
         }
         components.queryItems = queryItems
 
@@ -172,7 +184,10 @@ actor YapTranscriptService {
         remoteURL: String,
         locale: String?,
         baseURL: URL,
-        apiKey: String?
+        apiKey: String?,
+        name: String? = nil,
+        detectMusic: Bool? = nil,
+        musicSensitivity: String? = nil
     ) async throws -> String {
         let url = baseURL.appending(path: "transcriptions")
 
@@ -184,6 +199,15 @@ actor YapTranscriptService {
         ]
         if let loc = resolvedLocale {
             body["locale"] = loc
+        }
+        if let name {
+            body["name"] = name
+        }
+        if let detectMusic {
+            body["detect_music"] = detectMusic
+        }
+        if let musicSensitivity {
+            body["music_sensitivity"] = musicSensitivity
         }
 
         logger.info("[YapServer] submitRemoteURLJob locale_in=\(locale ?? "<nil>") locale_out=\(resolvedLocale ?? "<omitted>") body=\(body)")

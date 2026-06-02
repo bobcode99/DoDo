@@ -501,6 +501,13 @@ class TranscriptManager {
         let apiKey = await MainActor.run { YapServerSettings.shared.apiKey }
         let key = apiKey.isEmpty ? nil : apiKey
 
+        // Forward the global subtitle settings so Yap uses the same music
+        // detection behavior as the local Apple Speech path.
+        let detectMusic = await MainActor.run { SubtitleSettingsManager.shared.enableMusicDetection }
+        let musicSensitivity = await MainActor.run {
+          SubtitleSettingsManager.shared.musicDetectionSensitivity.rawValue
+        }
+
         guard let base = URL(string: serverURL) else {
           throw YapError.invalidServerURL
         }
@@ -514,10 +521,16 @@ class TranscriptManager {
         let yapJobID: String
         if fileExists {
           yapJobID = try await yapService.submitJob(
-            audioURL: audioURL, locale: job.language, baseURL: base, apiKey: key)
+            audioURL: audioURL, locale: job.language, baseURL: base, apiKey: key,
+            name: job.episodeTitle,
+            detectMusic: detectMusic,
+            musicSensitivity: musicSensitivity)
         } else if let remoteURLString = job.audioRemoteURL, !remoteURLString.isEmpty {
           yapJobID = try await yapService.submitRemoteURLJob(
-            remoteURL: remoteURLString, locale: job.language, baseURL: base, apiKey: key)
+            remoteURL: remoteURLString, locale: job.language, baseURL: base, apiKey: key,
+            name: job.episodeTitle,
+            detectMusic: detectMusic,
+            musicSensitivity: musicSensitivity)
         } else {
           throw NSError(
             domain: "TranscriptManager", code: 3,
