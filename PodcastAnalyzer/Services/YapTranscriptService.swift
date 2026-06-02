@@ -28,6 +28,17 @@ enum YapError: LocalizedError {
     }
 }
 
+// MARK: - YapHealthResult
+
+/// Result of the Test Connection probe — pairs the /health status with the
+/// list of available backends so the Settings UI can confirm both reachability
+/// and (when an API key is configured) authentication in one shot.
+struct YapHealthResult: Sendable {
+    let healthStatus: String
+    let backends: [String]
+    let defaultBackend: String
+}
+
 // MARK: - YapTranscriptService
 
 actor YapTranscriptService {
@@ -92,6 +103,65 @@ actor YapTranscriptService {
         logger.info("Yap remote-URL job submitted, id=\(jobID)")
         onJobSubmitted?(jobID)
         return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
+    }
+
+    /// Hits `GET /health` and `GET /backends` to confirm the yap server is
+    /// reachable and that the configured API key (when present) is accepted.
+    /// `/health` is auth-free; `/backends` is auth-gated, so a 401 here is a
+    /// clear signal that the API key is wrong.
+    func checkHealth(serverURL: String, apiKey: String?) async throws -> YapHealthResult {
+        guard let base = URL(string: serverURL) else {
+            throw YapError.invalidServerURL
+        }
+
+        let healthStatus = try await fetchHealth(baseURL: base, apiKey: apiKey)
+        let (backends, defaultBackend) = try await fetchBackends(baseURL: base, apiKey: apiKey)
+        return YapHealthResult(
+            healthStatus: healthStatus,
+            backends: backends,
+            defaultBackend: defaultBackend
+        )
+    }
+
+    private func fetchHealth(baseURL: URL, apiKey: String?) async throws -> String {
+        let url = baseURL.appending(path: "health")
+        var request = URLRequest(url: url)
+        if let key = apiKey, !key.isEmpty {
+            request.setValue(key, forHTTPHeaderField: "X-API-Key")
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw YapError.serverError("Non-HTTP response from /health")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw YapError.serverError("HTTP \(httpResponse.statusCode) from /health")
+        }
+        struct HealthResponse: Decodable { let status: String }
+        return try JSONDecoder().decode(HealthResponse.self, from: data).status
+    }
+
+    private func fetchBackends(baseURL: URL, apiKey: String?) async throws -> ([String], String) {
+        let url = baseURL.appending(path: "backends")
+        var request = URLRequest(url: url)
+        if let key = apiKey, !key.isEmpty {
+            request.setValue(key, forHTTPHeaderField: "X-API-Key")
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw YapError.serverError("Non-HTTP response from /backends")
+        }
+        if httpResponse.statusCode == 401 {
+            throw YapError.serverError("Unauthorized — check API key")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw YapError.serverError("HTTP \(httpResponse.statusCode) from /backends")
+        }
+        struct BackendsResponse: Decodable {
+            let backends: [String]
+            let `default`: String
+        }
+        let decoded = try JSONDecoder().decode(BackendsResponse.self, from: data)
+        return (decoded.backends, decoded.default)
     }
 
     /// Sends DELETE /transcriptions/{id} to cancel a queued or running yap server job.
