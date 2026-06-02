@@ -73,26 +73,21 @@ struct TrendingEpisodeDetailDestination: Hashable {
 
 struct HomeView: View {
   @State private var viewModel = HomeViewModel()
-  @State private var syncManager = BackgroundSyncManager.shared
   @Environment(\.modelContext) private var modelContext
   @State private var showRegionPicker = false
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
-        // Up Next Section
-        upNextSection
+        UpNextSection(viewModel: viewModel)
 
-        // For You Section (on-device AI recommendations)
         if #available(iOS 26.0, macOS 26.0, *) {
-          forYouSection
+          ForYouSection(viewModel: viewModel)
         }
 
-        // Trending Episodes Section
-        trendingEpisodesSection
+        TrendingEpisodesSection(viewModel: viewModel)
 
-        // Popular Shows Section
-        popularShowsSection
+        PopularShowsSection(viewModel: viewModel)
       }
       .padding(.vertical)
     }
@@ -144,18 +139,8 @@ struct HomeView: View {
     .navigationTitle(Constants.homeString)
     .platformToolbarTitleDisplayMode()
     .toolbar {
-      if syncManager.isSyncing {
-        ToolbarItem(placement: .navigation) {
-          HStack(spacing: 6) {
-            ProgressView().scaleEffect(0.7)
-            if syncManager.syncProgressTotal > 0 {
-              Text("\(syncManager.syncProgressCurrent)/\(syncManager.syncProgressTotal)")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-            }
-          }
-          .transition(.opacity)
-        }
+      ToolbarItem(placement: .navigation) {
+        SyncProgressToolbarBadge()
       }
       ToolbarItem(placement: .primaryAction) {
         Button(action: { showRegionPicker = true }) {
@@ -191,311 +176,6 @@ struct HomeView: View {
     }
   }
 
-  // MARK: - Up Next Context Menu Builder
-
-  private func upNextContextMenu(for episode: LibraryEpisode) -> UpNextContextMenu {
-    let checker = EpisodeStatusChecker(episode: episode)
-    return UpNextContextMenu(
-      episode: episode,
-      isStarred: episode.isStarred,
-      isCompleted: episode.isCompleted,
-      downloadState: checker.downloadState,
-      podcastModel: viewModel.findPodcastModel(for: episode.podcastTitle),
-      onToggleStar: { viewModel.toggleStar(for: episode) },
-      onTogglePlayed: { viewModel.togglePlayed(for: episode) },
-      onPlayNext: {
-        guard let audioURL = episode.episodeInfo.audioURL else { return }
-        let playbackEpisode = PlaybackEpisode(
-          id: episode.id,
-          title: episode.episodeInfo.title,
-          podcastTitle: episode.podcastTitle,
-          audioURL: audioURL,
-          imageURL: episode.imageURL,
-          episodeDescription: episode.episodeInfo.podcastEpisodeDescription,
-          pubDate: episode.episodeInfo.pubDate,
-          duration: episode.episodeInfo.duration,
-          guid: episode.episodeInfo.guid
-        )
-        EnhancedAudioManager.shared.playNext(playbackEpisode)
-      },
-      onDownload: {
-        DownloadManager.shared.downloadEpisode(
-          episode: episode.episodeInfo,
-          podcastTitle: episode.podcastTitle,
-          language: episode.language
-        )
-      },
-      onCancelDownload: {
-        DownloadManager.shared.cancelDownload(
-          episodeTitle: episode.episodeInfo.title,
-          podcastTitle: episode.podcastTitle
-        )
-      },
-      onDeleteDownload: {
-        DownloadManager.shared.deleteDownload(
-          episodeTitle: episode.episodeInfo.title,
-          podcastTitle: episode.podcastTitle
-        )
-      },
-      onRetryDownload: {
-        DownloadManager.shared.downloadEpisode(
-          episode: episode.episodeInfo,
-          podcastTitle: episode.podcastTitle,
-          language: episode.language
-        )
-      }
-    )
-  }
-
-  // MARK: - Up Next Section
-
-  @ViewBuilder
-  private var upNextSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .bottom) {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Up Next")
-            .font(.title2)
-            .fontWeight(.bold)
-          if viewModel.continueListeningCount > 0 {
-            Text("\(viewModel.continueListeningCount) in progress")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-        }
-
-        Spacer()
-
-        if !viewModel.upNextEpisodes.isEmpty {
-          NavigationLink(value: UpNextListRoute(episodes: viewModel.upNextEpisodes)) {
-            Text("See All")
-              .font(.subheadline)
-              .foregroundStyle(.blue)
-          }
-        }
-      }
-      .padding(.horizontal)
-
-      if viewModel.upNextEpisodes.isEmpty {
-        VStack(spacing: 8) {
-          Image(systemName: "play.circle")
-            .font(.system(size: 40))
-            .foregroundStyle(.gray)
-          Text("No unplayed episodes")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-          Text("Subscribe to podcasts to see new episodes here")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-      } else {
-        ScrollView(.horizontal) {
-          HStack(spacing: 12) {
-            ForEach(viewModel.scoredUpNextEpisodes.prefix(10)) { scored in
-              NavigationLink(
-                value: EpisodeDetailRoute(
-                  episode: scored.episode.episodeInfo,
-                  podcastTitle: scored.episode.podcastTitle,
-                  fallbackImageURL: scored.episode.imageURL,
-                  podcastLanguage: scored.episode.language
-                )
-              ) {
-                UpNextCard(
-                  episode: scored.episode,
-                  onPlay: { viewModel.playEpisode(scored.episode) },
-                  reason: scored.reason
-                )
-              }
-              .buttonStyle(.plain)
-              .contextMenu {
-                upNextContextMenu(for: scored.episode)
-              }
-            }
-          }
-          .padding(.horizontal)
-        }
-        .scrollIndicators(.never)
-        .animation(.default, value: viewModel.scoredUpNextIDs)
-      }
-    }
-  }
-
-  // MARK: - For You Section
-
-  @available(iOS 26.0, macOS 26.0, *)
-  @ViewBuilder
-  private var forYouSection: some View {
-    if viewModel.showForYouRecommendations && (!viewModel.recommendedEpisodes.isEmpty || viewModel.isLoadingRecommendations) {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          Image(systemName: "star.leadinghalf.filled")
-            .foregroundStyle(.purple)
-          Text("For You")
-            .font(.title2)
-            .fontWeight(.bold)
-
-          Spacer()
-
-          if viewModel.isLoadingRecommendations {
-            ProgressView()
-              .scaleEffect(0.8)
-          } else {
-            Button {
-              viewModel.refreshRecommendations()
-            } label: {
-              Image(systemName: "arrow.clockwise")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.borderless)
-          }
-        }
-        .padding(.horizontal)
-
-        if viewModel.isLoadingRecommendations && viewModel.recommendedEpisodes.isEmpty {
-          HStack(spacing: 8) {
-            ProgressView()
-              .scaleEffect(0.7)
-            Text("Finding episodes for you...")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 24)
-        } else {
-          ScrollView(.horizontal) {
-            HStack(spacing: 12) {
-              ForEach(Array(viewModel.recommendedEpisodes.enumerated()), id: \.element.id) { index, episode in
-                NavigationLink(
-                  value: EpisodeDetailRoute(
-                    episode: episode.episodeInfo,
-                    podcastTitle: episode.podcastTitle,
-                    fallbackImageURL: episode.imageURL,
-                    podcastLanguage: episode.language
-                  )
-                ) {
-                  ForYouCard(
-                    episode: episode
-                  )
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                  upNextContextMenu(for: episode)
-                }
-              }
-            }
-            .padding(.horizontal)
-          }
-          .scrollIndicators(.never)
-        }
-      }
-    }
-  }
-
-  // MARK: - Trending Episodes Section
-
-  @ViewBuilder
-  private var trendingEpisodesSection: some View {
-    if viewModel.showTrendingEpisodes && (!viewModel.trendingEpisodes.isEmpty || viewModel.isLoadingTrendingEpisodes) {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          Text("Top Episodes")
-            .font(.title2)
-            .fontWeight(.bold)
-
-          Spacer()
-
-          if viewModel.isLoadingTrendingEpisodes {
-            ProgressView()
-              .scaleEffect(0.8)
-          }
-
-          if !viewModel.trendingEpisodes.isEmpty {
-            NavigationLink(value: TrendingEpisodesDestination()) {
-              HStack(spacing: 2) {
-                Text("See All")
-                  .font(.subheadline)
-                Image(systemName: "chevron.right")
-                  .font(.caption)
-              }
-              .foregroundStyle(.blue)
-            }
-          }
-        }
-        .padding(.horizontal)
-
-        if viewModel.trendingEpisodes.isEmpty && viewModel.isLoadingTrendingEpisodes {
-          HStack {
-            Spacer()
-            ProgressView()
-            Spacer()
-          }
-          .frame(height: 120)
-        } else {
-          TrendingEpisodesPagedView(
-            episodes: Array(viewModel.trendingEpisodes.prefix(12))
-          )
-        }
-      }
-    }
-  }
-
-  // MARK: - Popular Shows Section
-
-  @ViewBuilder
-  private var popularShowsSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("Popular Shows")
-          .font(.title2)
-          .fontWeight(.bold)
-
-        Spacer()
-
-        if viewModel.isLoadingTopPodcasts {
-          ProgressView()
-            .scaleEffect(0.8)
-        }
-
-        if !viewModel.topPodcasts.isEmpty {
-          NavigationLink(value: PopularShowsDestination()) {
-            Text("See All")
-              .font(.subheadline)
-              .foregroundStyle(.blue)
-          }
-        }
-      }
-      .padding(.horizontal)
-
-      if viewModel.topPodcasts.isEmpty && !viewModel.isLoadingTopPodcasts {
-        VStack(spacing: 8) {
-          Image(systemName: "chart.line.uptrend.xyaxis")
-            .font(.system(size: 40))
-            .foregroundStyle(.gray)
-          Text("Unable to load popular shows")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-      } else {
-        VStack(spacing: 0) {
-          ForEach(Array(viewModel.topPodcasts.prefix(25).enumerated()), id: \.element.id) { index, podcast in
-            TopPodcastRow(
-              podcast: podcast,
-              rank: index + 1,
-              isSubscribed: viewModel.isAlreadySubscribed(podcast),
-              onSubscribe: { viewModel.subscribeToPodcast(podcast) }
-            )
-          }
-        }
-        .padding(.horizontal)
-      }
-    }
-  }
 }
 
 #Preview {

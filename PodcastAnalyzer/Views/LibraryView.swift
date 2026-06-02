@@ -11,7 +11,6 @@ import SwiftUI
 
 struct LibraryView: View {
   @State private var viewModel = LibraryViewModel(modelContext: nil)
-  @State private var syncManager = BackgroundSyncManager.shared
   @State private var showTranscriptProgressSheet = false
   @AppStorage("showEpisodeArtwork") private var showEpisodeArtwork = true
   @Environment(\.modelContext) private var modelContext
@@ -76,18 +75,8 @@ struct LibraryView: View {
     .navigationTitle(Constants.libraryString)
     .platformToolbarTitleDisplayMode()
     .toolbar {
-      if syncManager.isSyncing {
-        ToolbarItem(placement: .navigation) {
-          HStack(spacing: 6) {
-            ProgressView().scaleEffect(0.7)
-            if syncManager.syncProgressTotal > 0 {
-              Text("\(syncManager.syncProgressCurrent)/\(syncManager.syncProgressTotal)")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-            }
-          }
-          .transition(.opacity)
-        }
+      ToolbarItem(placement: .navigation) {
+        SyncProgressToolbarBadge()
       }
       ToolbarItem(placement: .navigation) {
         // Isolated subview observes TranscriptManager so progress ticks don't
