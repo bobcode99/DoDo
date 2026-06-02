@@ -500,6 +500,29 @@ struct SettingsView: View {
               }
             }
           }
+
+          if SubtitleSettingsManager.shared.enableMusicDetection {
+            Picker(selection: Binding(
+              get: { SubtitleSettingsManager.shared.musicDetectionSensitivity },
+              set: { SubtitleSettingsManager.shared.musicDetectionSensitivity = $0 }
+            )) {
+              ForEach(MusicDetectionSensitivity.allCases, id: \.self) { level in
+                Text(level.displayName).tag(level)
+              }
+            } label: {
+              HStack {
+                Image(systemName: "dial.medium")
+                  .foregroundStyle(.pink)
+                  .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                  Text("Music Sensitivity")
+                  Text("Higher = stricter; lower catches faint music")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+              }
+            }
+          }
         } header: {
           Text("Transcript")
         } footer: {

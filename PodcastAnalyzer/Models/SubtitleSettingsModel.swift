@@ -139,6 +139,35 @@ enum TranslationTargetLanguage: String, CaseIterable, Codable, Sendable {
   }
 }
 
+// MARK: - Music Detection Sensitivity
+
+/// Confidence threshold preset for the SoundAnalysis music classifier.
+/// Lower thresholds catch more music (including faint background beds) but
+/// risk flagging speech-with-music as music; higher thresholds only mark
+/// clearly musical passages.
+enum MusicDetectionSensitivity: String, CaseIterable, Codable, Sendable {
+  case low
+  case medium
+  case high
+
+  /// The confidence cutoff passed to `MusicDetectionService.detectMusicRanges`.
+  var minimumConfidence: Double {
+    switch self {
+    case .low: return 0.4
+    case .medium: return 0.6
+    case .high: return 0.8
+    }
+  }
+
+  var displayName: String {
+    switch self {
+    case .low: return "Low"
+    case .medium: return "Medium"
+    case .high: return "High"
+    }
+  }
+}
+
 // MARK: - Settings Manager
 
 /// Manages subtitle display and translation preferences
@@ -180,6 +209,13 @@ final class SubtitleSettingsManager {
     didSet { saveSettings() }
   }
 
+  /// Confidence threshold preset for the music classifier. Higher = stricter
+  /// (fewer false positives on speech-with-music); lower = more aggressive
+  /// (catches faint intro/outro music).
+  var musicDetectionSensitivity: MusicDetectionSensitivity = .medium {
+    didSet { saveSettings() }
+  }
+
   // MARK: - UserDefaults Keys
 
   private enum Keys {
@@ -189,6 +225,7 @@ final class SubtitleSettingsManager {
     static let autoDownloadTranscripts = "subtitle_auto_download_transcripts"
     static let autoGenerateTranscripts = "subtitle_auto_generate_transcripts"
     static let enableMusicDetection = "subtitle_enable_music_detection"
+    static let musicDetectionSensitivity = "subtitle_music_detection_sensitivity"
   }
 
   // MARK: - Initialization
@@ -229,6 +266,11 @@ final class SubtitleSettingsManager {
     if defaults.object(forKey: Keys.enableMusicDetection) != nil {
       enableMusicDetection = defaults.bool(forKey: Keys.enableMusicDetection)
     }
+
+    if let raw = defaults.string(forKey: Keys.musicDetectionSensitivity),
+       let value = MusicDetectionSensitivity(rawValue: raw) {
+      musicDetectionSensitivity = value
+    }
   }
 
   private func saveSettings() {
@@ -239,6 +281,7 @@ final class SubtitleSettingsManager {
     defaults.set(autoDownloadTranscripts, forKey: Keys.autoDownloadTranscripts)
     defaults.set(autoGenerateTranscripts, forKey: Keys.autoGenerateTranscripts)
     defaults.set(enableMusicDetection, forKey: Keys.enableMusicDetection)
+    defaults.set(musicDetectionSensitivity.rawValue, forKey: Keys.musicDetectionSensitivity)
   }
 
   // MARK: - Translation Availability

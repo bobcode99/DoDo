@@ -65,8 +65,12 @@ extension TranscriptService {
         // detection typically finishes well before transcription, so the
         // overlap is essentially free.
         let musicDetectionEnabled = await SubtitleSettingsManager.shared.enableMusicDetection
+        let musicDetectionConfidence = await SubtitleSettingsManager.shared
+          .musicDetectionSensitivity.minimumConfidence
         async let musicRangesTask = Self.detectMusicIfEnabled(
-          audioURL: audioURL, enabled: musicDetectionEnabled
+          audioURL: audioURL,
+          enabled: musicDetectionEnabled,
+          minimumConfidence: musicDetectionConfidence
         )
 
         self.logger.info("Exporting audio chunks (chunkDuration: \(chunkDuration)s)")
@@ -183,9 +187,13 @@ extension TranscriptService {
   /// of the toggle state.
   private static func detectMusicIfEnabled(
     audioURL: URL,
-    enabled: Bool
+    enabled: Bool,
+    minimumConfidence: Double
   ) async -> [MusicDetectionService.TimeRange] {
     guard enabled else { return [] }
-    return await MusicDetectionService.detectMusicRanges(in: audioURL)
+    return await MusicDetectionService.detectMusicRanges(
+      in: audioURL,
+      minimumConfidence: minimumConfidence
+    )
   }
 }
