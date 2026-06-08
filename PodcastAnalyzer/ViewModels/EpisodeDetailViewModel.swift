@@ -171,8 +171,7 @@ final class EpisodeDetailViewModel {
   // RSS transcript state (from podcast:transcript tag)
   var rssTranscriptState: TranscriptDownloadState = .notAvailable
 
-  // DAI source tracking
-  var transcriptSource: String = ""
+  // DAI source tracking — computed from the live `EpisodeDownloadModel` below.
 
   // Translation state
   var translationStatus: TranslationStatus = .idle
@@ -197,16 +196,15 @@ final class EpisodeDetailViewModel {
   @ObservationIgnored
   private let subtitleSettings = SubtitleSettingsManager.shared
 
-  // Playback state from SwiftData
-  @ObservationIgnored
-  private var episodeModel: EpisodeDownloadModel?
+  // Playback state from SwiftData. NOT @ObservationIgnored — once set,
+  // reading `episodeModel?.<property>` in computed properties registers
+  // Observation through both this view model and the @Model itself, so any
+  // write by PlaybackStateCoordinator (same main context) re-renders the
+  // detail view without a notification round-trip.
+  private(set) var episodeModel: EpisodeDownloadModel?
 
   @ObservationIgnored
   private var modelContext: ModelContext?
-
-  // Notification-driven playback position observer (replaces polling)
-  @ObservationIgnored
-  private var playbackObserverTask: Task<Void, Never>?
 
   // Translation task for cancellation
   @ObservationIgnored
@@ -322,7 +320,6 @@ final class EpisodeDetailViewModel {
       podcastLanguage = lang
     }
     loadEpisodeModel()
-    observePlaybackPosition()
     loadAIAnalysisFromSwiftData()
     observeCloudAnalysisJobFinished()
   }
@@ -418,13 +415,17 @@ final class EpisodeDetailViewModel {
     isPlayingThisEpisode ? audioManager.currentCaption : ""
   }
 
-  // Tracked stored properties — updated explicitly so SwiftUI re-renders even
-  // when episodeModel was nil at the initial render (episodeModel is @ObservationIgnored).
-  var isStarred: Bool = false
-  var isCompleted: Bool = false
-  var savedDuration: TimeInterval = 0
-  var lastPlaybackPosition: TimeInterval = 0
-  var playbackProgress: Double = 0
+  // Live mirrors of the SwiftData EpisodeDownloadModel. Reading any of these
+  // in a SwiftUI view body registers an Observation dependency on
+  // `episodeModel` and (transitively) on the @Model's accessed property, so
+  // updates from PlaybackStateCoordinator propagate without a 5s notification
+  // round-trip.
+  var isStarred: Bool { episodeModel?.isStarred ?? false }
+  var isCompleted: Bool { episodeModel?.isCompleted ?? false }
+  var savedDuration: TimeInterval { episodeModel?.duration ?? 0 }
+  var lastPlaybackPosition: TimeInterval { episodeModel?.lastPlaybackPosition ?? 0 }
+  var playbackProgress: Double { episodeModel?.progress ?? 0 }
+  var transcriptSource: String { episodeModel?.transcriptSource ?? "" }
 
   var formattedDuration: String? {
     episode.formattedDuration
@@ -470,7 +471,6 @@ final class EpisodeDetailViewModel {
         model.lastPlaybackPosition = 0
         model.isCompleted = false
         try? modelContext?.save()
-        syncTrackedProperties(from: model)
         startTime = 0
 
         // Force new player if this is the same episode (AVPlayer may be at end-of-media)
@@ -574,46 +574,6 @@ final class EpisodeDetailViewModel {
     downloadManager.deleteDownload(episodeTitle: episode.title, podcastTitle: podcastTitle)
   }
 
-  /// Listen for playback position updates via notification (posted every 5s by EnhancedAudioManager)
-  private func observePlaybackPosition() {
-    playbackObserverTask?.cancel()
-    playbackObserverTask = Task { @MainActor [weak self] in
-      for await _ in NotificationCenter.default.notifications(named: .playbackPositionDidUpdate) {
-        guard !Task.isCancelled else { break }
-        self?.refreshEpisodeModel()
-      }
-    }
-  }
-
-  private func refreshEpisodeModel() {
-    guard let context = modelContext else { return }
-
-    let id = episodeKey
-    let descriptor = FetchDescriptor<EpisodeDownloadModel>(
-      predicate: #Predicate { $0.id == id }
-    )
-
-    do {
-      let results = try context.fetch(descriptor)
-      if let model = results.first {
-        episodeModel = model
-        syncTrackedProperties(from: model)
-      }
-    } catch {
-      // Silent fail - model will be refreshed on next timer tick
-    }
-  }
-
-  /// Sync tracked stored properties from the episodeModel so SwiftUI sees changes.
-  private func syncTrackedProperties(from model: EpisodeDownloadModel) {
-    isStarred = model.isStarred
-    isCompleted = model.isCompleted
-    savedDuration = model.duration
-    lastPlaybackPosition = model.lastPlaybackPosition
-    playbackProgress = model.progress
-    transcriptSource = model.transcriptSource
-  }
-
   // MARK: - SwiftData Persistence
 
   private func loadEpisodeModel() {
@@ -628,7 +588,6 @@ final class EpisodeDetailViewModel {
       let results = try context.fetch(descriptor)
       if let model = results.first {
         episodeModel = model
-        syncTrackedProperties(from: model)
       } else {
         // Create new model
         createEpisodeModel(context: context)
@@ -653,7 +612,6 @@ final class EpisodeDetailViewModel {
     do {
       try context.save()
       episodeModel = model
-      syncTrackedProperties(from: model)
     } catch {
       logger.error("Failed to create episode model: \(error.localizedDescription)")
     }
@@ -678,8 +636,6 @@ final class EpisodeDetailViewModel {
     } catch {
       logger.error("Failed to save playback position: \(error.localizedDescription)")
     }
-
-    syncTrackedProperties(from: model)
   }
 
   private func updateLastPlayed() {
@@ -1121,7 +1077,6 @@ final class EpisodeDetailViewModel {
     } catch {
       logger.error("Failed to save star state: \(error.localizedDescription)")
     }
-    syncTrackedProperties(from: model)
   }
 
   func togglePlayed() {
@@ -1144,7 +1099,6 @@ final class EpisodeDetailViewModel {
     } catch {
       logger.error("Failed to save played state: \(error.localizedDescription)")
     }
-    syncTrackedProperties(from: model)
   }
 
   func addToPlayNext() {
@@ -1223,7 +1177,6 @@ final class EpisodeDetailViewModel {
         // Track that this transcript came from RSS
         if let model = self.episodeModel {
           model.transcriptSource = "rss"
-          self.transcriptSource = "rss"
           try? self.modelContext?.save()
         }
 
@@ -1375,7 +1328,6 @@ final class EpisodeDetailViewModel {
     // Mark as locally generated
     if let model = episodeModel {
       model.transcriptSource = "local"
-      transcriptSource = "local"
       try? modelContext?.save()
     }
 
@@ -2360,10 +2312,6 @@ final class EpisodeDetailViewModel {
     // Cancel share task
     shareTask?.cancel()
     shareTask = nil
-
-    // Cancel playback observer
-    playbackObserverTask?.cancel()
-    playbackObserverTask = nil
 
     // Cancel translation task
     translationTask?.cancel()

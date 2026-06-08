@@ -1416,6 +1416,16 @@ private func handleAudioInterruption(_ notification: Notification) {
     logger.info("Playback ended")
     isPlaying = false
 
+    // Persist a final position == duration so PlaybackStateCoordinator flips
+    // model.isCompleted = true and downstream views (EpisodeListView,
+    // Library lists) re-render to the replay state. The periodic 5s save
+    // alone can miss the actual end since the last tick may land seconds
+    // before AVPlayerItemDidPlayToEndTime fires.
+    if duration > 0 {
+      currentTime = duration
+      postPlaybackPositionUpdate()
+    }
+
     // Remove current episode from auto-play candidates (it's been fully played)
     if let currentId = currentEpisode?.id {
       removeFromAutoPlayCandidates(currentId)

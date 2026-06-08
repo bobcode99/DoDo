@@ -23,6 +23,11 @@ struct UpNextContextMenu: View {
   let onCancelDownload: () -> Void
   let onDeleteDownload: () -> Void
   let onRetryDownload: () -> Void
+  /// Optional Apple-Podcasts-style "Remove from Up Next". When non-nil the
+  /// menu shows a destructive remove button after Share. Hide the episode
+  /// from Up Next without marking it played; replaying resurfaces it because
+  /// `lastPlayedDate` overtakes `upNextDismissedAt`.
+  var onRemoveFromUpNext: (() -> Void)? = nil
 
   var body: some View {
     goToShowSection
@@ -33,6 +38,7 @@ struct UpNextContextMenu: View {
     downloadSection
     Divider()
     shareSection
+    removeFromUpNextSection
   }
 
   // MARK: - Go to Show
@@ -136,6 +142,18 @@ struct UpNextContextMenu: View {
         PlatformShareSheet.share(url: url)
       } label: {
         Label("Share Episode", systemImage: "square.and.arrow.up")
+      }
+    }
+  }
+
+  // MARK: - Remove from Up Next
+
+  @ViewBuilder
+  private var removeFromUpNextSection: some View {
+    if let onRemoveFromUpNext {
+      Divider()
+      Button(role: .destructive, action: onRemoveFromUpNext) {
+        Label("Remove from Up Next", systemImage: "text.badge.minus")
       }
     }
   }

@@ -413,7 +413,8 @@ struct MacHomeContentView: View {
           podcastTitle: episode.podcastTitle,
           language: episode.language
         )
-      }
+      },
+      onRemoveFromUpNext: { viewModel.dismissFromUpNext(episode) }
     )
   }
 }

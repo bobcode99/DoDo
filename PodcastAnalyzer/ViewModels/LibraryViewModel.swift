@@ -252,6 +252,9 @@ final class LibraryViewModel {
   @ObservationIgnored private var refreshTask: Task<Void, Never>?
   /// Observes episodeDownloadCompleted notifications for optimistic UI updates.
   @ObservationIgnored private var downloadCompletionTask: Task<Void, Never>?
+  /// Observes playbackPositionDidUpdate so list rows reflect current "X left"
+  /// without waiting for the user to back out and re-enter the tab.
+  @ObservationIgnored private var playbackPositionTask: Task<Void, Never>?
   /// Polls inFlightProgress at 500ms intervals while downloads are active.
   @ObservationIgnored private var progressTimer: Timer?
 
@@ -265,6 +268,7 @@ final class LibraryViewModel {
     observeDownloadingEpisodes()
     manageProgressTimer()
     observeDownloadCompletions()
+    observePlaybackPositionUpdates()
   }
 
   /// Clean up resources. Call this from onDisappear.
@@ -275,8 +279,74 @@ final class LibraryViewModel {
     refreshTask = nil
     downloadCompletionTask?.cancel()
     downloadCompletionTask = nil
+    playbackPositionTask?.cancel()
+    playbackPositionTask = nil
     progressTimer?.invalidate()
     progressTimer = nil
+  }
+
+  /// Listen for playback position updates posted by `EnhancedAudioManager`
+  /// (every 5s during playback, on pause/seek, and at end-of-episode) and
+  /// update the matching `LibraryEpisode` in each visible array. The structs
+  /// are immutable snapshots, so we rebuild them in place with the fresh
+  /// playback fields — the @Observable array reassignment triggers a row
+  /// re-render in any list currently on screen.
+  private func observePlaybackPositionUpdates() {
+    playbackPositionTask?.cancel()
+    playbackPositionTask = Task { [weak self] in
+      for await notification in NotificationCenter.default.notifications(named: .playbackPositionDidUpdate) {
+        guard let self else { return }
+        guard let update = notification.userInfo?["update"] as? PlaybackPositionUpdate else {
+          continue
+        }
+        self.applyPlaybackUpdate(update)
+      }
+    }
+  }
+
+  private func applyPlaybackUpdate(_ update: PlaybackPositionUpdate) {
+    let id = "\(update.podcastTitle)\(Self.episodeKeyDelimiter)\(update.episodeTitle)"
+    // Mirror PlaybackStateCoordinator's completion threshold so the row's
+    // replay icon appears as soon as SwiftData would flip it.
+    let isCompleted = update.duration > 0 && (update.duration - update.position) < 30
+
+    savedEpisodes = Self.replacingPlayback(in: savedEpisodes, id: id, position: update.position, duration: update.duration, isCompleted: isCompleted)
+    downloadedEpisodes = Self.replacingPlayback(in: downloadedEpisodes, id: id, position: update.position, duration: update.duration, isCompleted: isCompleted)
+    latestEpisodes = Self.replacingPlayback(in: latestEpisodes, id: id, position: update.position, duration: update.duration, isCompleted: isCompleted)
+  }
+
+  /// Returns `episodes` with the matching id replaced by a fresh `LibraryEpisode`
+  /// carrying the new playback fields. Returns the input unchanged when no match
+  /// is found, so `@Observable` re-renders only fire when something actually changed.
+  private static func replacingPlayback(
+    in episodes: [LibraryEpisode],
+    id: String,
+    position: TimeInterval,
+    duration: TimeInterval,
+    isCompleted: Bool
+  ) -> [LibraryEpisode] {
+    guard let index = episodes.firstIndex(where: { $0.id == id }) else { return episodes }
+    let existing = episodes[index]
+    // Skip if nothing material changed — avoids a needless array write.
+    if existing.lastPlaybackPosition == position,
+       existing.savedDuration == duration,
+       existing.isCompleted == isCompleted {
+      return episodes
+    }
+    var copy = episodes
+    copy[index] = LibraryEpisode(
+      id: existing.id,
+      podcastTitle: existing.podcastTitle,
+      imageURL: existing.imageURL,
+      language: existing.language,
+      episodeInfo: existing.episodeInfo,
+      isStarred: existing.isStarred,
+      isDownloaded: existing.isDownloaded,
+      isCompleted: isCompleted,
+      lastPlaybackPosition: position,
+      savedDuration: duration
+    )
+    return copy
   }
 
   private func observeDownloadCompletions() {
