@@ -17,6 +17,7 @@
 		15AEEAEE2F26464500D90D05 /* PodcastAnalyzerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000022ED303EC000ABAA0 /* WhisperKit */; };
 		AABB0003000000000000AABB /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002000000000000AABB /* MCP */; };
+		ACDDA2642FD871880075A140 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
 		CCDD0003000000000000CCDD /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = CCDD0002000000000000CCDD /* Hummingbird */; };
 /* End PBXBuildFile section */
 
@@ -66,6 +67,7 @@
 		15ED5EFC2EC44BC9001B6CD7 /* PodcastAnalyzerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5F062EC44BC9001B6CD7 /* PodcastAnalyzerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AC576B882F776FE9007B884A /* PodcastAnalyzer.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = PodcastAnalyzer.xctestplan; sourceTree = "<group>"; };
+		ACDDA2632FD871880075A140 /* dodo.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = dodo.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -169,6 +171,7 @@
 				15AEEAE22F26464200D90D05 /* PodcastAnalyzerWidget */,
 				155164742ED374440015567A /* Frameworks */,
 				15ED5EEE2EC44BC6001B6CD7 /* Products */,
+				ACDDA2632FD871880075A140 /* dodo.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -351,6 +354,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ACDDA2642FD871880075A140 /* dodo.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -432,7 +436,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzerWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PodcastAnalyzerWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = "DoDo Widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -475,7 +479,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzerWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PodcastAnalyzerWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = "DoDo Widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -629,7 +633,7 @@
 		15ED5F112EC44BC9001B6CD7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = dodo;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PodcastAnalyzer/PodcastAnalyzer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -650,6 +654,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe podcast episodes locally on your device.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -660,7 +666,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -686,7 +692,7 @@
 		15ED5F122EC44BC9001B6CD7 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = dodo;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PodcastAnalyzer/PodcastAnalyzer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -707,6 +713,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe podcast episodes locally on your device.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -717,7 +725,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";

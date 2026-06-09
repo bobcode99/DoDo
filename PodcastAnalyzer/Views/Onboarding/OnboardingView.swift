@@ -54,16 +54,22 @@ private struct WelcomeOnboardingPage: View {
         .foregroundStyle(.blue.gradient)
         .padding(.bottom, 28)
 
-      VStack(spacing: 10) {
-        Text("Welcome to\nPodcastAnalyzer")
+      VStack(spacing: 6) {
+        Text("Welcome to\nDoDo")
           .font(.largeTitle)
           .fontWeight(.bold)
           .multilineTextAlignment(.center)
+
+        Text("a Podcast Analyzer")
+          .font(.callout)
+          .italic()
+          .foregroundStyle(.secondary)
 
         Text("Listen, download, and analyze podcasts\nwith AI-powered insights.")
           .font(.body)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
+          .padding(.top, 6)
       }
 
       Spacer()
@@ -92,14 +98,20 @@ private struct WelcomeOnboardingPage: View {
 
       Spacer()
 
-      Button("Get Started", action: onNext)
-        .font(.headline)
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(.blue, in: .rect(cornerRadius: 14))
-        .padding(.horizontal, 24)
-        .padding(.bottom, 52)
+      VStack(spacing: 12) {
+        Button("Get Started", action: onNext)
+          .font(.headline)
+          .foregroundStyle(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 16)
+          .background(.blue, in: .rect(cornerRadius: 14))
+
+        Text("Named after 兜 (Dōu), the Sand Dollar Cactus.")
+          .font(.caption2)
+          .foregroundStyle(.tertiary)
+      }
+      .padding(.horizontal, 24)
+      .padding(.bottom, 40)
     }
   }
 }
