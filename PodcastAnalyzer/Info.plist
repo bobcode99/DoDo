@@ -34,6 +34,8 @@
 	<string>Used to paste podcast RSS feed URLs and episode links from other apps.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Used to generate on-device transcripts of podcast episodes you choose to transcribe. Audio never leaves your device.</string>
+	<key>NSSiriUsageDescription</key>
+	<string>DoDo uses Siri to voice-control podcast playback — “Hey Siri, play podcast using DoDo”.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Used only when you configure a local Whisper or Ollama server in Settings. The app does not connect to anything on your network unless you opt in.</string>
 <key>UIBackgroundModes</key>
