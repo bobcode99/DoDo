@@ -664,11 +664,15 @@ struct PodcastAnalyzerShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: PlayPodcastByNameIntent(),
             phrases: [
+                // Avoid "Play \(\.$podcast) using \(.applicationName)" — collides with
+                // the literal "Play podcast using DoDo" phrase on PlayLastEpisodeIntent
+                // (Siri's NL matcher extracts the word "podcast" as the parameter and
+                // prompts "Which one?"). The "in / on / Listen to" variants below are
+                // distinctive enough that the literal resume phrases still win.
                 "Play \(\.$podcast) in \(.applicationName)",
-                "Play \(\.$podcast) using \(.applicationName)",
                 "Play \(\.$podcast) on \(.applicationName)",
                 "Listen to \(\.$podcast) in \(.applicationName)",
-                "Listen to \(\.$podcast) using \(.applicationName)"
+                "Listen to \(\.$podcast) on \(.applicationName)"
             ],
             shortTitle: "Play Specific Podcast",
             systemImageName: "play.circle.fill"
