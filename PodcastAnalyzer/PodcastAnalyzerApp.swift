@@ -5,6 +5,7 @@
 //  Created by Bob on 2025/11/12.
 //
 
+import AppIntents
 import OSLog
 import Speech
 import SwiftData
@@ -103,6 +104,11 @@ struct PodcastAnalyzerApp: App {
 
           // Handle any pending widget toggle (pause) flag from cold launch.
           EnhancedAudioManager.shared.handleWidgetToggleOnActive()
+
+          // Force Siri to re-read AppShortcut phrases + suggested entities so
+          // phrase mappings stay current after a fresh install or app update.
+          // Cheap to call; no-op on Siri's side if nothing changed.
+          PodcastAnalyzerShortcuts.updateAppShortcutParameters()
 
           // Request critical permissions early so they don't interrupt mid-session
           #if os(iOS)

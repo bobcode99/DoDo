@@ -664,17 +664,19 @@ struct PodcastAnalyzerShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: PlayPodcastByNameIntent(),
             phrases: [
-                // Avoid "Play \(\.$podcast) using \(.applicationName)" — collides with
-                // the literal "Play podcast using DoDo" phrase on PlayLastEpisodeIntent
-                // (Siri's NL matcher extracts the word "podcast" as the parameter and
-                // prompts "Which one?"). The "in / on / Listen to" variants below are
-                // distinctive enough that the literal resume phrases still win.
-                "Play \(\.$podcast) in \(.applicationName)",
-                "Play \(\.$podcast) on \(.applicationName)",
+                // Reserved verb pattern: ALL "Play <X>" utterances must route to the
+                // literal PlayLastEpisodeIntent ("Play podcast using DoDo" → resume).
+                // Any "Play \(\.$podcast)" template here causes Siri's NL matcher to
+                // fuzzy-extract the literal word "podcast" as a parameter value and
+                // prompt "Which one?". Use "Listen to" / "Open" verbs instead — they
+                // are exclusive to the parameterized intent and never collide.
                 "Listen to \(\.$podcast) in \(.applicationName)",
-                "Listen to \(\.$podcast) on \(.applicationName)"
+                "Listen to \(\.$podcast) on \(.applicationName)",
+                "Listen to \(\.$podcast) using \(.applicationName)",
+                "Open \(\.$podcast) in \(.applicationName)",
+                "Open \(\.$podcast) on \(.applicationName)"
             ],
-            shortTitle: "Play Specific Podcast",
+            shortTitle: "Listen to Podcast",
             systemImageName: "play.circle.fill"
         )
 
