@@ -451,6 +451,165 @@ struct SkipBackwardIntent: AudioPlaybackIntent {
     }
 }
 
+// MARK: - Podcast App Entity (Siri: "Play <Podcast Name> in DoDo")
+
+/// Lightweight Sendable snapshot of a subscribed podcast, suitable for
+/// passing across the AppIntents boundary. The id is the RSS URL — stable
+/// across renames and matches `PodcastInfo.id`.
+@available(iOS 16.0, macOS 13.0, *)
+struct PodcastAppEntity: AppEntity, Sendable {
+    var id: String
+    var title: String
+    var imageURL: String
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation {
+        TypeDisplayRepresentation(name: "Podcast")
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)")
+    }
+
+    static var defaultQuery: PodcastEntityQuery { PodcastEntityQuery() }
+}
+
+@available(iOS 16.0, macOS 13.0, *)
+struct PodcastEntityQuery: EntityQuery, EntityStringQuery {
+    @MainActor
+    func entities(for identifiers: [String]) async throws -> [PodcastAppEntity] {
+        let needles = Set(identifiers)
+        return try AppIntentsModelStore.fetchSubscribed { models in
+            models
+                .filter { needles.contains($0.rssUrl) }
+                .map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
+        }
+    }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [PodcastAppEntity] {
+        let needle = string.lowercased()
+        return try AppIntentsModelStore.fetchSubscribed { models in
+            models
+                .filter { $0.title.lowercased().contains(needle) }
+                .map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
+        }
+    }
+
+    @MainActor
+    func suggestedEntities() async throws -> [PodcastAppEntity] {
+        try AppIntentsModelStore.fetchSubscribed { models in
+            models.map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
+        }
+    }
+}
+
+/// Intent: play the latest episode of a specific subscribed podcast by name.
+/// Resumes from the last saved playback position if any; otherwise starts fresh.
+@available(iOS 16.0, macOS 13.0, *)
+struct PlayPodcastByNameIntent: AudioPlaybackIntent {
+    static let title: LocalizedStringResource = "Play Podcast"
+    static let description = IntentDescription(
+        "Play the latest episode of a specific subscribed podcast"
+    )
+
+    static let openAppWhenRun: Bool = false
+
+    @Parameter(title: "Podcast")
+    var podcast: PodcastAppEntity
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Play \(\.$podcast)")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        guard let container = AppIntentsModelStore.container else { return .result() }
+        let context = container.mainContext
+
+        let rssUrl = podcast.id
+        let podcastDescriptor = FetchDescriptor<PodcastInfoModel>(
+            predicate: #Predicate<PodcastInfoModel> { $0.rssUrl == rssUrl }
+        )
+        guard let model = try? context.fetch(podcastDescriptor).first else { return .result() }
+
+        let sortedEpisodes = model.podcastInfo.episodes.sorted {
+            ($0.pubDate ?? .distantPast) > ($1.pubDate ?? .distantPast)
+        }
+        guard let latest = sortedEpisodes.first(where: { ($0.audioURL ?? "").isEmpty == false }),
+              let audioURL = latest.audioURL else { return .result() }
+
+        // Resume from saved position if any.
+        let podcastTitle = model.title
+        let episodeTitle = latest.title
+        let episodeKey = "\(podcastTitle)\u{1F}\(episodeTitle)"
+        var startTime: TimeInterval = 0
+        let downloadDescriptor = FetchDescriptor<EpisodeDownloadModel>(
+            predicate: #Predicate<EpisodeDownloadModel> { $0.id == episodeKey }
+        )
+        if let saved = try? context.fetch(downloadDescriptor).first, !saved.isCompleted {
+            startTime = saved.lastPlaybackPosition
+        }
+
+        let playbackEpisode = PlaybackEpisode(
+            id: latest.id,
+            title: latest.title,
+            podcastTitle: podcastTitle,
+            audioURL: audioURL,
+            imageURL: latest.imageURL ?? model.podcastInfo.imageURL,
+            episodeDescription: latest.podcastEpisodeDescription,
+            pubDate: latest.pubDate,
+            duration: latest.duration,
+            guid: latest.guid
+        )
+
+        EnhancedAudioManager.shared.play(
+            episode: playbackEpisode,
+            audioURL: audioURL,
+            startTime: startTime,
+            imageURL: playbackEpisode.imageURL,
+            useDefaultSpeed: startTime == 0
+        )
+
+        return .result()
+    }
+}
+
+/// Lazy, process-wide ModelContainer for AppIntents that need to read podcasts
+/// outside the App's `.modelContainer` injection. The on-disk store is shared
+/// with the main app — this just gives intents a way to fetch without
+/// reaching into PodcastAnalyzerApp.
+@MainActor
+private enum AppIntentsModelStore {
+    static let container: ModelContainer? = {
+        let schema = Schema([
+            PodcastInfoModel.self,
+            EpisodeDownloadModel.self,
+            EpisodeAIAnalysis.self,
+            EpisodeQuickTagsModel.self,
+            QueueItemModel.self,
+        ])
+        let config = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .none
+        )
+        return try? ModelContainer(for: schema, configurations: [config])
+    }()
+
+    static func fetchSubscribed<T: Sendable>(
+        _ transform: ([PodcastInfoModel]) -> T
+    ) throws -> T {
+        guard let container else { return transform([]) }
+        let context = container.mainContext
+        let descriptor = FetchDescriptor<PodcastInfoModel>(
+            predicate: #Predicate<PodcastInfoModel> { $0.isSubscribed },
+            sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
+        )
+        let models = (try? context.fetch(descriptor)) ?? []
+        return transform(models)
+    }
+}
+
 @MainActor
 private enum SiriPlaybackController {
     static func play() {
@@ -500,6 +659,19 @@ struct PodcastAnalyzerShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Play Podcast",
             systemImageName: "play.fill"
+        )
+
+        AppShortcut(
+            intent: PlayPodcastByNameIntent(),
+            phrases: [
+                "Play \(\.$podcast) in \(.applicationName)",
+                "Play \(\.$podcast) using \(.applicationName)",
+                "Play \(\.$podcast) on \(.applicationName)",
+                "Listen to \(\.$podcast) in \(.applicationName)",
+                "Listen to \(\.$podcast) using \(.applicationName)"
+            ],
+            shortTitle: "Play Specific Podcast",
+            systemImageName: "play.circle.fill"
         )
 
         AppShortcut(
