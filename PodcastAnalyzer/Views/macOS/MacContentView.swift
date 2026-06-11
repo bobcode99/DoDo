@@ -39,36 +39,6 @@ enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
     }
   }
 
-  // Convert to LibrarySubItem if applicable
-  var librarySubItem: LibrarySubItem? {
-    switch self {
-    case .libraryPodcasts: return .podcasts
-    case .librarySaved: return .saved
-    case .libraryDownloaded: return .downloaded
-    case .libraryLatest: return .latest
-    default: return nil
-    }
-  }
-}
-
-// MARK: - Library Sub-items
-
-enum LibrarySubItem: String, CaseIterable, Identifiable {
-  case podcasts = "Your Podcasts"
-  case saved = "Saved"
-  case downloaded = "Downloaded"
-  case latest = "Latest Episodes"
-
-  var id: String { rawValue }
-
-  var iconName: String {
-    switch self {
-    case .podcasts: return "square.stack"
-    case .saved: return "star.fill"
-    case .downloaded: return "arrow.down.circle.fill"
-    case .latest: return "clock.fill"
-    }
-  }
 }
 
 // MARK: - Main Content View
@@ -82,18 +52,10 @@ struct MacContentView: View {
   @Environment(\.modelContext) private var modelContext
 
   @State private var selectedSidebarItem: MacSidebarItem? = .home
-  @State private var selectedLibrarySubItem: LibrarySubItem? = .podcasts
   @State private var searchText: String = ""
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var showExpandedPlayer = false
   @State private var navigationPath = NavigationPath()
-
-  // For notification navigation
-  @State private var notificationEpisode: PodcastEpisodeInfo?
-  @State private var notificationPodcastTitle: String = ""
-  @State private var notificationImageURL: String?
-  @State private var notificationLanguage: String = "en"
-  @State private var showNotificationEpisode: Bool = false
 
   // Friendly playback-blocked alert (offline + no local copy)
   @State private var playbackAlertMessage: String?
@@ -106,28 +68,22 @@ struct MacContentView: View {
   var body: some View {
     @Bindable var importManager = importManager
 
-    ZStack(alignment: .bottom) {
-      NavigationSplitView(columnVisibility: $columnVisibility) {
-        sidebarContent
-          .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
-      } detail: {
-        mainContent
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .safeAreaInset(edge: .bottom) {
-            if hasCurrentEpisode {
-              Color.clear.frame(height: 80)
-            }
+    NavigationSplitView(columnVisibility: $columnVisibility) {
+      sidebarContent
+        .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+    } detail: {
+      mainContent
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .bottom) {
+          if hasCurrentEpisode {
+            MacMiniPlayerBar(showExpandedPlayer: $showExpandedPlayer)
+              .padding(.horizontal, 8)
+              .padding(.bottom, 4)
+              .transition(.move(edge: .bottom).combined(with: .opacity))
           }
-      }
-      .navigationSplitViewStyle(.balanced)
-
-      if hasCurrentEpisode {
-        MacMiniPlayerBar(showExpandedPlayer: $showExpandedPlayer)
-          .padding(.horizontal, 8)
-          .padding(.bottom, 4)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
-      }
+        }
     }
+    .navigationSplitViewStyle(.balanced)
     .animation(.easeInOut(duration: 0.25), value: hasCurrentEpisode)
     .frame(minWidth: 900, minHeight: 600)
     .sheet(isPresented: $showExpandedPlayer) {
@@ -228,11 +184,7 @@ struct MacContentView: View {
     }
     .listStyle(.sidebar)
     .navigationTitle("Podcasts")
-    .onChange(of: selectedSidebarItem) { _, newValue in
-      // Update selectedLibrarySubItem when a library sub-item is selected
-      if let subItem = newValue?.librarySubItem {
-        selectedLibrarySubItem = subItem
-      }
+    .onChange(of: selectedSidebarItem) { _, _ in
       // Reset the navigation path so any pushed view (e.g. EpisodeDetail) is
       // dismissed — this ensures onDisappear fires and ViewModels are cleaned up.
       navigationPath = NavigationPath()
@@ -240,8 +192,9 @@ struct MacContentView: View {
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         SettingsLink {
-          Image(systemName: "gearshape")
+          Label("Settings", systemImage: "gearshape")
         }
+        .labelStyle(.iconOnly)
         .help("Settings")
       }
     }
@@ -386,17 +339,17 @@ struct MacContentView: View {
   }
 
   private func handleNotificationNavigation(target: NotificationNavigationTarget) {
-    if let result = notificationManager.findEpisode(
+    defer { notificationManager.clearNavigation() }
+    guard let result = notificationManager.findEpisode(
       podcastTitle: target.podcastTitle,
       episodeTitle: target.episodeTitle
-    ) {
-      notificationEpisode = result.episode
-      notificationPodcastTitle = target.podcastTitle
-      notificationImageURL = result.imageURL
-      notificationLanguage = result.language
-      showNotificationEpisode = true
-    }
-    notificationManager.clearNavigation()
+    ) else { return }
+    navigationPath.append(EpisodeDetailRoute(
+      episode: result.episode,
+      podcastTitle: target.podcastTitle,
+      fallbackImageURL: result.imageURL,
+      podcastLanguage: result.language
+    ))
   }
 }
 
