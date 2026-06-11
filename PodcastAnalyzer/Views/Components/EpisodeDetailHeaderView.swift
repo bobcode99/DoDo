@@ -221,7 +221,7 @@ struct EpisodeDetailHeaderView: View {
                     .foregroundStyle(.purple)
             }
 
-            if viewModel.hasAIAnalysis {
+            if viewModel.aiAnalysis.hasAIAnalysis {
                 Image(systemName: "sparkles")
                     .font(.system(size: statusIconSize))
                     .foregroundStyle(.orange)

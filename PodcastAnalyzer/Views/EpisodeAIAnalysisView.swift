@@ -60,7 +60,7 @@ struct EpisodeAIAnalysisView: View {
         ScrollView {
           aiContentView
         }
-        .onChange(of: viewModel.cloudAnalysisCache.questionAnswers.count) { _, _ in
+        .onChange(of: viewModel.aiAnalysis.cloudAnalysisCache.questionAnswers.count) { _, _ in
           scrollChatToBottom(proxy: proxy)
         }
         .onChange(of: cloudQuestionIsAnalyzing) { _, isAnalyzing in
@@ -211,12 +211,12 @@ struct EpisodeAIAnalysisView: View {
         description: "One-shot analysis with summary, entities, highlights, quotes, and takeaways"
       )
 
-      if viewModel.isStreaming && viewModel.currentStreamingType == .analysis {
+      if viewModel.aiAnalysis.isStreaming && viewModel.aiAnalysis.currentStreamingType == .analysis {
         // Currently streaming — reset regenerating flag and show progress
         streamingResponseView
           .onAppear { isRegenerating = false }
 
-      } else if isRegenerating, let result = viewModel.cloudAnalysisCache.analysis {
+      } else if isRegenerating, let result = viewModel.aiAnalysis.cloudAnalysisCache.analysis {
         // User tapped Regenerate — show hint editor above the existing result
         shortcutPickerRow
         formatHintField
@@ -226,7 +226,7 @@ struct EpisodeAIAnalysisView: View {
           action: {
             isRegenerating = false
             isFormatFieldFocused = false
-            viewModel.generateCloudAnalysis(
+            viewModel.aiAnalysis.generateCloudAnalysis(
               type: .analysis,
               formatHint: formatHintDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? nil : formatHintDraft
@@ -254,8 +254,8 @@ struct EpisodeAIAnalysisView: View {
 
         analysisResultCard(result)
 
-      } else if case .error(let errorMsg) = viewModel.cloudAnalysisState,
-                let result = viewModel.cloudAnalysisCache.analysis {
+      } else if case .error(let errorMsg) = viewModel.aiAnalysis.cloudAnalysisState,
+                let result = viewModel.aiAnalysis.cloudAnalysisCache.analysis {
         // Regeneration failed — show inline warning + keep old result
         HStack(alignment: .top, spacing: 10) {
           Image(systemName: "exclamationmark.triangle.fill")
@@ -278,19 +278,19 @@ struct EpisodeAIAnalysisView: View {
 
         analysisResultCard(result)
 
-      } else if let result = viewModel.cloudAnalysisCache.analysis {
+      } else if let result = viewModel.aiAnalysis.cloudAnalysisCache.analysis {
         // Normal completed state
         analysisResultCard(result)
 
       } else {
         // Show analysis error prominently at the top so it's not missed
-        if case .error(let errorMsg) = viewModel.cloudAnalysisState {
-          analysisErrorBanner(message: errorMsg, isRetry: viewModel.cloudAnalysisCache.analysis == nil)
+        if case .error(let errorMsg) = viewModel.aiAnalysis.cloudAnalysisState {
+          analysisErrorBanner(message: errorMsg, isRetry: viewModel.aiAnalysis.cloudAnalysisCache.analysis == nil)
         }
 
         // Show progress indicator while analyzing (no previous result to show)
-        if case .analyzing = viewModel.cloudAnalysisState {
-          analysisStateView(for: viewModel.cloudAnalysisState, type: .analysis)
+        if case .analyzing = viewModel.aiAnalysis.cloudAnalysisState {
+          analysisStateView(for: viewModel.aiAnalysis.cloudAnalysisState, type: .analysis)
         } else {
           // No result yet — show hint field + analyze button
           shortcutPickerRow
@@ -300,7 +300,7 @@ struct EpisodeAIAnalysisView: View {
             title: "Analyze Episode",
             action: {
               isFormatFieldFocused = false
-              viewModel.generateCloudAnalysis(
+              viewModel.aiAnalysis.generateCloudAnalysis(
                 type: .analysis,
                 formatHint: formatHintDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                   ? nil : formatHintDraft
@@ -481,7 +481,7 @@ struct EpisodeAIAnalysisView: View {
       #endif
 
       // Q&A error — show above history so it's immediately visible
-      if case .error(let errorMsg) = viewModel.cloudQuestionState {
+      if case .error(let errorMsg) = viewModel.aiAnalysis.cloudQuestionState {
         HStack(alignment: .top, spacing: 10) {
           Image(systemName: "xmark.circle.fill")
             .foregroundStyle(.red)
@@ -509,7 +509,7 @@ struct EpisodeAIAnalysisView: View {
 
       // Chat-style conversation: oldest at top, newest at bottom,
       // followed by a typing indicator while a new answer is in flight.
-      let conversation = viewModel.cloudAnalysisCache.questionAnswers
+      let conversation = viewModel.aiAnalysis.cloudAnalysisCache.questionAnswers
       if !conversation.isEmpty || cloudQuestionIsAnalyzing {
         VStack(alignment: .leading, spacing: 12) {
           if !conversation.isEmpty {
@@ -553,7 +553,7 @@ struct EpisodeAIAnalysisView: View {
   }
 
   private var cloudQuestionIsAnalyzing: Bool {
-    if case .analyzing = viewModel.cloudQuestionState { return true }
+    if case .analyzing = viewModel.aiAnalysis.cloudQuestionState { return true }
     return false
   }
 
@@ -566,7 +566,7 @@ struct EpisodeAIAnalysisView: View {
   private func submitQuestion() {
     let trimmed = questionInput.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, canAnalyze else { return }
-    viewModel.askCloudQuestion(questionInput)
+    viewModel.aiAnalysis.askCloudQuestion(questionInput)
     questionInput = ""
     #if os(iOS)
     // Hide keyboard after submitting
@@ -1123,11 +1123,11 @@ struct EpisodeAIAnalysisView: View {
       }
 
       // Streaming text content
-      if !viewModel.streamingText.isEmpty {
-        Text(viewModel.streamingText)
+      if !viewModel.aiAnalysis.streamingText.isEmpty {
+        Text(viewModel.aiAnalysis.streamingText)
           .font(.body)
           .textSelection(.enabled)
-          .animation(.easeInOut(duration: 0.1), value: viewModel.streamingText)
+          .animation(.easeInOut(duration: 0.1), value: viewModel.aiAnalysis.streamingText)
       } else {
         HStack {
           Text("Waiting for response...")
@@ -1414,7 +1414,7 @@ struct EpisodeAIAnalysisView: View {
 
       case .analyzing(let progress, let message):
         // Only show progress on the tab that owns the current analysis
-        if let type, let streamingType = viewModel.currentStreamingType, type != streamingType {
+        if let type, let streamingType = viewModel.aiAnalysis.currentStreamingType, type != streamingType {
           EmptyView()
         } else {
           VStack(spacing: 12) {
