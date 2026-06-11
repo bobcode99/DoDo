@@ -1626,14 +1626,6 @@ final class EpisodeDetailViewModel {
 
     // Precompute sentence grouping for transcript views
     regroupSentences()
-
-    // Debug: log first few segments if we have any
-    if !segments.isEmpty {
-      logger.info("First segment: \(segments[0].text.prefix(50))...")
-      if segments.count > 1 {
-        logger.info("Second segment: \(segments[1].text.prefix(50))...")
-      }
-    }
   }
 
   /// Parses SRT time format (HH:MM:SS,mmm) to TimeInterval
