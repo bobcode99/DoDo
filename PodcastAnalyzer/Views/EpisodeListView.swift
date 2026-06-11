@@ -20,6 +20,7 @@ enum EpisodeFilter: String, CaseIterable {
   case played = "Played"
   case starred = "Starred"
   case downloaded = "Downloaded"
+  case transcript = "Transcript"
   /// User-defined per-podcast filter (include/exclude terms + min-duration)
   /// configured via `PodcastEpisodeFilterView`. Falls back to "show
   /// everything" semantics when no filter fields are set.
@@ -32,6 +33,7 @@ enum EpisodeFilter: String, CaseIterable {
     case .played: return "checkmark.circle"
     case .starred: return "star.fill"
     case .downloaded: return "arrow.down.circle.fill"
+    case .transcript: return "text.bubble"
     case .custom: return "line.3.horizontal.decrease.circle"
     }
   }

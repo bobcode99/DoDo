@@ -132,6 +132,16 @@ final class EpisodeListViewModel {
         if case .downloaded = state { return true }
         return false
       }
+    case .transcript:
+      episodes = episodes.filter { episode in
+        // RSS-advertised transcript (downloadable on demand).
+        if let url = episode.transcriptURL, !url.isEmpty { return true }
+        // Locally stored: either a .srt was generated (transcriptSource set)
+        // or a captionPath has been written.
+        let key = makeEpisodeKey(episode)
+        guard let model = episodeModels[key] else { return false }
+        return !model.transcriptSource.isEmpty || (model.captionPath?.isEmpty == false)
+      }
     case .custom:
       // Reuses the auto-download evaluator — same include/exclude/min-duration
       // semantics, so the chip surfaces exactly the set that auto-download
