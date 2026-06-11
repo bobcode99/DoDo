@@ -2090,38 +2090,66 @@ final class EpisodeDetailViewModel {
   /// Cached SwiftData model for AI analysis
   private var aiAnalysisModel: EpisodeAIAnalysis?
 
-  /// Load AI analysis from SwiftData on initialization
+  /// Load AI analysis from SwiftData on initialization.
+  ///
+  /// Looks up by `episodeAudioURL` (fast path), then falls back to
+  /// `episodeTitle + podcastTitle` to survive podcast-host CDN URL drift
+  /// (Megaphone/Libsyn/Anchor rewrite tracking URLs over time, so the
+  /// stored URL on an old analysis row may no longer equal the current
+  /// `episode.audioURL`). When a fallback hits, the stale row's URL is
+  /// re-linked so future lookups take the fast path.
   func loadAIAnalysisFromSwiftData() {
     guard let context = modelContext else { return }
 
-    // Load cloud analysis
     let audioURL = episode.audioURL ?? ""
+    let episodeTitle = episode.title
+    let podcast = podcastTitle
+
+    // Load cloud analysis
     let cloudDescriptor = FetchDescriptor<EpisodeAIAnalysis>(
       predicate: #Predicate { $0.episodeAudioURL == audioURL }
     )
-
-    do {
-      let results = try context.fetch(cloudDescriptor)
-      if let model = results.first {
-        aiAnalysisModel = model
-        restoreCloudAnalysisFromModel(model)
+    var cloudModel = (try? context.fetch(cloudDescriptor))?.first
+    if cloudModel == nil, !episodeTitle.isEmpty {
+      let titleDescriptor = FetchDescriptor<EpisodeAIAnalysis>(
+        predicate: #Predicate {
+          $0.episodeTitle == episodeTitle && $0.podcastTitle == podcast
+        }
+      )
+      if let fallback = (try? context.fetch(titleDescriptor))?.first {
+        cloudModel = fallback
+        // Re-link to the current URL so subsequent loads hit the fast path.
+        if !audioURL.isEmpty, fallback.episodeAudioURL != audioURL {
+          fallback.episodeAudioURL = audioURL
+          try? context.save()
+        }
       }
-    } catch {
-      logger.error("Failed to load AI analysis: \(error.localizedDescription)")
+    }
+    if let cloudModel {
+      aiAnalysisModel = cloudModel
+      restoreCloudAnalysisFromModel(cloudModel)
     }
 
-    // Load quick tags
+    // Load quick tags (same fallback pattern; EpisodeQuickTagsModel only
+    // carries episodeTitle, so the fallback key is title-only).
     let tagsDescriptor = FetchDescriptor<EpisodeQuickTagsModel>(
       predicate: #Predicate { $0.episodeAudioURL == audioURL }
     )
-
-    do {
-      let results = try context.fetch(tagsDescriptor)
-      if let model = results.first {
-        restoreQuickTagsFromModel(model)
+    var tagsModel = (try? context.fetch(tagsDescriptor))?.first
+    if tagsModel == nil, !episodeTitle.isEmpty {
+      let titleDescriptor = FetchDescriptor<EpisodeQuickTagsModel>(
+        predicate: #Predicate { $0.episodeTitle == episodeTitle }
+      )
+      if let fallback = (try? context.fetch(titleDescriptor))?.first {
+        tagsModel = fallback
+        if !audioURL.isEmpty, fallback.episodeAudioURL != audioURL {
+          fallback.episodeAudioURL = audioURL
+          try? context.save()
+        }
       }
-    } catch {
-      logger.error("Failed to load quick tags: \(error.localizedDescription)")
+    }
+    if let tagsModel {
+      restoreQuickTagsFromModel(tagsModel)
     }
   }
 
