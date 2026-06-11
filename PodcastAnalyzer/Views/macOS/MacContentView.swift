@@ -172,6 +172,14 @@ struct MacContentView: View {
       Section("Browse") {
         Label("Home", systemImage: "house")
           .tag(MacSidebarItem.home)
+
+        Label {
+          Text("Analysis")
+        } icon: {
+          Image(systemName: "sparkles")
+            .foregroundStyle(.purple)
+        }
+        .tag(MacSidebarItem.analysis)
       }
 
       Section("Library") {
@@ -214,14 +222,6 @@ struct MacContentView: View {
       }
 
       Section("Discover") {
-        Label {
-          Text("Analysis")
-        } icon: {
-          Image(systemName: "sparkles")
-            .foregroundStyle(.purple)
-        }
-        .tag(MacSidebarItem.analysis)
-
         Label("Search", systemImage: "magnifyingglass")
           .tag(MacSidebarItem.search)
       }
