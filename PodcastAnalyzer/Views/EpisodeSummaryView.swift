@@ -16,7 +16,7 @@ struct EpisodeSummaryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let translated = viewModel.translatedDescription {
+            if let translated = viewModel.translation.translatedDescription {
                 VStack(alignment: .leading, spacing: 12) {
                     HTMLTextView(
                         attributedString: NSAttributedString(

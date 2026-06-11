@@ -4,7 +4,7 @@
 //
 //  Dedicated full-screen transcript search. Replaces the inline-toolbar search
 //  field. Tap a result row → dismiss + scroll the transcript to that sentence
-//  (the parent's onChange(of: viewModel.currentMatchIndex) drives the scroll).
+//  (the parent's onChange(of: viewModel.transcript.currentMatchIndex) drives the scroll).
 //  Does NOT touch audio playback — selection is navigate-only by design.
 //
 
@@ -29,7 +29,7 @@ struct TranscriptSearchSheet: View {
 
                 if localQuery.isEmpty {
                     emptyState
-                } else if viewModel.searchMatchIds.isEmpty {
+                } else if viewModel.transcript.searchMatchIds.isEmpty {
                     noResults
                 } else {
                     resultsHeader
@@ -53,12 +53,12 @@ struct TranscriptSearchSheet: View {
             }
         }
         .onAppear {
-            localQuery = viewModel.transcriptSearchQuery
+            localQuery = viewModel.transcript.transcriptSearchQuery
             fieldFocused = true
         }
         .onChange(of: localQuery) { _, newValue in
-            viewModel.transcriptSearchQuery = newValue
-            viewModel.updateSearchMatches(query: newValue)
+            viewModel.transcript.transcriptSearchQuery = newValue
+            viewModel.transcript.updateSearchMatches(query: newValue)
         }
     }
 
@@ -137,7 +137,7 @@ struct TranscriptSearchSheet: View {
     }
 
     private var resultsHeader: some View {
-        Text("Showing \(viewModel.searchMatchIds.count) result\(viewModel.searchMatchIds.count == 1 ? "" : "s")")
+        Text("Showing \(viewModel.transcript.searchMatchIds.count) result\(viewModel.transcript.searchMatchIds.count == 1 ? "" : "s")")
             .font(.subheadline)
             .foregroundStyle(.tint)
             .frame(maxWidth: .infinity)
@@ -149,7 +149,7 @@ struct TranscriptSearchSheet: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 let lookup = sentenceLookup
-                ForEach(Array(viewModel.searchMatchIds.enumerated()), id: \.offset) { index, sentenceID in
+                ForEach(Array(viewModel.transcript.searchMatchIds.enumerated()), id: \.offset) { index, sentenceID in
                     if let sentence = lookup[sentenceID] {
                         TranscriptSearchResultRow(
                             sentence: sentence,
@@ -168,7 +168,7 @@ struct TranscriptSearchSheet: View {
     }
 
     private var sentenceLookup: [TranscriptSentence.ID: TranscriptSentence] {
-        Dictionary(uniqueKeysWithValues: viewModel.groupedSentences.map { ($0.id, $0) })
+        Dictionary(uniqueKeysWithValues: viewModel.transcript.groupedSentences.map { ($0.id, $0) })
     }
 
     private func handleSelect(matchIndex: Int, sentenceID: TranscriptSentence.ID) {
@@ -176,7 +176,7 @@ struct TranscriptSearchSheet: View {
         // via the parent's onChange handler. We intentionally do NOT call
         // seekToSegment here — that would start audio playback, which users
         // don't want when they're just searching for a passage.
-        viewModel.currentMatchIndex = matchIndex
+        viewModel.transcript.currentMatchIndex = matchIndex
         onSelect(sentenceID)
         dismiss()
     }

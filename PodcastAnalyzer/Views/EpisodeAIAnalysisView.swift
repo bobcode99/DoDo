@@ -100,7 +100,7 @@ struct EpisodeAIAnalysisView: View {
         podcastTitle: viewModel.podcastTitle,
         episodeTitle: viewModel.episode.title,
         podcastLanguage: viewModel.podcastLanguage,
-        transcript: viewModel.transcriptText,
+        transcript: viewModel.transcript.transcriptText,
         formatHint: formatHintDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           ? nil : formatHintDraft,
         onCopied: {

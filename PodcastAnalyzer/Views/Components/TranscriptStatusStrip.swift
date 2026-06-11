@@ -27,15 +27,15 @@ struct TranscriptStatusStrip: View {
 
             Spacer(minLength: 0)
 
-            if !viewModel.transcriptSearchQuery.isEmpty {
+            if !viewModel.transcript.transcriptSearchQuery.isEmpty {
                 searchMatchChip
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .animation(.snappy(duration: 0.2), value: autoScrollEnabled)
-        .animation(.snappy(duration: 0.2), value: viewModel.transcriptSearchQuery)
-        .animation(.snappy(duration: 0.2), value: viewModel.hasExistingTranslation)
+        .animation(.snappy(duration: 0.2), value: viewModel.transcript.transcriptSearchQuery)
+        .animation(.snappy(duration: 0.2), value: viewModel.translation.hasExistingTranslation)
     }
 
     // MARK: - Language Chip (Menu)
@@ -49,14 +49,14 @@ struct TranscriptStatusStrip: View {
             languageChipLabel
         }
         .menuOrder(.fixed)
-        .disabled(viewModel.translationStatus.isTranslating)
+        .disabled(viewModel.translation.translationStatus.isTranslating)
         .accessibilityLabel(Text(languageAccessibilityLabel))
         .accessibilityHint("Adjust translation and subtitle display")
     }
 
     @ViewBuilder
     private var languageMenuContent: some View {
-        if viewModel.hasExistingTranslation {
+        if viewModel.translation.hasExistingTranslation {
             Section("Display") {
                 ForEach(SubtitleDisplayMode.allCases, id: \.self) { mode in
                     Button {
@@ -68,7 +68,7 @@ struct TranscriptStatusStrip: View {
                             Label(mode.displayName, systemImage: mode.icon)
                         }
                     }
-                    .disabled(mode.requiresTranslation && !viewModel.hasExistingTranslation)
+                    .disabled(mode.requiresTranslation && !viewModel.translation.hasExistingTranslation)
                 }
             }
 
@@ -114,13 +114,13 @@ struct TranscriptStatusStrip: View {
 
     @ViewBuilder
     private var languageChipIcon: some View {
-        if viewModel.translationStatus.isTranslating {
-            TranslationProgressCircle(status: viewModel.translationStatus)
+        if viewModel.translation.translationStatus.isTranslating {
+            TranslationProgressCircle(status: viewModel.translation.translationStatus)
                 .frame(width: 14, height: 14)
-        } else if case .failed = viewModel.translationStatus {
+        } else if case .failed = viewModel.translation.translationStatus {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.caption2)
-        } else if viewModel.hasExistingTranslation {
+        } else if viewModel.translation.hasExistingTranslation {
             Image(systemName: "translate")
                 .font(.caption)
         } else {
@@ -130,20 +130,20 @@ struct TranscriptStatusStrip: View {
     }
 
     private var languageChipBackground: AnyShapeStyle {
-        if case .failed = viewModel.translationStatus {
+        if case .failed = viewModel.translation.translationStatus {
             return AnyShapeStyle(Color.red.opacity(0.15))
         }
-        if viewModel.hasExistingTranslation {
+        if viewModel.translation.hasExistingTranslation {
             return AnyShapeStyle(Color.accentColor.opacity(0.15))
         }
         return AnyShapeStyle(.thinMaterial)
     }
 
     private var languageChipForeground: AnyShapeStyle {
-        if case .failed = viewModel.translationStatus {
+        if case .failed = viewModel.translation.translationStatus {
             return AnyShapeStyle(Color.red)
         }
-        if viewModel.hasExistingTranslation {
+        if viewModel.translation.hasExistingTranslation {
             return AnyShapeStyle(Color.accentColor)
         }
         return AnyShapeStyle(.secondary)
@@ -179,8 +179,8 @@ struct TranscriptStatusStrip: View {
     // MARK: - Search Match Chip
 
     private var searchMatchChip: some View {
-        let total = viewModel.searchMatchIds.count
-        let position = total == 0 ? 0 : viewModel.currentMatchIndex + 1
+        let total = viewModel.transcript.searchMatchIds.count
+        let position = total == 0 ? 0 : viewModel.transcript.currentMatchIndex + 1
         return HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.caption2)
@@ -199,7 +199,7 @@ struct TranscriptStatusStrip: View {
 
     /// Reading language: target when translated, else source / podcast language.
     private var currentLanguageLabel: String {
-        if let translated = viewModel.selectedTranslationLanguage, viewModel.hasExistingTranslation {
+        if let translated = viewModel.translation.selectedTranslationLanguage, viewModel.translation.hasExistingTranslation {
             return translated.shortName
         }
         let code = viewModel.podcastLanguage
@@ -208,10 +208,10 @@ struct TranscriptStatusStrip: View {
     }
 
     private var languageAccessibilityLabel: String {
-        if viewModel.translationStatus.isTranslating { return "Translating in progress" }
-        if case .failed = viewModel.translationStatus { return "Translation failed" }
-        if viewModel.hasExistingTranslation,
-           let lang = viewModel.selectedTranslationLanguage {
+        if viewModel.translation.translationStatus.isTranslating { return "Translating in progress" }
+        if case .failed = viewModel.translation.translationStatus { return "Translation failed" }
+        if viewModel.translation.hasExistingTranslation,
+           let lang = viewModel.translation.selectedTranslationLanguage {
             return "Translated to \(lang.displayName)"
         }
         return "Reading language: \(currentLanguageLabel)"

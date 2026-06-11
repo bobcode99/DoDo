@@ -52,7 +52,7 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
             } message: {
                 Text(translationErrorMessage)
             }
-            .onChange(of: viewModel.translationStatus) { _, newStatus in
+            .onChange(of: viewModel.translation.translationStatus) { _, newStatus in
                 if case .failed(let error) = newStatus {
                     translationErrorMessage = error
                     showTranslationError = true
@@ -71,59 +71,59 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
                 Text("Are you sure you want to delete this downloaded episode? You can download it again later.")
             }
             .sheet(isPresented: $showSubtitleSettings) {
-                SubtitleSettingsSheet(hasTranslation: viewModel.hasExistingTranslation)
+                SubtitleSettingsSheet(hasTranslation: viewModel.translation.hasExistingTranslation)
             }
             .sheet(isPresented: $showRegenerateConfirmation) {
                 TranscriptRegenerateSheet(viewModel: viewModel)
             }
             .sheet(isPresented: $showTranslationLanguagePicker) {
                 TranslationLanguagePickerSheet(
-                    availableTranslations: viewModel.availableTranslationLanguages,
-                    translationStatus: viewModel.translationStatus,
+                    availableTranslations: viewModel.translation.availableTranslationLanguages,
+                    translationStatus: viewModel.translation.translationStatus,
                     onSelectLanguage: { language in
-                        viewModel.translateTo(language)
+                        viewModel.translation.translateTo(language)
                     }
                 )
             }
             .onAppear {
                 viewModel.setModelContext(modelContext)
-                viewModel.checkTranscriptStatus()
-                viewModel.loadExistingTranslations()
-                viewModel.checkAvailableTranslations()
+                viewModel.transcript.checkTranscriptStatus()
+                viewModel.translation.loadExistingTranslations()
+                viewModel.translation.checkAvailableTranslations()
             }
             .onDisappear {
                 viewModel.cleanup()
             }
-            .onChange(of: viewModel.transcriptTranslationTrigger) { _, _ in
+            .onChange(of: viewModel.translation.transcriptTranslationTrigger) { _, _ in
                 triggerTranscriptTranslation()
             }
-            .onChange(of: viewModel.descriptionTranslationTrigger) { _, _ in
+            .onChange(of: viewModel.translation.descriptionTranslationTrigger) { _, _ in
                 triggerDescriptionTranslation()
             }
-            .onChange(of: viewModel.episodeTitleTranslationTrigger) { _, _ in
+            .onChange(of: viewModel.translation.episodeTitleTranslationTrigger) { _, _ in
                 triggerTitleTranslation()
             }
-            .onChange(of: viewModel.podcastTitleTranslationTrigger) { _, _ in
+            .onChange(of: viewModel.translation.podcastTitleTranslationTrigger) { _, _ in
                 triggerPodcastTitleTranslation()
             }
             .translationTask(transcriptTranslationConfig) { session in
-                await viewModel.performTranscriptTranslation(using: session)
+                await viewModel.translation.performTranscriptTranslation(using: session)
             }
             .translationTask(descriptionTranslationConfig) { session in
-                await viewModel.performDescriptionTranslation(using: session)
+                await viewModel.translation.performDescriptionTranslation(using: session)
             }
             .translationTask(titleTranslationConfig) { session in
-                await viewModel.performTitleTranslation(using: session)
+                await viewModel.translation.performTitleTranslation(using: session)
             }
             .translationTask(podcastTitleTranslationConfig) { session in
-                await viewModel.performPodcastTitleTranslation(using: session)
+                await viewModel.translation.performPodcastTitleTranslation(using: session)
             }
     }
 
     // MARK: - Translation triggers
 
     private func triggerTranscriptTranslation() {
-        guard let targetLang = viewModel.selectedTranslationLanguage?.localeLanguage else { return }
+        guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
         let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
         transcriptTranslationConfig = TranslationService.shared.makeConfiguration(
             sourceLanguage: sourceLang,
@@ -132,7 +132,7 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
     }
 
     private func triggerDescriptionTranslation() {
-        guard let targetLang = viewModel.selectedTranslationLanguage?.localeLanguage else { return }
+        guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
         let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
         descriptionTranslationConfig = TranslationService.shared.makeConfiguration(
             sourceLanguage: sourceLang,
@@ -141,7 +141,7 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
     }
 
     private func triggerTitleTranslation() {
-        guard let targetLang = viewModel.selectedTranslationLanguage?.localeLanguage else { return }
+        guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
         let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
         titleTranslationConfig = TranslationService.shared.makeConfiguration(
             sourceLanguage: sourceLang,
@@ -150,7 +150,7 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
     }
 
     private func triggerPodcastTitleTranslation() {
-        guard let targetLang = viewModel.selectedTranslationLanguage?.localeLanguage else { return }
+        guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
         let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
         podcastTitleTranslationConfig = TranslationService.shared.makeConfiguration(
             sourceLanguage: sourceLang,

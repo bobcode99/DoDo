@@ -94,7 +94,7 @@ struct EpisodeTranscriptView: View {
     /// time is before the first sentence or unresolved.
     private var liveActiveSentenceID: Int? {
         guard let time = currentTime else { return nil }
-        return viewModel.transcriptSentences.activeID(at: time)
+        return viewModel.transcript.transcriptSentences.activeID(at: time)
     }
 
     /// Id of the sentence to highlight + auto-scroll to. Sticky — once we
@@ -109,7 +109,7 @@ struct EpisodeTranscriptView: View {
     private var showJumpToPlaying: Bool {
         !autoScrollEnabled
             && activeSentenceID != nil
-            && viewModel.transcriptSearchQuery.isEmpty
+            && viewModel.transcript.transcriptSearchQuery.isEmpty
     }
 
     var body: some View {
@@ -121,7 +121,7 @@ struct EpisodeTranscriptView: View {
                 )
             }
 
-            if viewModel.hasTranscript && !viewModel.isTranscriptProcessing {
+            if viewModel.hasTranscript && !viewModel.transcript.isTranscriptProcessing {
                 TranscriptStatusStrip(
                     viewModel: viewModel,
                     autoScrollEnabled: $autoScrollEnabled,
@@ -149,10 +149,10 @@ struct EpisodeTranscriptView: View {
                 showRegenerateConfirmation = false
             }
         }
-        .onChange(of: viewModel.transcriptSearchQuery) { _, newQuery in
-            viewModel.updateSearchMatches(query: newQuery)
+        .onChange(of: viewModel.transcript.transcriptSearchQuery) { _, newQuery in
+            viewModel.transcript.updateSearchMatches(query: newQuery)
         }
-        .onChange(of: viewModel.transcriptSentences.count) { _, _ in
+        .onChange(of: viewModel.transcript.transcriptSentences.count) { _, _ in
             // If the underlying sentence list changes (regroup after
             // translation toggle, transcript regenerated, etc.) the sticky
             // cache may point at an id that no longer exists. Drop it so the
@@ -163,12 +163,12 @@ struct EpisodeTranscriptView: View {
             if isShowing {
                 // Reopen: restore the previously typed query so the input
                 // field is pre-filled and highlights re-appear.
-                viewModel.transcriptSearchQuery = lastSearchQuery
+                viewModel.transcript.transcriptSearchQuery = lastSearchQuery
             } else {
                 // Dismiss: stash the query for the next reopen, then clear
                 // the active query so transcript highlights disappear.
-                lastSearchQuery = viewModel.transcriptSearchQuery
-                viewModel.transcriptSearchQuery = ""
+                lastSearchQuery = viewModel.transcript.transcriptSearchQuery
+                viewModel.transcript.transcriptSearchQuery = ""
             }
         }
         .sheet(isPresented: $showSearchSheet) {
@@ -201,11 +201,11 @@ struct EpisodeTranscriptView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 SentenceBasedTranscriptView(
-                    sentences: viewModel.transcriptSentences,
+                    sentences: viewModel.transcript.transcriptSentences,
                     currentTime: currentTime,
-                    searchQuery: viewModel.transcriptSearchQuery,
-                    onSegmentTap: viewModel.seekToSegment,
-                    subtitleMode: viewModel.effectiveDisplayMode,
+                    searchQuery: viewModel.transcript.transcriptSearchQuery,
+                    onSegmentTap: viewModel.transcript.seekToSegment,
+                    subtitleMode: viewModel.translation.effectiveDisplayMode,
                     flashedSentenceID: flashedSentenceID
                 )
                 .padding(.horizontal, 20)
@@ -238,15 +238,15 @@ struct EpisodeTranscriptView: View {
             .onChange(of: activeSentenceID) { _, newID in
                 guard autoScrollEnabled,
                       let id = newID,
-                      viewModel.transcriptSearchQuery.isEmpty,
+                      viewModel.transcript.transcriptSearchQuery.isEmpty,
                       Date() >= suppressAutoScrollUntil else { return }
                 withAnimation(.easeInOut(duration: 0.35)) {
                     proxy.scrollTo(id, anchor: .center)
                 }
             }
-            .onChange(of: viewModel.currentMatchIndex) { _, _ in
-                guard !viewModel.searchMatchIds.isEmpty else { return }
-                let matchId = viewModel.searchMatchIds[viewModel.currentMatchIndex]
+            .onChange(of: viewModel.transcript.currentMatchIndex) { _, _ in
+                guard !viewModel.transcript.searchMatchIds.isEmpty else { return }
+                let matchId = viewModel.transcript.searchMatchIds[viewModel.transcript.currentMatchIndex]
                 suppressAutoScrollUntil = Date().addingTimeInterval(0.4)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     proxy.scrollTo(matchId, anchor: .center)

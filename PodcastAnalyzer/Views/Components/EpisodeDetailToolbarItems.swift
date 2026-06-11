@@ -17,7 +17,7 @@ struct EpisodeDetailToolbarItems: View {
                 } label: {
                     translateButtonLabel
                 }
-                .disabled(viewModel.translationStatus.isTranslating)
+                .disabled(viewModel.translation.translationStatus.isTranslating)
                 .accessibilityLabel(translateAccessibilityLabel)
             }
             Menu {
@@ -46,17 +46,17 @@ struct EpisodeDetailToolbarItems: View {
 
     @ViewBuilder
     private var translateButtonLabel: some View {
-        if viewModel.translationStatus.isTranslating {
-            TranslationProgressCircle(status: viewModel.translationStatus)
+        if viewModel.translation.translationStatus.isTranslating {
+            TranslationProgressCircle(status: viewModel.translation.translationStatus)
                 .frame(width: 24, height: 24)
-        } else if case .failed = viewModel.translationStatus {
+        } else if case .failed = viewModel.translation.translationStatus {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
-        } else if viewModel.hasExistingTranslation {
+        } else if viewModel.translation.hasExistingTranslation {
             ZStack(alignment: .bottomTrailing) {
                 Image(systemName: "translate.fill")
                     .foregroundStyle(.blue)
-                if let lang = viewModel.selectedTranslationLanguage {
+                if let lang = viewModel.translation.selectedTranslationLanguage {
                     Text(lang.shortName)
                         .font(.system(size: 8, weight: .bold))
                         .padding(.horizontal, 3)
@@ -72,10 +72,10 @@ struct EpisodeDetailToolbarItems: View {
     }
 
     private var translateAccessibilityLabel: String {
-        if viewModel.translationStatus.isTranslating { return "Translating in progress" }
-        if case .failed = viewModel.translationStatus { return "Translation failed" }
-        if viewModel.hasExistingTranslation,
-           let lang = viewModel.selectedTranslationLanguage {
+        if viewModel.translation.translationStatus.isTranslating { return "Translating in progress" }
+        if case .failed = viewModel.translation.translationStatus { return "Translation failed" }
+        if viewModel.translation.hasExistingTranslation,
+           let lang = viewModel.translation.selectedTranslationLanguage {
             return "Translated to \(lang.displayName). Change language."
         }
         return "Translate"

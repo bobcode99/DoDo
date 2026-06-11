@@ -33,7 +33,7 @@ struct TranscriptNavToolbar: ToolbarContent {
         Button {
             showSearchSheet = true
         } label: {
-            Image(systemName: viewModel.transcriptSearchQuery.isEmpty
+            Image(systemName: viewModel.transcript.transcriptSearchQuery.isEmpty
                   ? "magnifyingglass"
                   : "magnifyingglass.circle.fill")
         }
@@ -43,27 +43,27 @@ struct TranscriptNavToolbar: ToolbarContent {
     private var transcriptActionsMenu: some View {
         Menu {
             Section {
-                if let date = viewModel.cachedTranscriptDate {
+                if let date = viewModel.transcript.cachedTranscriptDate {
                     Label(
                         "Generated \(date.formatted(date: .abbreviated, time: .shortened))",
                         systemImage: "clock"
                     )
                 }
                 Label(
-                    "\(viewModel.transcriptSegments.count) segments",
+                    "\(viewModel.transcript.transcriptSegments.count) segments",
                     systemImage: "text.alignleft"
                 )
             }
 
             Section("Copy") {
                 Button {
-                    viewModel.copyTranscriptToClipboard()
+                    viewModel.transcript.copyTranscriptToClipboard()
                     showCopySuccess = true
                 } label: {
                     Label("Copy All (with timestamps)", systemImage: "doc.on.doc")
                 }
                 Button {
-                    PlatformClipboard.string = viewModel.cleanTranscriptText
+                    PlatformClipboard.string = viewModel.transcript.cleanTranscriptText
                     showCopySuccess = true
                 } label: {
                     Label("Copy Text Only", systemImage: "text.alignleft")

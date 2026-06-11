@@ -5,7 +5,7 @@ struct EpisodeTranscriptStatusView: View {
     @Bindable var viewModel: EpisodeDetailViewModel
 
     private var effectiveEngine: TranscriptEngine {
-        viewModel.selectedTranscriptEngine ?? TranscriptEngine(
+        viewModel.transcript.selectedTranscriptEngine ?? TranscriptEngine(
             rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
         ) ?? .appleSpeech
     }
@@ -34,8 +34,8 @@ struct EpisodeTranscriptStatusView: View {
     }
 
     private var transcriptLanguageName: String {
-        if effectiveEngine == .whisper, viewModel.selectedTranscriptLanguage == nil {
-            if let detected = viewModel.transcriptDetectedLanguage {
+        if effectiveEngine == .whisper, viewModel.transcript.selectedTranscriptLanguage == nil {
+            if let detected = viewModel.transcript.transcriptDetectedLanguage {
                 let name = pickerLocales.first { $0.id == detected }?.name
                     ?? Locale.current.localizedString(forLanguageCode: detected)
                     ?? detected
@@ -43,7 +43,7 @@ struct EpisodeTranscriptStatusView: View {
             }
             return "Auto-detect"
         }
-        let code = viewModel.selectedTranscriptLanguage ?? viewModel.podcastLanguage
+        let code = viewModel.transcript.selectedTranscriptLanguage ?? viewModel.podcastLanguage
         return pickerLocales.first { $0.id == resolvedLanguage(code) }?.name ?? code
     }
 
@@ -53,7 +53,7 @@ struct EpisodeTranscriptStatusView: View {
     }
 
     var body: some View {
-        switch viewModel.transcriptState {
+        switch viewModel.transcript.transcriptState {
         case .idle:
             idleView
         case .downloadingModel(let progress):
@@ -71,9 +71,9 @@ struct EpisodeTranscriptStatusView: View {
 
     @ViewBuilder
     private var idleView: some View {
-        if viewModel.hasRSSTranscriptAvailable {
+        if viewModel.transcript.hasRSSTranscriptAvailable {
             rssAvailableView
-        } else if viewModel.isDownloadingRSSTranscript {
+        } else if viewModel.transcript.isDownloadingRSSTranscript {
             rssDownloadingView
         } else {
             generateConfigView
@@ -87,7 +87,7 @@ struct EpisodeTranscriptStatusView: View {
             Text("This episode has a transcript from the podcast feed.")
         } actions: {
             Button {
-                viewModel.downloadRSSTranscript()
+                viewModel.transcript.downloadRSSTranscript()
             } label: {
                 Label("Download Transcript", systemImage: "arrow.down.circle")
             }
@@ -141,7 +141,7 @@ struct EpisodeTranscriptStatusView: View {
     @ViewBuilder
     private var primaryActionView: some View {
         if canGenerate {
-            Button(action: { viewModel.generateTranscript() }) {
+            Button(action: { viewModel.transcript.generateTranscript() }) {
                 Label("Generate Transcript", systemImage: "text.bubble")
                     .font(.subheadline)
                     .padding(.horizontal, 20).padding(.vertical, 10)
@@ -182,7 +182,7 @@ struct EpisodeTranscriptStatusView: View {
 
     private var statusDescription: String {
         if canGenerate {
-            if !viewModel.isModelReady && effectiveEngine == .whisper {
+            if !viewModel.transcript.isModelReady && effectiveEngine == .whisper {
                 return "Speech recognition model will be downloaded on first use."
             }
             if effectiveEngine == .yapServer && !viewModel.hasLocalAudio {
@@ -206,11 +206,11 @@ struct EpisodeTranscriptStatusView: View {
         Picker("Engine", selection: Binding(
             get: { effectiveEngine },
             set: { newEngine in
-                viewModel.selectedTranscriptEngine = newEngine
-                guard newEngine != .whisper, let selected = viewModel.selectedTranscriptLanguage else { return }
+                viewModel.transcript.selectedTranscriptEngine = newEngine
+                guard newEngine != .whisper, let selected = viewModel.transcript.selectedTranscriptLanguage else { return }
                 let resolved = resolvedLanguage(selected)
                 if !SettingsViewModel.locales(for: newEngine).contains(where: { $0.id == resolved }) {
-                    viewModel.selectedTranscriptLanguage = nil
+                    viewModel.transcript.selectedTranscriptLanguage = nil
                 }
             }
         )) {
@@ -226,9 +226,9 @@ struct EpisodeTranscriptStatusView: View {
         Picker("Language", selection: Binding(
             get: {
                 if effectiveEngine == .whisper {
-                    return viewModel.selectedTranscriptLanguage ?? "auto"
+                    return viewModel.transcript.selectedTranscriptLanguage ?? "auto"
                 }
-                if let selected = viewModel.selectedTranscriptLanguage {
+                if let selected = viewModel.transcript.selectedTranscriptLanguage {
                     return resolvedLanguage(selected)
                 }
                 let lang = viewModel.podcastLanguage
@@ -242,13 +242,13 @@ struct EpisodeTranscriptStatusView: View {
             },
             set: { newValue in
                 if effectiveEngine == .whisper {
-                    viewModel.selectedTranscriptLanguage = newValue == "auto" ? nil : newValue
+                    viewModel.transcript.selectedTranscriptLanguage = newValue == "auto" ? nil : newValue
                 } else {
                     // Always store the explicit selection — never nil-optimize.
                     // Nil-optimizing caused the picker to show "zh-tw" (first locale,
                     // accidental match for empty podcastLanguage) while selectedTranscriptLanguage
                     // remained nil, so generateTranscript() fell back to getPodcastLanguage() → "en".
-                    viewModel.selectedTranscriptLanguage = newValue
+                    viewModel.transcript.selectedTranscriptLanguage = newValue
                 }
             }
         )) {
@@ -298,7 +298,7 @@ struct EpisodeTranscriptStatusView: View {
                     .monospacedDigit()
             }
 
-            Button("Cancel", role: .cancel) { viewModel.cancelTranscript() }
+            Button("Cancel", role: .cancel) { viewModel.transcript.cancelTranscript() }
                 .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity)
@@ -331,7 +331,7 @@ struct EpisodeTranscriptStatusView: View {
             Text(message)
         } actions: {
             Button {
-                viewModel.transcriptState = .idle
+                viewModel.transcript.transcriptState = .idle
             } label: {
                 Label("Try Again", systemImage: "arrow.clockwise")
             }

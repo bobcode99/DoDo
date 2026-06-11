@@ -6,7 +6,7 @@ struct TranscriptRegenerateSheet: View {
     @Bindable var viewModel: EpisodeDetailViewModel
 
     private var effectiveEngine: TranscriptEngine {
-        viewModel.selectedTranscriptEngine ?? TranscriptEngine(
+        viewModel.transcript.selectedTranscriptEngine ?? TranscriptEngine(
             rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
         ) ?? .appleSpeech
     }
@@ -64,18 +64,18 @@ struct TranscriptRegenerateSheet: View {
         Binding(
             get: {
                 if effectiveEngine == .whisper {
-                    return viewModel.selectedTranscriptLanguage ?? "auto"
+                    return viewModel.transcript.selectedTranscriptLanguage ?? "auto"
                 }
                 return resolvedLanguage(
-                    viewModel.selectedTranscriptLanguage ?? viewModel.podcastLanguage,
+                    viewModel.transcript.selectedTranscriptLanguage ?? viewModel.podcastLanguage,
                     for: effectiveEngine
                 )
             },
             set: { newValue in
                 if effectiveEngine == .whisper {
-                    viewModel.selectedTranscriptLanguage = (newValue == "auto") ? nil : newValue
+                    viewModel.transcript.selectedTranscriptLanguage = (newValue == "auto") ? nil : newValue
                 } else {
-                    viewModel.selectedTranscriptLanguage = newValue
+                    viewModel.transcript.selectedTranscriptLanguage = newValue
                 }
             }
         )
@@ -92,18 +92,18 @@ struct TranscriptRegenerateSheet: View {
                     Picker("Engine", selection: Binding(
                         get: { effectiveEngine },
                         set: { newEngine in
-                            viewModel.selectedTranscriptEngine = newEngine
+                            viewModel.transcript.selectedTranscriptEngine = newEngine
                             if newEngine == .whisper {
                                 return
                             }
 
-                            if let selected = viewModel.selectedTranscriptLanguage {
+                            if let selected = viewModel.transcript.selectedTranscriptLanguage {
                                 let resolved = resolvedLanguage(selected, for: newEngine)
                                 let isSupported = SettingsViewModel.locales(for: newEngine).contains {
                                     $0.id == resolved
                                 }
                                 if !isSupported {
-                                    viewModel.selectedTranscriptLanguage = nil
+                                    viewModel.transcript.selectedTranscriptLanguage = nil
                                 }
                             }
                         }
@@ -134,7 +134,7 @@ struct TranscriptRegenerateSheet: View {
                 Section {
                     Button("Regenerate from Audio") {
                         dismiss()
-                        viewModel.regenerateTranscript()
+                        viewModel.transcript.regenerateTranscript()
                     }
                     .disabled(!canRegenerate)
                 }

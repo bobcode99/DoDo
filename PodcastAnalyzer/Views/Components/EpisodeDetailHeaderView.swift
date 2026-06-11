@@ -123,7 +123,7 @@ struct EpisodeDetailHeaderView: View {
 
     @ViewBuilder
     private var titleView: some View {
-        if let translatedTitle = viewModel.translatedEpisodeTitle {
+        if let translatedTitle = viewModel.translation.translatedEpisodeTitle {
             VStack(alignment: .leading, spacing: 4) {
                 Text(translatedTitle)
                     .font(titleFont)
@@ -156,7 +156,7 @@ struct EpisodeDetailHeaderView: View {
     private var podcastTitleLink: some View {
         NavigationLink(value: podcastBrowseRoute) {
             HStack(spacing: 4) {
-                if let translatedTitle = viewModel.translatedPodcastTitle {
+                if let translatedTitle = viewModel.translation.translatedPodcastTitle {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(translatedTitle)
                             .font(podcastTitleFont)
@@ -206,7 +206,7 @@ struct EpisodeDetailHeaderView: View {
                     .foregroundStyle(.green)
             }
 
-            switch viewModel.transcriptState {
+            switch viewModel.transcript.transcriptState {
             case .idle, .error:
                 if viewModel.hasTranscript {
                     Image(systemName: "captions.bubble.fill")
