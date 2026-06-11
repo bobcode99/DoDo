@@ -75,6 +75,17 @@ struct MacLibraryPodcastsView: View {
 struct MacPodcastGridCell: View {
   let podcast: PodcastInfoModel
 
+  /// Most recent episode pubDate, formatted as "2 days ago" etc.
+  /// Mirrors the iOS PodcastGridCell so Mac users see the same
+  /// "freshness" cue as on iPhone.
+  private var latestEpisodeDateString: String? {
+    guard let date = podcast.podcastInfo.episodes
+      .lazy
+      .compactMap(\.pubDate)
+      .max() else { return nil }
+    return Formatters.formatRelativeDate(date)
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       CachedArtworkImage(urlString: podcast.podcastInfo.imageURL, size: 150, cornerRadius: 10)
@@ -83,6 +94,12 @@ struct MacPodcastGridCell: View {
         .font(.caption)
         .fontWeight(.medium)
         .lineLimit(2)
+
+      if let dateStr = latestEpisodeDateString {
+        Text(dateStr)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
     }
     .frame(width: 150)
   }
