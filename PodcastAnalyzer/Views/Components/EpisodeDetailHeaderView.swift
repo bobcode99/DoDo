@@ -277,16 +277,30 @@ struct EpisodeDetailHeaderView: View {
         let descriptor = FetchDescriptor<PodcastInfoModel>(
             predicate: #Predicate { $0.title == title }
         )
-        if let model = try? modelContext.fetch(descriptor).first {
-            cachedPodcastModel = model
-        } else {
-            let service = ApplePodcastService()
-            if let results = try? await service.searchPodcasts(term: title, limit: 5),
-               let match = results.first(where: {
-                   $0.collectionName.lowercased() == title.lowercased()
-               }) ?? results.first {
-                browseCollectionId = String(match.collectionId)
+        // Multiple rows can share a title (an old browsed row from
+        // EpisodeListView.loadBrowsePodcast plus a later subscribed row from
+        // HomeViewModel.subscribeToPodcast). `.first` is unordered, so it can
+        // return the stale browsed copy whose `podcastInfo.episodes` was never
+        // refreshed — surfacing the old episode list when the header link
+        // pushes a new EpisodeListView. Prefer the subscribed, freshest row.
+        if let results = try? modelContext.fetch(descriptor), !results.isEmpty {
+            let best = results.max { a, b in
+                if a.isSubscribed != b.isSubscribed {
+                    return !a.isSubscribed && b.isSubscribed
+                }
+                return a.lastUpdated < b.lastUpdated
             }
+            if let best {
+                cachedPodcastModel = best
+                return
+            }
+        }
+        let service = ApplePodcastService()
+        if let results = try? await service.searchPodcasts(term: title, limit: 5),
+           let match = results.first(where: {
+               $0.collectionName.lowercased() == title.lowercased()
+           }) ?? results.first {
+            browseCollectionId = String(match.collectionId)
         }
     }
 }
