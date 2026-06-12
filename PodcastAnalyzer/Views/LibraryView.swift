@@ -23,10 +23,16 @@ struct LibraryView: View {
 
   @State private var sortedPodcasts: [PodcastGridItem] = []
   @State private var podcastModelByID: [PodcastInfoModel.ID: PodcastInfoModel] = [:]
-  /// Last podcast id-set we processed. Lets us skip re-sorting and re-mapping
-  /// on the second+ time the user enters the tab when nothing has changed —
-  /// the @Query emits a new array on every SwiftData write, even unrelated ones.
-  @State private var lastProcessedPodcastIds: [PodcastInfoModel.ID] = []
+  /// (id → lastUpdated) of the last podcast snapshot we processed. Lets us skip
+  /// re-sorting and re-mapping on the second+ time the user enters the tab when
+  /// nothing has changed — the @Query emits a new array on every SwiftData
+  /// write, even unrelated ones. Tracking lastUpdated (not just ids) means a
+  /// background feed sync still refreshes the grid's latest-episode dates.
+  @State private var lastProcessedPodcastStamp: [PodcastInfoModel.ID: Date] = [:]
+  /// Throttles the saved/downloaded re-fetch in onAppear: popping back from a
+  /// sub-page re-fires onAppear, and running SwiftData fetches during the nav
+  /// transition is what makes the pop animation hitch.
+  @State private var lastAppearRefresh = Date.distantPast
   @State private var errorMessage: String?
   @State private var showError = false
 
@@ -111,10 +117,16 @@ struct LibraryView: View {
     .onAppear {
       viewModel.setModelContext(modelContext)
       applyPodcastsIfChanged(subscribedPodcasts)
-      // Re-fetch saved/starred episodes on every appearance so stars set from
-      // Home/Search/Trending (outside the Library tab) surface immediately and
-      // the ContentUnavailableView clears once content exists.
+      // Re-fetch saved/starred episodes so stars set from Home/Search/Trending
+      // (outside the Library tab) surface on return. Deferred past the nav
+      // transition and throttled, so popping back from a sub-page doesn't run
+      // SwiftData fetches mid-animation — that contention was the visible
+      // hitch when navigating back into this tab.
+      let now = Date()
+      guard now.timeIntervalSince(lastAppearRefresh) > 2 else { return }
+      lastAppearRefresh = now
       Task {
+        try? await Task.sleep(for: .milliseconds(350))
         await viewModel.refreshSavedEpisodes()
         await viewModel.refreshDownloadedEpisodes()
       }
@@ -153,13 +165,16 @@ struct LibraryView: View {
 
   // MARK: - Helper Methods
 
-  /// Apply a new subscribed-podcasts snapshot only if the id-set actually
-  /// changed. Cheap identity check that skips the expensive map+sort, the
-  /// dictionary rebuild, and the viewModel refresh on every body re-eval.
+  /// Apply a new subscribed-podcasts snapshot only if the (id, lastUpdated)
+  /// signature actually changed. Cheap identity check that skips the expensive
+  /// map+sort, the dictionary rebuild, and the viewModel refresh on every
+  /// body re-eval.
   private func applyPodcastsIfChanged(_ podcasts: [PodcastInfoModel]) {
-    let currentIds = podcasts.map(\.id)
-    guard currentIds != lastProcessedPodcastIds else { return }
-    lastProcessedPodcastIds = currentIds
+    let currentStamp = Dictionary(
+      uniqueKeysWithValues: podcasts.map { ($0.id, $0.lastUpdated) }
+    )
+    guard currentStamp != lastProcessedPodcastStamp else { return }
+    lastProcessedPodcastStamp = currentStamp
     podcastModelByID = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0) })
     viewModel.setPodcasts(podcasts)
     sortedPodcasts = podcasts

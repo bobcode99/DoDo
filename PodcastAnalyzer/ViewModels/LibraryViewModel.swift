@@ -247,6 +247,17 @@ final class LibraryViewModel {
   // Cache for O(1) lookups
   private var podcastTitleMap: [String: PodcastInfoModel] = [:]
 
+  /// Decoded `PodcastInfo` snapshots keyed by title, rebuilt together with
+  /// `podcastTitleMap`. The saved/downloaded loaders previously re-decoded
+  /// every podcast's episode blob (`mapValues { $0.podcastInfo }`) on each
+  /// refresh — i.e. on every Library appearance — which is main-thread work
+  /// proportional to total episode count across the whole library.
+  private var podcastInfoByTitle: [String: PodcastInfo] = [:]
+
+  /// (id → lastUpdated) signature of the last `loadAllPodcasts` fetch.
+  /// Repeat calls with an unchanged store skip the map rebuilds entirely.
+  private var allPodcastsStamp: [UUID: Date] = [:]
+
   @ObservationIgnored private var initTask: Task<Void, Never>?
   /// Tracks the latest unstructured refresh task so it can be cancelled in cleanup().
   @ObservationIgnored private var refreshTask: Task<Void, Never>?
@@ -737,15 +748,26 @@ final class LibraryViewModel {
 
     do {
       let podcasts = try context.fetch(descriptor)
+
+      // Skip the (blob-decoding) map rebuilds when no podcast was added,
+      // removed, or refreshed since the last build.
+      let stamp = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0.lastUpdated) })
+      if stamp == allPodcastsStamp, !podcastTitleMap.isEmpty {
+        self.allPodcasts = podcasts
+        return
+      }
+      allPodcastsStamp = stamp
+
       // Since we're @MainActor, update directly
       self.allPodcasts = podcasts
-      
+
       // Update lookup map (keep latest on duplicate titles)
       self.podcastTitleMap = Dictionary(
         podcasts.map { ($0.podcastInfo.title, $0) },
         uniquingKeysWith: { _, latest in latest }
       )
-      
+      self.podcastInfoByTitle = podcastTitleMap.mapValues { $0.podcastInfo }
+
       logger.info("Loaded \(self.allPodcasts.count) total podcasts for episode lookups")
     } catch {
       logger.error("Failed to load all podcasts: \(error.localizedDescription)")
@@ -771,8 +793,8 @@ final class LibraryViewModel {
       let models = try context.fetch(descriptor)
       // Extract Sendable snapshots on MainActor (ModelContext boundary)
       let snapshots = models.map { FullEpisodeSnapshot(from: $0) }
-      // Capture Sendable lookup map
-      let infoMap = self.podcastTitleMap.mapValues { $0.podcastInfo }
+      // Capture cached Sendable lookup map (built in loadAllPodcasts)
+      let infoMap = self.podcastInfoByTitle
       let delimiter = Self.episodeKeyDelimiter
 
       // Dedup + map off the MainActor
@@ -784,7 +806,11 @@ final class LibraryViewModel {
         }
       }.value
 
-      self.savedEpisodes = results
+      // Assign only on real change — an unconditional write invalidates every
+      // observer (Library body, QuickAccess counts) even when nothing moved.
+      if results != self.savedEpisodes {
+        self.savedEpisodes = results
+      }
       logger.info("Loaded \(self.savedEpisodes.count) saved episodes")
     } catch {
       logger.error("Failed to load saved episodes: \(error.localizedDescription)")
@@ -807,8 +833,8 @@ final class LibraryViewModel {
       let models = try context.fetch(descriptor)
       // Extract Sendable snapshots on MainActor (ModelContext boundary)
       let snapshots = models.map { FullEpisodeSnapshot(from: $0) }
-      // Capture Sendable lookup map
-      let infoMap = self.podcastTitleMap.mapValues { $0.podcastInfo }
+      // Capture cached Sendable lookup map (built in loadAllPodcasts)
+      let infoMap = self.podcastInfoByTitle
       let delimiter = Self.episodeKeyDelimiter
 
       // Dedup + map off the MainActor
@@ -821,7 +847,11 @@ final class LibraryViewModel {
         }
       }.value
 
-      self.downloadedEpisodes = results
+      // Assign only on real change — an unconditional write invalidates every
+      // observer (Library body, QuickAccess counts) even when nothing moved.
+      if results != self.downloadedEpisodes {
+        self.downloadedEpisodes = results
+      }
       logger.info("Quick loaded \(self.downloadedEpisodes.count) downloaded episodes")
     } catch {
       logger.error("Download fetch failed: \(error)")

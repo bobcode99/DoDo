@@ -68,11 +68,14 @@ struct PodcastGridItem: Identifiable, Equatable {
   let latestEpisodeDate: Date?
 
   init(from model: PodcastInfoModel) {
+    // Bind once — each `model.podcastInfo` access walks SwiftData's backing
+    // storage for the composite Codable value.
+    let info = model.podcastInfo
     self.id = model.id
-    self.title = model.podcastInfo.title
-    self.imageURL = model.podcastInfo.imageURL
-    self.episodeCount = model.podcastInfo.episodes.count
-    self.latestEpisodeDate = model.podcastInfo.episodes.lazy.compactMap(\.pubDate).max()
+    self.title = info.title
+    self.imageURL = info.imageURL
+    self.episodeCount = info.episodes.count
+    self.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
   }
 }
 
