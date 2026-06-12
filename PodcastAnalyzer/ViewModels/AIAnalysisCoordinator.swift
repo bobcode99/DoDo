@@ -155,11 +155,11 @@ final class AIAnalysisCoordinator {
   func checkOnDeviceAIAvailability() {
     if #available(iOS 26.0, macOS 26.0, *) {
       onDeviceAICheckTask?.cancel()
-      onDeviceAICheckTask = Task {
+      onDeviceAICheckTask = Task { [weak self] in
         let service = AppleFoundationModelsService()
         let availability = await service.checkAvailability()
-        guard !Task.isCancelled else { return }
-        onDeviceAIAvailability = availability
+        guard !Task.isCancelled, let self else { return }
+        self.onDeviceAIAvailability = availability
       }
     } else {
       onDeviceAIAvailability = .unavailable(reason: "Requires iOS 26 or later")
@@ -179,17 +179,18 @@ final class AIAnalysisCoordinator {
     }
 
     quickTagsTask?.cancel()
-    quickTagsTask = Task {
+    quickTagsTask = Task { [weak self] in
+      guard let self else { return }
       do {
-        quickTagsState = .analyzing(progress: 0, message: "Generating tags...")
+        self.quickTagsState = .analyzing(progress: 0, message: "Generating tags...")
 
         let service = AppleFoundationModelsService()
         let tags = try await service.generateQuickTags(
-          title: episode.title,
-          description: episode.podcastEpisodeDescription ?? "",
-          podcastTitle: podcastTitle,
-          duration: episode.duration.map { TimeInterval($0) },
-          releaseDate: episode.pubDate,
+          title: self.episode.title,
+          description: self.episode.podcastEpisodeDescription ?? "",
+          podcastTitle: self.podcastTitle,
+          duration: self.episode.duration.map { TimeInterval($0) },
+          releaseDate: self.episode.pubDate,
           progressCallback: { [weak self] message, progress in
             Task { @MainActor in
               self?.quickTagsState = .analyzing(progress: progress, message: message)
@@ -197,15 +198,16 @@ final class AIAnalysisCoordinator {
           }
         )
 
-        quickTagsCache.tags = tags
-        quickTagsCache.generatedAt = Date()
-        quickTagsState = .completed
+        guard !Task.isCancelled else { return }
+        self.quickTagsCache.tags = tags
+        self.quickTagsCache.generatedAt = Date()
+        self.quickTagsState = .completed
 
-        saveQuickTagsToSwiftData(tags: tags)
+        self.saveQuickTagsToSwiftData(tags: tags)
 
         logger.info("Quick tags generated successfully")
       } catch {
-        quickTagsState = .error("Failed: \(error.localizedDescription)")
+        self.quickTagsState = .error("Failed: \(error.localizedDescription)")
         logger.error("Quick tags generation failed: \(error.localizedDescription)")
       }
     }
@@ -224,14 +226,15 @@ final class AIAnalysisCoordinator {
     }
 
     briefSummaryTask?.cancel()
-    briefSummaryTask = Task {
+    briefSummaryTask = Task { [weak self] in
+      guard let self else { return }
       do {
-        quickTagsState = .analyzing(progress: 0, message: "Creating summary...")
+        self.quickTagsState = .analyzing(progress: 0, message: "Creating summary...")
 
         let service = AppleFoundationModelsService()
         let summary = try await service.generateBriefSummary(
-          title: episode.title,
-          description: episode.podcastEpisodeDescription ?? "",
+          title: self.episode.title,
+          description: self.episode.podcastEpisodeDescription ?? "",
           progressCallback: { [weak self] message, progress in
             Task { @MainActor in
               self?.quickTagsState = .analyzing(progress: progress, message: message)
@@ -239,12 +242,13 @@ final class AIAnalysisCoordinator {
           }
         )
 
-        quickTagsCache.briefSummary = summary
-        quickTagsCache.generatedAt = Date()
-        quickTagsState = .completed
+        guard !Task.isCancelled else { return }
+        self.quickTagsCache.briefSummary = summary
+        self.quickTagsCache.generatedAt = Date()
+        self.quickTagsState = .completed
         logger.info("Brief summary generated successfully")
       } catch {
-        quickTagsState = .error("Failed: \(error.localizedDescription)")
+        self.quickTagsState = .error("Failed: \(error.localizedDescription)")
         logger.error("Brief summary generation failed: \(error.localizedDescription)")
       }
     }
@@ -323,8 +327,11 @@ final class AIAnalysisCoordinator {
     let transcriptSnapshot = (transcriptSource?.transcriptText ?? "")
     let podcastLanguageSnapshot = podcastLanguage
 
+    let episodeTitle = episode.title
+
     cloudQuestionTask?.cancel()
-    cloudQuestionTask = Task {
+    cloudQuestionTask = Task { [weak self] in
+      guard let self else { return }
       #if os(iOS)
       var bgTaskID: UIBackgroundTaskIdentifier = .invalid
       bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "CloudQA") {
@@ -341,14 +348,14 @@ final class AIAnalysisCoordinator {
       #endif
 
       do {
-        cloudQuestionState = .analyzing(progress: 0, message: "Processing question...")
+        self.cloudQuestionState = .analyzing(progress: 0, message: "Processing question...")
 
         let service = CloudAIService.shared
 
         let result = try await service.askQuestion(
           question,
           transcript: transcriptSnapshot,
-          episodeTitle: episode.title,
+          episodeTitle: episodeTitle,
           podcastLanguage: podcastLanguageSnapshot,
           progressCallback: { [weak self] message, progress in
             Task { @MainActor in
@@ -357,14 +364,15 @@ final class AIAnalysisCoordinator {
           }
         )
 
-        cloudAnalysisCache.questionAnswers.append(result)
-        cloudQuestionState = .completed
+        guard !Task.isCancelled else { return }
+        self.cloudAnalysisCache.questionAnswers.append(result)
+        self.cloudQuestionState = .completed
 
-        saveQAToSwiftData(result)
+        self.saveQAToSwiftData(result)
 
         logger.info("Cloud Q&A completed successfully - Provider: \(result.provider.displayName), Model: \(result.model)")
       } catch {
-        cloudQuestionState = .error(error.localizedDescription)
+        self.cloudQuestionState = .error(error.localizedDescription)
         logger.error("Cloud Q&A failed: \(error.localizedDescription)")
       }
     }
