@@ -18,20 +18,21 @@ struct MacMiniPlayerBar: View {
   @State private var isHoveringProgress = false
   @State private var isDraggingProgress = false
 
-  private var progressPercentage: Double {
-    guard audioManager.duration > 0 else { return 0 }
-    return audioManager.currentTime / audioManager.duration
-  }
-
   var body: some View {
     let content = VStack(spacing: 0) {
-      // Interactive progress bar
-      progressBar
-        .frame(height: isHoveringProgress || isDraggingProgress ? 6 : 3)
-        .animation(.easeInOut(duration: 0.15), value: isHoveringProgress)
-        .onHover { hovering in
-          isHoveringProgress = hovering
-        }
+      // Interactive progress bar. The currentTime read lives inside this child
+      // view, so periodic time-observer ticks (~4×/sec during playback)
+      // re-render only the bar instead of the whole player (artwork, controls,
+      // speed menu, glass background).
+      MacMiniPlayerProgressBar(
+        isHoveringProgress: $isHoveringProgress,
+        isDraggingProgress: $isDraggingProgress
+      )
+      .frame(height: isHoveringProgress || isDraggingProgress ? 6 : 3)
+      .animation(.easeInOut(duration: 0.15), value: isHoveringProgress)
+      .onHover { hovering in
+        isHoveringProgress = hovering
+      }
 
       // Player controls
       HStack(spacing: 16) {
@@ -69,11 +70,7 @@ struct MacMiniPlayerBar: View {
 
         // Right: Time, speed, and expand
         HStack(spacing: 12) {
-          Text("\(Formatters.formatPlaybackTime(audioManager.currentTime)) / \(Formatters.formatPlaybackTime(audioManager.duration))")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-            .frame(width: 90, alignment: .trailing)
+          MacMiniPlayerTimeLabel()
 
           // Playback speed button
           Menu {
@@ -122,10 +119,23 @@ struct MacMiniPlayerBar: View {
     }
   }
 
-  // MARK: - Progress Bar
+}
 
-  @ViewBuilder
-  private var progressBar: some View {
+// MARK: - Isolated progress bar
+
+/// Reads `currentTime`/`duration` only inside this view so the high-frequency
+/// time-observer ticks re-render just the bar, not the whole MacMiniPlayerBar.
+private struct MacMiniPlayerProgressBar: View {
+  @Binding var isHoveringProgress: Bool
+  @Binding var isDraggingProgress: Bool
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  private var progressPercentage: Double {
+    guard audioManager.duration > 0 else { return 0 }
+    return audioManager.currentTime / audioManager.duration
+  }
+
+  var body: some View {
     GeometryReader { geometry in
       ZStack(alignment: .leading) {
         Rectangle()
@@ -149,6 +159,22 @@ struct MacMiniPlayerBar: View {
           }
       )
     }
+  }
+}
+
+// MARK: - Isolated time label
+
+/// Isolates the per-tick "elapsed / total" text so it doesn't invalidate the
+/// surrounding controls on every time-observer update.
+private struct MacMiniPlayerTimeLabel: View {
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  var body: some View {
+    Text("\(Formatters.formatPlaybackTime(audioManager.currentTime)) / \(Formatters.formatPlaybackTime(audioManager.duration))")
+      .font(.system(size: 11))
+      .foregroundStyle(.secondary)
+      .monospacedDigit()
+      .frame(width: 90, alignment: .trailing)
   }
 }
 

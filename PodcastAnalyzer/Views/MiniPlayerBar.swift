@@ -37,19 +37,14 @@ struct MiniPlayerBar: View {
   @State private var showExpandedPlayer = false
   @State private var deferredNavigation: ExpandedPlayerNavigation = .none
 
-  private var progress: Double {
-    guard audioManager.duration > 0 else { return 0 }
-    return min(max(audioManager.currentTime / audioManager.duration, 0), 1)
-  }
-
   var body: some View {
     VStack(spacing: 0) {
-      // Progress bar (hidden or 0 if not playing)
-      ProgressView(value: progress)
-        .progressViewStyle(.linear)
-        .tint(.blue)
-        .frame(height: 3)
-        .opacity(audioManager.currentEpisode == nil ? 0 : 1)
+      // Progress bar (hidden or 0 if not playing). Isolated into its own view
+      // so the high-frequency currentTime ticks (~4×/sec during playback)
+      // invalidate only the 3pt bar — not the whole accessory (artwork,
+      // marquee, glass), which is drawn over every tab and otherwise
+      // re-rendered on every tick, competing with navigation animations.
+      MiniPlayerProgressBar()
 
       // Main content
       ZStack {
@@ -262,6 +257,29 @@ struct MiniPlayerBar: View {
     )
   }
 }
+
+// MARK: - Isolated progress bar
+
+/// Reads `currentTime`/`duration` only inside this 3pt bar, so the periodic
+/// time-observer ticks (~4×/sec during playback) re-render just this view
+/// instead of the whole MiniPlayerBar accessory.
+private struct MiniPlayerProgressBar: View {
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  private var progress: Double {
+    guard audioManager.duration > 0 else { return 0 }
+    return min(max(audioManager.currentTime / audioManager.duration, 0), 1)
+  }
+
+  var body: some View {
+    ProgressView(value: progress)
+      .progressViewStyle(.linear)
+      .tint(.blue)
+      .frame(height: 3)
+      .opacity(audioManager.currentEpisode == nil ? 0 : 1)
+  }
+}
+
 // MARK: - Preview
 
 #Preview {
