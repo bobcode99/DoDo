@@ -24,6 +24,18 @@ struct PodcastAnalyzerApp: App {
   @Environment(\.scenePhase) private var scenePhase
   @State private var languageManager = LanguageManager.shared
 
+  /// Whether to auto-present the expanded player when the user brings the app
+  /// to the foreground while it is still playing. This is how Apple Podcasts
+  /// makes tapping the Dynamic Island / Now Playing controls land on the
+  /// player: iOS gives no "opened from Now Playing" signal, so we approximate
+  /// it by opening the player whenever a playing app is foregrounded.
+  @AppStorage("openPlayerOnReturnToPlayback") private var openPlayerOnReturnToPlayback = true
+
+  /// Captured at backgrounding so we only auto-open the player when the app
+  /// was *actively playing* as it left (and still is on return) — not on cold
+  /// launches or returns from a paused state.
+  @State private var wasPlayingOnBackground = false
+
   let sharedModelContainer: ModelContainer = {
     let schema = Schema([
       PodcastInfoModel.self,
@@ -158,12 +170,34 @@ struct PodcastAnalyzerApp: App {
         if BackgroundSyncManager.shared.isBackgroundSyncEnabled {
           BackgroundSyncManager.shared.startForegroundSync()
         }
+        #if os(iOS)
+        // Returned to a still-playing app (e.g. tapped the Dynamic Island /
+        // Now Playing controls) → surface the expanded player, Apple Podcasts
+        // style. handleWidgetToggleOnActive() above already applied any pending
+        // pause, so isPlaying here reflects the real post-activation state.
+        if openPlayerOnReturnToPlayback,
+           wasPlayingOnBackground,
+           EnhancedAudioManager.shared.isPlaying,
+           EnhancedAudioManager.shared.currentEpisode != nil {
+          Task { @MainActor in
+            // Let the foreground transition settle before presenting the sheet.
+            try? await Task.sleep(for: .milliseconds(350))
+            NotificationNavigationManager.shared.requestExpandPlayer()
+          }
+        }
+        wasPlayingOnBackground = false
+        #endif
       case .background:
         // App going to background - stop foreground timer, schedule background task
         BackgroundSyncManager.shared.stopForegroundSync()
         if BackgroundSyncManager.shared.isBackgroundSyncEnabled {
           BackgroundSyncManager.shared.scheduleBackgroundRefresh()
         }
+        #if os(iOS)
+        // Remember whether we left mid-playback so .active can decide whether
+        // to auto-open the player on return.
+        wasPlayingOnBackground = EnhancedAudioManager.shared.isPlaying
+        #endif
       case .inactive:
         break
       @unknown default:
