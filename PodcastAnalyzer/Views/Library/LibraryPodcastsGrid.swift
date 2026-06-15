@@ -52,6 +52,11 @@ struct LibraryPodcastsGrid: View {
             }
           }
         }
+        // Animates only the reposition when `sortedPodcasts` changes (e.g. a
+        // background sync brings new episodes and a show jumps to the front).
+        // The expensive rebuild already happened in applyPodcastsIfChanged, so
+        // this animates cheap layout moves of stable-id cells, not the work.
+        .animation(.smooth, value: sortedPodcasts)
       }
     }
   }

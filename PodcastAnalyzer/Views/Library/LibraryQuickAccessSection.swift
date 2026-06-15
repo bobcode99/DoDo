@@ -9,14 +9,18 @@
 import SwiftUI
 
 struct LibraryQuickAccessSection: View {
-  let savedCount: Int
-  let downloadedCount: Int
-  let latestCount: Int
+  /// Observed directly so the high-churn episode counts (download progress,
+  /// saved/downloaded changes) re-render only this card row instead of
+  /// LibraryView.body and the whole podcast grid below it.
+  let viewModel: LibraryViewModel
 
   @State private var showTranscriptProgressSheet = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    let savedCount = viewModel.savedEpisodes.count
+    let downloadedCount = viewModel.downloadedEpisodes.count + viewModel.downloadingEpisodes.count
+    let latestCount = viewModel.latestEpisodes.count
+    return VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 12) {
         NavigationLink(value: LibrarySubpageRoute.saved) {
           QuickAccessCard(

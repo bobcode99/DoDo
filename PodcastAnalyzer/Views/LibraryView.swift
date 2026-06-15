@@ -33,6 +33,11 @@ struct LibraryView: View {
   /// sub-page re-fires onAppear, and running SwiftData fetches during the nav
   /// transition is what makes the pop animation hitch.
   @State private var lastAppearRefresh = Date.distantPast
+  /// Built grid items keyed by podcast id, tagged with the `lastUpdated` stamp
+  /// they were derived from. Lets `applyPodcastsIfChanged` reuse items for
+  /// podcasts that haven't changed and decode the (expensive) `podcastInfo`
+  /// blob only for podcasts whose feed actually changed since the last build.
+  @State private var gridItemCache: [PodcastInfoModel.ID: CachedGridItem] = [:]
   @State private var errorMessage: String?
   @State private var showError = false
 
@@ -40,12 +45,8 @@ struct LibraryView: View {
     ZStack {
       ScrollView {
         VStack(spacing: 24) {
-          LibraryQuickAccessSection(
-            savedCount: viewModel.savedEpisodes.count,
-            downloadedCount: viewModel.downloadedEpisodes.count + viewModel.downloadingEpisodes.count,
-            latestCount: viewModel.latestEpisodes.count
-          )
-          .padding(.horizontal, 16)
+          LibraryQuickAccessSection(viewModel: viewModel)
+            .padding(.horizontal, 16)
 
           LibraryPodcastsGrid(
             sortedPodcasts: sortedPodcasts,
@@ -148,9 +149,10 @@ struct LibraryView: View {
       showError = newValue != nil
     }
     .onChange(of: subscribedPodcasts) { _, newPodcasts in
-      withAnimation(.easeInOut(duration: 0.3)) {
-        applyPodcastsIfChanged(newPodcasts)
-      }
+      // No withAnimation here: animating a full grid map+sort+dictionary
+      // rebuild was both a main-thread cost and visible jank. The grid items
+      // are cheap value types; SwiftUI's default diffing handles insert/remove.
+      applyPodcastsIfChanged(newPodcasts)
     }
 
     // Note: Do NOT call viewModel.cleanup() here — LibraryView is a tab root,
@@ -177,18 +179,45 @@ struct LibraryView: View {
     lastProcessedPodcastStamp = currentStamp
     podcastModelByID = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0) })
     viewModel.setPodcasts(podcasts)
-    sortedPodcasts = podcasts
-      .map { PodcastGridItem(from: $0) }
-      .sorted {
-        switch ($0.latestEpisodeDate, $1.latestEpisodeDate) {
-        case let (lhs?, rhs?): return lhs > rhs
-        case (_?, nil):        return true   // dated before undated
-        case (nil, _?):        return false
-        case (nil, nil):       return false
-        }
+
+    // Build grid items, reusing the cached item whenever a podcast's
+    // (id, lastUpdated) signature is unchanged. `PodcastGridItem(from:)` decodes
+    // the SwiftData `podcastInfo` Codable blob AND scans the full episode array
+    // for the latest pubDate — doing that for every podcast on the main thread,
+    // on every Library appearance / SwiftData write, was the source of the
+    // navigation hangs (Instruments: LibraryView.body up to ~280 ms/eval).
+    // Caching means we pay that cost only for podcasts that actually changed.
+    var rebuiltCache: [PodcastInfoModel.ID: CachedGridItem] = [:]
+    rebuiltCache.reserveCapacity(podcasts.count)
+    let items: [PodcastGridItem] = podcasts.map { model in
+      if let cached = gridItemCache[model.id], cached.stamp == model.lastUpdated {
+        rebuiltCache[model.id] = cached
+        return cached.item
       }
+      let item = PodcastGridItem(from: model)
+      rebuiltCache[model.id] = CachedGridItem(stamp: model.lastUpdated, item: item)
+      return item
+    }
+    gridItemCache = rebuiltCache
+
+    sortedPodcasts = items.sorted {
+      switch ($0.latestEpisodeDate, $1.latestEpisodeDate) {
+      case let (lhs?, rhs?): return lhs > rhs
+      case (_?, nil):        return true   // dated before undated
+      case (nil, _?):        return false
+      case (nil, nil):       return false
+      }
+    }
   }
 
+}
+
+/// A `PodcastGridItem` tagged with the `lastUpdated` stamp it was built from,
+/// so `LibraryView` can reuse it across appearances without re-decoding the
+/// podcast's `podcastInfo` blob when nothing changed.
+private struct CachedGridItem {
+  let stamp: Date
+  let item: PodcastGridItem
 }
 
 // MARK: - Isolated transcript toolbar badge
