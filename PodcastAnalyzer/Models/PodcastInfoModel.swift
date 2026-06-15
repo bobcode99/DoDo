@@ -44,6 +44,19 @@ class PodcastInfoModel {
   /// RSS URL for predicate queries (mirrors podcastInfo.rssUrl)
   var rssUrl: String = ""
 
+  // MARK: - Denormalized grid fields
+  // Mirror the handful of podcast-level values the Library grid renders +
+  // sorts on, so the grid never has to decode the full `podcastInfo` episode
+  // blob just to draw artwork and a date. Kept in sync by `applyPodcastInfo`
+  // / init; legacy rows are backfilled by LibraryViewModel.loadAllPodcasts.
+
+  /// Podcast artwork URL (mirrors podcastInfo.imageURL).
+  var imageURL: String = ""
+  /// Number of episodes in the current snapshot (mirrors podcastInfo.episodes.count).
+  var episodeCount: Int = 0
+  /// Newest episode pubDate in the snapshot — drives the grid's recency sort.
+  var latestEpisodeDate: Date?
+
   /// Stores either an ETag token or a Last-Modified date string from the last
   /// successful RSS fetch (AntennaPod dual-field trick). nil = never fetched.
   var httpCacheHeader: String?
@@ -84,6 +97,10 @@ class PodcastInfoModel {
     // Initialize queryable properties
     self.title = podcastInfo.title
     self.rssUrl = podcastInfo.rssUrl
+    // Initialize denormalized grid mirrors
+    self.imageURL = podcastInfo.imageURL
+    self.episodeCount = podcastInfo.episodes.count
+    self.latestEpisodeDate = podcastInfo.episodes.lazy.compactMap(\.pubDate).max()
   }
 
   /// The single funnel for replacing the stored podcast snapshot. SwiftData
@@ -97,5 +114,8 @@ class PodcastInfoModel {
     self.podcastInfo = info
     self.title = info.title
     self.rssUrl = info.rssUrl
+    self.imageURL = info.imageURL
+    self.episodeCount = info.episodes.count
+    self.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
   }
 }

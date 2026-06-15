@@ -761,12 +761,29 @@ final class LibraryViewModel {
       // Since we're @MainActor, update directly
       self.allPodcasts = podcasts
 
-      // Update lookup map (keep latest on duplicate titles)
-      self.podcastTitleMap = Dictionary(
-        podcasts.map { ($0.podcastInfo.title, $0) },
-        uniquingKeysWith: { _, latest in latest }
-      )
-      self.podcastInfoByTitle = podcastTitleMap.mapValues { $0.podcastInfo }
+      // Decode each podcast's episode blob exactly once, building both lookup
+      // maps in a single pass and backfilling the denormalized grid mirrors for
+      // any legacy row persisted before those columns existed. (Previously this
+      // decoded every blob twice — once for the title map, once for mapValues.)
+      var titleMap: [String: PodcastInfoModel] = [:]
+      var infoByTitle: [String: PodcastInfo] = [:]
+      titleMap.reserveCapacity(podcasts.count)
+      infoByTitle.reserveCapacity(podcasts.count)
+      var didBackfill = false
+      for model in podcasts {
+        let info = model.podcastInfo
+        titleMap[info.title] = model           // later row wins on duplicate titles
+        infoByTitle[info.title] = info
+        if model.episodeCount == 0 && !info.episodes.isEmpty {
+          model.imageURL = info.imageURL
+          model.episodeCount = info.episodes.count
+          model.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
+          didBackfill = true
+        }
+      }
+      self.podcastTitleMap = titleMap
+      self.podcastInfoByTitle = infoByTitle
+      if didBackfill { try? context.save() }
 
       logger.info("Loaded \(self.allPodcasts.count) total podcasts for episode lookups")
     } catch {
@@ -1126,8 +1143,14 @@ final class LibraryViewModel {
       return
     }
 
-    // Capture the podcast info structs (already Sendable)
-    let podcasts = self.podcastInfoModelList.map { $0.podcastInfo }
+    // Reuse the episode blobs already decoded by loadAllPodcasts (keyed by the
+    // reliable title mirror) so we don't re-decode every subscribed podcast on
+    // the main actor here. Falls back to a direct decode only when the cache
+    // isn't warm yet (e.g. setPodcasts → loadLatestSection raced ahead of it).
+    let infoByTitle = self.podcastInfoByTitle
+    let podcasts: [PodcastInfo] = self.podcastInfoModelList.map { model in
+      infoByTitle[model.title] ?? model.podcastInfo
+    }
 
     // 2. Perform heavy processing in background
     let delimiter = Self.episodeKeyDelimiter

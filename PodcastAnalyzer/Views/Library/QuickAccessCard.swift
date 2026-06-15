@@ -68,14 +68,23 @@ struct PodcastGridItem: Identifiable, Equatable {
   let latestEpisodeDate: Date?
 
   init(from model: PodcastInfoModel) {
-    // Bind once — each `model.podcastInfo` access walks SwiftData's backing
-    // storage for the composite Codable value.
-    let info = model.podcastInfo
     self.id = model.id
-    self.title = info.title
-    self.imageURL = info.imageURL
-    self.episodeCount = info.episodes.count
-    self.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
+    // Fast path: read the denormalized mirrors so the grid never decodes the
+    // podcastInfo episode blob (the cold-load hang). Rows persisted before
+    // these columns existed fall back to a one-time decode; LibraryViewModel
+    // .loadAllPodcasts backfills them so subsequent launches take the fast path.
+    if model.episodeCount > 0 || !model.imageURL.isEmpty {
+      self.title = model.title
+      self.imageURL = model.imageURL
+      self.episodeCount = model.episodeCount
+      self.latestEpisodeDate = model.latestEpisodeDate
+    } else {
+      let info = model.podcastInfo
+      self.title = info.title
+      self.imageURL = info.imageURL
+      self.episodeCount = info.episodes.count
+      self.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
+    }
   }
 }
 
