@@ -19,6 +19,10 @@ enum AutoDownloadSetting: String, CaseIterable {
 
 @Model
 class PodcastInfoModel {
+  // Indexes for the hot query paths: the subscribed-podcasts @Query, identity
+  // lookups by rssUrl/title, and recency sorting.
+  #Index<PodcastInfoModel>([\.isSubscribed], [\.rssUrl], [\.title], [\.lastUpdated])
+
   var id: UUID = UUID()
 
   var podcastInfo: PodcastInfo = PodcastInfo()
@@ -80,5 +84,18 @@ class PodcastInfoModel {
     // Initialize queryable properties
     self.title = podcastInfo.title
     self.rssUrl = podcastInfo.rssUrl
+  }
+
+  /// The single funnel for replacing the stored podcast snapshot. SwiftData
+  /// silently ignores property observers on `@Model`, so assigning
+  /// `podcastInfo` directly leaves the denormalized `title`/`rssUrl` mirrors
+  /// stale — which then breaks every `#Predicate { $0.title == … }` /
+  /// `{ $0.rssUrl == … }` lookup after a feed renames (downloads, AI analysis,
+  /// and queue items keyed by the old title silently orphan). Always assign
+  /// the podcast snapshot through here so the query mirrors stay in sync.
+  func applyPodcastInfo(_ info: PodcastInfo) {
+    self.podcastInfo = info
+    self.title = info.title
+    self.rssUrl = info.rssUrl
   }
 }

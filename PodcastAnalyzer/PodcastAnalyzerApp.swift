@@ -53,8 +53,23 @@ struct PodcastAnalyzerApp: App {
     do {
       return try ModelContainer(for: schema, configurations: [modelConfiguration])
     } catch {
-      logger.error("ModelContainer init failed: \(error.localizedDescription)")
-      fatalError("Could not create ModelContainer: \(error)")
+      // The project intentionally ships no schema migrations — a schema change
+      // is allowed to reset the local store (see CLAUDE.md). Rather than brick
+      // the app on a migration failure, delete the incompatible store (and its
+      // -wal/-shm sidecars) and rebuild it from scratch. This is what makes
+      // future schema changes (indexes, #Unique, new properties) safe to ship.
+      logger.error("ModelContainer init failed, rebuilding store: \(error.localizedDescription)")
+      let storeURL = modelConfiguration.url
+      let fm = FileManager.default
+      try? fm.removeItem(at: storeURL)
+      try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-wal"))
+      try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-shm"))
+      do {
+        return try ModelContainer(for: schema, configurations: [modelConfiguration])
+      } catch {
+        logger.error("ModelContainer rebuild failed: \(error.localizedDescription)")
+        fatalError("Could not create ModelContainer even after store reset: \(error)")
+      }
     }
   }()
 

@@ -455,8 +455,8 @@ final class EpisodeListViewModel {
           }
           .map { key, _ in key }
       )
-      podcastModel.podcastInfo = podcastModel.podcastInfo.merging(
-        updatedFrom: updatedPodcast, preservedKeys: preservedKeys)
+      podcastModel.applyPodcastInfo(podcastModel.podcastInfo.merging(
+        updatedFrom: updatedPodcast, preservedKeys: preservedKeys))
       recomputeFilteredEpisodes()
       try? modelContext?.save()
       lastRefreshDate = Date()

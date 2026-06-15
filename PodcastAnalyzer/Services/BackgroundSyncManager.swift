@@ -401,7 +401,7 @@ class BackgroundSyncManager {
       // Merge: RSS episodes + orphaned episodes the user has touched (downloaded/starred/played)
       // so they don't vanish when a feed trims its backlog.
       let merged = podcast.podcastInfo.merging(updatedFrom: updatedPodcast, preservedKeys: episodesWithUserData)
-      podcast.podcastInfo = merged
+      podcast.applyPodcastInfo(merged)
       podcast.lastUpdated = Date()
 
       // Update release schedule prediction from the latest episode pub dates

@@ -120,7 +120,7 @@ struct PodcastContextMenu: ViewModifier {
     let rssService = PodcastRssService()
     do {
       let updatedPodcast = try await rssService.fetchPodcast(from: podcast.podcastInfo.rssUrl)
-      podcast.podcastInfo = updatedPodcast
+      podcast.applyPodcastInfo(updatedPodcast)
       podcast.lastUpdated = Date()
       try modelContext.save()
     } catch {

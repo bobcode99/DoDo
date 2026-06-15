@@ -17,6 +17,10 @@ import SwiftData
 
 @Model
 class EpisodeDownloadModel {
+  // Indexes for the hot query paths: lookup by composite `id`, per-podcast
+  // lists, the Saved/Downloaded filters, and "most recently played" sorting.
+  #Index<EpisodeDownloadModel>([\.id], [\.podcastTitle], [\.isStarred], [\.localAudioPath], [\.lastPlayedDate])
+
   var id: String = ""
 
   var episodeTitle: String = ""

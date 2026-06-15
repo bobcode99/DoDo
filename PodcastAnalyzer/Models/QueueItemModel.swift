@@ -10,6 +10,8 @@ import SwiftData
 
 @Model
 class QueueItemModel {
+  #Index<QueueItemModel>([\.position])
+
   var id: String = ""
   var position: Int = 0
   var episodeTitle: String = ""

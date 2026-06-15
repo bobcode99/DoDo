@@ -1390,7 +1390,7 @@ final class LibraryViewModel {
     for (id, updatedPodcast) in results {
       if let podcast = updatedPodcast,
          let model = self.podcastInfoModelList.first(where: { $0.id == id }) {
-        model.podcastInfo = podcast
+        model.applyPodcastInfo(podcast)
         model.lastUpdated = now  // Update timestamp for proper sorting
         successCount += 1
         logger.info("Updated \(podcast.title) with \(podcast.episodes.count) episodes")
