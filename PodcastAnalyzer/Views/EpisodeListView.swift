@@ -157,7 +157,7 @@ struct EpisodeListView: View {
       if let vm = viewModel {
         episodeListContent(viewModel: vm)
       } else {
-        ProgressView("Loading...")
+        episodeLoadingView
       }
     }
     .task {
@@ -210,6 +210,20 @@ struct EpisodeListView: View {
       }
 
       ProgressView("Loading episodes...")
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  /// Centered, full-frame loading placeholder shown while the view model is
+  /// still being built — avoids the abrupt top-left spinner so navigating in
+  /// reads as a smooth transition.
+  private var episodeLoadingView: some View {
+    VStack(spacing: 16) {
+      ProgressView()
+        .scaleEffect(1.2)
+      Text("Loading episodes\u{2026}")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -356,7 +370,7 @@ struct EpisodeListView: View {
 
       // MARK: - Episodes List
       Section {
-        ForEach(viewModel.filteredEpisodes) { episode in
+        ForEach(viewModel.displayedEpisodes) { episode in
           EpisodeRowView(
             episode: episode,
             podcastTitle: viewModel.podcastInfo.title,
@@ -383,6 +397,14 @@ struct EpisodeListView: View {
             }
           )
           .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        }
+
+        // "Show All (N)" footer — only the latest `initialEpisodeDisplayCount`
+        // episodes render until the user opts into the full backlog.
+        if viewModel.hasMoreEpisodesToShow {
+          showAllButton(viewModel: viewModel)
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
         }
       } header: {
         Text("Episodes (\(viewModel.filteredEpisodeCount))")
@@ -539,6 +561,31 @@ struct EpisodeListView: View {
         )
       }
     }
+  }
+
+  /// Footer row that reveals the full episode backlog. Tapping flips the view
+  /// model's window flag; the List then materializes the remaining rows.
+  @ViewBuilder
+  private func showAllButton(viewModel: EpisodeListViewModel) -> some View {
+    Button {
+      withAnimation(.easeInOut(duration: 0.25)) {
+        viewModel.isShowingAllEpisodes = true
+      }
+    } label: {
+      HStack(spacing: 6) {
+        Spacer()
+        Text("Show All (\(viewModel.filteredEpisodeCount))")
+          .font(.subheadline)
+          .fontWeight(.semibold)
+        Image(systemName: "chevron.down")
+          .font(.caption)
+        Spacer()
+      }
+      .foregroundStyle(.blue)
+      .padding(.vertical, 10)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 
   // MARK: - Apple Podcast Lookup

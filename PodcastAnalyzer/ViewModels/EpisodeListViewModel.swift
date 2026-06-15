@@ -30,13 +30,19 @@ final class EpisodeListViewModel {
   private let instanceId = UUID()
   #endif
   var selectedFilter: EpisodeFilter = .all {
-    didSet { recomputeFilteredEpisodes() }
+    didSet {
+      isShowingAllEpisodes = false  // collapse back to the window for the new set
+      recomputeFilteredEpisodes()
+    }
   }
   var sortOldestFirst: Bool = false {
-    didSet { recomputeFilteredEpisodes() }
+    didSet { recomputeFilteredEpisodes() }  // same set, just reordered — keep expansion
   }
   var searchText: String = "" {
-    didSet { recomputeFilteredEpisodes() }
+    didSet {
+      isShowingAllEpisodes = false
+      recomputeFilteredEpisodes()
+    }
   }
   var isRefreshing: Bool = false
   var isDescriptionExpanded: Bool = false
@@ -81,16 +87,41 @@ final class EpisodeListViewModel {
 
   private(set) var filteredEpisodes: [PodcastEpisodeInfo] = []
 
-  var podcastInfo: PodcastInfo {
-    podcastModel.podcastInfo
-  }
+  /// Episodes shown on first open before the user taps "Show All". Keeps
+  /// navigating into a large feed light — only this many rows are materialized
+  /// by the List initially, so first paint isn't proportional to a 600+ backlog.
+  static let initialEpisodeDisplayCount = 10
+
+  /// When false, only the first `initialEpisodeDisplayCount` filtered episodes
+  /// render; the user reveals the rest via the "Show All" footer button. Reset
+  /// whenever the filtered set changes (filter / search), kept across re-sorts.
+  var isShowingAllEpisodes = false
+
+  /// Cached decoded snapshot. Reading the model's stored podcast blob
+  /// re-materializes the entire episode array out of SwiftData's backing store
+  /// on every access, and this view touches it per row and inside filter loops —
+  /// so we decode once (refreshed in init + refreshPodcast) and read this cheap
+  /// cached struct everywhere else. This is what keeps a 600+ episode list fast.
+  private(set) var podcastInfo: PodcastInfo
 
   var filteredEpisodeCount: Int {
     filteredEpisodes.count
   }
 
+  /// Episodes actually rendered by the List — a capped window until "Show All".
+  var displayedEpisodes: [PodcastEpisodeInfo] {
+    isShowingAllEpisodes
+      ? filteredEpisodes
+      : Array(filteredEpisodes.prefix(Self.initialEpisodeDisplayCount))
+  }
+
+  /// True when more episodes exist beyond the initial window.
+  var hasMoreEpisodesToShow: Bool {
+    !isShowingAllEpisodes && filteredEpisodes.count > Self.initialEpisodeDisplayCount
+  }
+
   private func recomputeFilteredEpisodes() {
-    var episodes = podcastModel.podcastInfo.episodes
+    var episodes = podcastInfo.episodes
 
     // Apply search filter first
     if !searchText.isEmpty {
@@ -127,7 +158,7 @@ final class EpisodeListViewModel {
       episodes = episodes.filter { episode in
         let state = downloadManager.getDownloadState(
           episodeTitle: episode.title,
-          podcastTitle: podcastModel.podcastInfo.title
+          podcastTitle: podcastInfo.title
         )
         if case .downloaded = state { return true }
         return false
@@ -176,13 +207,14 @@ final class EpisodeListViewModel {
 
   init(podcastModel: PodcastInfoModel, initialFilter: EpisodeFilter = .all) {
     self.podcastModel = podcastModel
+    self.podcastInfo = podcastModel.podcastInfo  // decode once; cached for every read below
     self.selectedFilter = initialFilter
     recomputeFilteredEpisodes()
     parseDescription()
     observeDownloadStates()
     manageProgressTimer()
     #if DEBUG
-    viewModelLogger.info("📦 EpisodeListViewModel INIT: \(self.instanceId) for \(podcastModel.podcastInfo.title)")
+    viewModelLogger.info("📦 EpisodeListViewModel INIT: \(self.instanceId) for \(self.podcastInfo.title)")
     #endif
   }
 
@@ -211,7 +243,7 @@ final class EpisodeListViewModel {
   }
 
   private func rebuildDownloadStatesSnapshot() {
-    let podcastTitle = podcastModel.podcastInfo.title
+    let podcastTitle = podcastInfo.title
     var snapshot: [String: DownloadState] = [:]
     for (key, state) in downloadManager.downloadStates {
       guard key.hasPrefix(podcastTitle) else { continue }
@@ -256,7 +288,7 @@ final class EpisodeListViewModel {
       progressTimer = nil
       return
     }
-    let podcastTitle = podcastModel.podcastInfo.title
+    let podcastTitle = podcastInfo.title
     var snapshot = downloadStatesSnapshot
     var changed = false
     for (key, progress) in downloadManager.inFlightProgress {
@@ -294,7 +326,7 @@ final class EpisodeListViewModel {
     }
 
     // Capture podcast title before closure to avoid main actor isolation issues
-    let myPodcastTitle = podcastModel.podcastInfo.title
+    let myPodcastTitle = podcastInfo.title
 
     // Listen for download completion to update SwiftData
     downloadCompletionObserver = NotificationCenter.default.addObserver(
@@ -339,7 +371,7 @@ final class EpisodeListViewModel {
       try? context.save()
     } else {
       // Find the episode to get its audio URL
-      guard let episode = podcastModel.podcastInfo.episodes.first(where: { $0.title == episodeTitle }),
+      guard let episode = podcastInfo.episodes.first(where: { $0.title == episodeTitle }),
             let audioURL = episode.audioURL else { return }
 
       // Create new model
@@ -349,7 +381,7 @@ final class EpisodeListViewModel {
         audioURL: audioURL,
         localAudioPath: localPath,
         downloadedDate: Date(),
-        imageURL: episode.imageURL ?? podcastModel.podcastInfo.imageURL,
+        imageURL: episode.imageURL ?? podcastInfo.imageURL,
         pubDate: episode.pubDate
       )
       // Get file size
@@ -366,7 +398,7 @@ final class EpisodeListViewModel {
   // MARK: - HTML Description Parsing
 
   private func parseDescription() {
-    let html = podcastModel.podcastInfo.podcastInfoDescription ?? ""
+    let html = podcastInfo.podcastInfoDescription ?? ""
 
     guard !html.isEmpty else {
       descriptionContent = .empty
@@ -406,7 +438,7 @@ final class EpisodeListViewModel {
   // MARK: - Episode Key Helper
 
   func makeEpisodeKey(_ episode: PodcastEpisodeInfo) -> String {
-    return "\(podcastModel.podcastInfo.title)\(Self.episodeKeyDelimiter)\(episode.title)"
+    return "\(podcastInfo.title)\(Self.episodeKeyDelimiter)\(episode.title)"
   }
 
   // MARK: - Data Loading
@@ -414,7 +446,7 @@ final class EpisodeListViewModel {
   func loadEpisodeModels() {
     guard let context = modelContext else { return }
 
-    let podcastTitle = podcastModel.podcastInfo.title
+    let podcastTitle = podcastInfo.title
     let descriptor = FetchDescriptor<EpisodeDownloadModel>(
       predicate: #Predicate { $0.podcastTitle == podcastTitle }
     )
@@ -444,7 +476,7 @@ final class EpisodeListViewModel {
 
     do {
       let updatedPodcast = try await rssService.fetchPodcast(
-        from: podcastModel.podcastInfo.rssUrl)
+        from: podcastInfo.rssUrl)
       // Merge instead of replace: episodes with user data that aged off the RSS feed
       // (downloaded, starred, played, or in-progress) are preserved.
       let preservedKeys: Set<String> = Set(
@@ -455,8 +487,10 @@ final class EpisodeListViewModel {
           }
           .map { key, _ in key }
       )
-      podcastModel.applyPodcastInfo(podcastModel.podcastInfo.merging(
-        updatedFrom: updatedPodcast, preservedKeys: preservedKeys))
+      let merged = podcastInfo.merging(
+        updatedFrom: updatedPodcast, preservedKeys: preservedKeys)
+      podcastModel.applyPodcastInfo(merged)
+      podcastInfo = merged  // refresh the cache from the value we just built (no re-decode)
       recomputeFilteredEpisodes()
       try? modelContext?.save()
       lastRefreshDate = Date()
@@ -478,9 +512,9 @@ final class EpisodeListViewModel {
       guard let audioURL = episode.audioURL else { return }
       let model = EpisodeDownloadModel(
         episodeTitle: episode.title,
-        podcastTitle: podcastModel.podcastInfo.title,
+        podcastTitle: podcastInfo.title,
         audioURL: audioURL,
-        imageURL: episode.imageURL ?? podcastModel.podcastInfo.imageURL,
+        imageURL: episode.imageURL ?? podcastInfo.imageURL,
         pubDate: episode.pubDate
       )
       model.isStarred = true
@@ -493,15 +527,15 @@ final class EpisodeListViewModel {
   func downloadEpisode(_ episode: PodcastEpisodeInfo) {
     downloadManager.downloadEpisode(
       episode: episode,
-      podcastTitle: podcastModel.podcastInfo.title,
-      language: podcastModel.podcastInfo.language
+      podcastTitle: podcastInfo.title,
+      language: podcastInfo.language
     )
   }
 
   func deleteDownload(_ episode: PodcastEpisodeInfo) {
     downloadManager.deleteDownload(
       episodeTitle: episode.title,
-      podcastTitle: podcastModel.podcastInfo.title
+      podcastTitle: podcastInfo.title
     )
   }
 
@@ -519,9 +553,9 @@ final class EpisodeListViewModel {
       guard let audioURL = episode.audioURL else { return }
       let model = EpisodeDownloadModel(
         episodeTitle: episode.title,
-        podcastTitle: podcastModel.podcastInfo.title,
+        podcastTitle: podcastInfo.title,
         audioURL: audioURL,
-        imageURL: episode.imageURL ?? podcastModel.podcastInfo.imageURL,
+        imageURL: episode.imageURL ?? podcastInfo.imageURL,
         pubDate: episode.pubDate
       )
       model.isCompleted = true
