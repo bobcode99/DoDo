@@ -61,8 +61,16 @@ struct EpisodeTranscriptView: View {
         if viewModel.isCurrentEpisode {
             let live = viewModel.audioManager.currentTime
             if live.isFinite && live > 0 { return live }
+            // Bridge only transient AVPlayer 0/NaN hiccups *while this episode
+            // is the active one*. The sticky cache must stay scoped to this
+            // branch: surfacing it when the episode is no longer current would
+            // pin the highlight to the last-played time (a forward-ratcheted
+            // value) instead of this episode's true position — the "playhead
+            // at 9:00 but highlight at 9:52" bug.
+            if let lastValidLiveTime { return lastValidLiveTime }
         }
-        if let lastValidLiveTime { return lastValidLiveTime }
+        // Not the current episode: the authoritative position is the persisted
+        // one for THIS episode, never the forward live cache.
         let saved = viewModel.lastPlaybackPosition
         return saved > 0 ? saved : nil
     }
@@ -158,6 +166,16 @@ struct EpisodeTranscriptView: View {
             // cache may point at an id that no longer exists. Drop it so the
             // next live lookup re-seeds it cleanly.
             stickyActiveSentenceID = nil
+        }
+        .onChange(of: viewModel.isCurrentEpisode) { _, isCurrent in
+            // When another episode takes over, drop the forward-ratcheted
+            // caches so the highlight falls back to this episode's persisted
+            // position instead of the last live value we observed while it
+            // was playing.
+            if !isCurrent {
+                lastValidLiveTime = nil
+                stickyActiveSentenceID = nil
+            }
         }
         .onChange(of: showSearchSheet) { _, isShowing in
             if isShowing {
