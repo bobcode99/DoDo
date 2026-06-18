@@ -43,6 +43,28 @@ final class HomeViewModel {
   var topPodcasts: [AppleRSSPodcast] = []
   var isLoadingTopPodcasts = false
 
+  /// When the currently-shown Popular Shows list was fetched from the network — or,
+  /// when painted from the on-disk cache, that cache's saved time. Drives the
+  /// freshness caption ("Updated 2h ago" / "Offline · saved 2h ago").
+  var popularShowsFetchedAt: Date?
+
+  /// True once a successful *network* fetch has populated Popular Shows this session.
+  /// Gates reconnect-refresh so a Wi-Fi blip doesn't reshuffle an already-fresh list.
+  @ObservationIgnored
+  private var hasFreshPopularShowsThisSession = false
+
+  /// Region the currently-displayed `topPodcasts` belong to (from disk hydrate, the
+  /// in-memory cache, or a network fetch). Lets a refresh keep the list on screen for
+  /// a same-region swap and only blank it when actually switching regions.
+  @ObservationIgnored
+  private var displayedRegion: String?
+
+  /// True when connectivity has been determined and we're offline. Lets Popular Shows
+  /// caption itself as saved/offline instead of showing a load error.
+  var isOffline: Bool {
+    NetworkMonitor.shared.hasReceivedFirstUpdate && !NetworkMonitor.shared.isConnected
+  }
+
   // Trending episodes from top podcasts
   var trendingEpisodes: [ApplePodcastService.TrendingEpisode] = []
   var isLoadingTrendingEpisodes = false
@@ -118,6 +140,10 @@ final class HomeViewModel {
   @ObservationIgnored
   private var completionObserverTask: Task<Void, Never>?
 
+  // Task observing connectivity restoration to refresh stale discovery content
+  @ObservationIgnored
+  private var reconnectObserverTask: Task<Void, Never>?
+
   // Track current playing episode to detect changes
   @ObservationIgnored
   private var lastCurrentEpisodeId: String?
@@ -168,6 +194,9 @@ final class HomeViewModel {
     if !Self.cachedTopPodcasts.isEmpty && Self.cachedRegion == selectedRegion {
       topPodcasts = Self.cachedTopPodcasts
     }
+    // Otherwise paint Popular Shows from the on-disk cache for an instant first frame
+    // (works with no internet too); a network refresh later swaps in fresh data.
+    hydratePopularShowsFromDisk()
 
     // Observers are started lazily in restartObserversIfNeeded() (called from setModelContext),
     // so they survive tab-switch cleanup/onAppear cycles without creating duplicates.
@@ -230,6 +259,17 @@ final class HomeViewModel {
         }
       }
     }
+    if reconnectObserverTask == nil {
+      reconnectObserverTask = Task { [weak self] in
+        for await _ in NotificationCenter.default.notifications(named: .networkDidReconnect) {
+          guard let self, self.isHomeVisible else { continue }
+          // Only refresh when we're showing stale (disk-cached) or empty content —
+          // never reshuffle a list that's already fresh this session.
+          guard !self.hasFreshPopularShowsThisSession || self.topPodcasts.isEmpty else { continue }
+          await self.refreshDiscoveryContent(forceRefresh: true)
+        }
+      }
+    }
   }
 
   // MARK: - Load All Data
@@ -286,6 +326,9 @@ final class HomeViewModel {
     trendingEpisodes = []
     isLoadingTopPodcasts = false
     isLoadingTrendingEpisodes = false
+    popularShowsFetchedAt = nil
+    hasFreshPopularShowsThisSession = false
+    displayedRegion = nil
     Self.cachedTopPodcasts = []
     Self.cachedTrendingEpisodes = []
     Self.cachedRegion = ""
@@ -575,6 +618,12 @@ final class HomeViewModel {
       if topPodcasts.isEmpty {
         topPodcasts = Self.cachedTopPodcasts
       }
+      // Restore the freshness timestamp from disk if a new instance is reusing the
+      // in-memory cache without having stamped it yet.
+      if popularShowsFetchedAt == nil {
+        popularShowsFetchedAt = DiscoveryCacheStore.loadTopPodcasts(region: regionToLoad)?.fetchedAt
+      }
+      displayedRegion = regionToLoad
       logger.debug("Using cached top podcasts for \(regionToLoad)")
       return
     }
@@ -586,6 +635,9 @@ final class HomeViewModel {
         let podcasts = try await task.value
         if selectedRegion == regionToLoad {
           topPodcasts = podcasts
+          displayedRegion = regionToLoad
+          popularShowsFetchedAt = Date()
+          hasFreshPopularShowsThisSession = true
         }
       } catch {
         logger.error("Joined task failed: \(error.localizedDescription)")
@@ -599,9 +651,12 @@ final class HomeViewModel {
     isLoadingTopPodcasts = true
     Self.loadingRegion = regionToLoad
 
-    // Clean up old data if force refreshing or changing region
-    if forceRefresh || Self.cachedRegion != regionToLoad {
+    // Blank the list only when switching to a different region (old rows are for the
+    // wrong region). For a same-region refresh — pull-to-refresh or reconnect — keep
+    // the current list on screen and swap it when fresh data lands: no flash of empty.
+    if let shown = displayedRegion, shown != regionToLoad {
       topPodcasts = []
+      displayedRegion = nil
       Self.cachedTopPodcasts = []
       Self.cachedRegion = ""
     }
@@ -635,10 +690,15 @@ final class HomeViewModel {
       // Update both static cache and observable instance property
       Self.cachedTopPodcasts = podcasts
       Self.cachedRegion = regionToLoad
+      // Persist for offline browsing + an instant cold-launch paint next time.
+      DiscoveryCacheStore.saveTopPodcasts(podcasts, region: regionToLoad)
 
       // Update instance property only if region hasn't changed
       if selectedRegion == regionToLoad {
         topPodcasts = podcasts
+        displayedRegion = regionToLoad
+        popularShowsFetchedAt = Date()
+        hasFreshPopularShowsThisSession = true
       }
       logger.info("Loaded \(podcasts.count) top podcasts for \(regionToLoad)")
     } catch {
@@ -652,6 +712,22 @@ final class HomeViewModel {
     }
 
     isLoadingTopPodcasts = false
+  }
+
+  /// Paint Popular Shows from the on-disk cache when we have nothing to show yet.
+  /// Cheap, synchronous, best-effort — gives an instant first frame on cold launch and
+  /// keeps the tab browsable with no internet. No-op once `topPodcasts` is populated
+  /// (live data always wins).
+  private func hydratePopularShowsFromDisk() {
+    guard topPodcasts.isEmpty,
+          let cached = DiscoveryCacheStore.loadTopPodcasts(region: selectedRegion) else { return }
+    topPodcasts = cached.podcasts
+    popularShowsFetchedAt = cached.fetchedAt
+    displayedRegion = selectedRegion
+    // Deliberately NOT writing the static in-memory cache here: that flag means
+    // "fetched from network this session" and gates the launch refresh. Disk data is
+    // from a previous session, so we still want a fresh fetch to run and swap in.
+    logger.debug("Hydrated \(cached.podcasts.count) popular shows from disk for \(self.selectedRegion)")
   }
 
   /// Check if a podcast is already subscribed by name
@@ -910,6 +986,8 @@ final class HomeViewModel {
     subscribeTask = nil
     completionObserverTask?.cancel()
     completionObserverTask = nil
+    reconnectObserverTask?.cancel()
+    reconnectObserverTask = nil
   }
 
   // MARK: - Find Podcast Model

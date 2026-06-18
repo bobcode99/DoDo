@@ -17,18 +17,23 @@ struct PopularShowsListView: View {
   var viewModel: HomeViewModel
 
   var body: some View {
-    List {
-      ForEach(Array(podcasts.prefix(200).enumerated()), id: \.element.id) { index, podcast in
-        TopPodcastRow(
+    // Match the Home "Popular Shows" section exactly: TopPodcastRow already draws
+    // its own rank, chevron, and trailing divider, so it belongs in a LazyVStack —
+    // dropping it in a List doubled the chevron (List's disclosure indicator) and
+    // the separator (List's row separator over the row's manual Divider).
+    ScrollView {
+      LazyVStack(spacing: 0) {
+        ForEach(Array(podcasts.prefix(200).enumerated()), id: \.element.id) { index, podcast in
+          TopPodcastRow(
             podcast: podcast,
             rank: index + 1,
             isSubscribed: viewModel.isAlreadySubscribed(podcast),
             onSubscribe: { viewModel.subscribeToPodcast(podcast) }
           )
-          .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        }
       }
+      .padding(.horizontal)
     }
-    .listStyle(.plain)
     .navigationTitle("Popular Shows")
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)

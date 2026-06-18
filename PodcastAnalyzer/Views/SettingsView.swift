@@ -452,6 +452,24 @@ struct SettingsView: View {
             viewModel.setSelectedTranscriptLocale(newValue)
           }
 
+          // Per-podcast "Show Format" / context terms — bias recognition toward
+          // each show's names + jargon, and feed the same value to AI analysis.
+          NavigationLink {
+            TranscriptContextManagementView()
+          } label: {
+            HStack {
+              Image(systemName: "character.book.closed")
+                .foregroundStyle(.teal)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Transcription Context")
+                Text("Per-podcast names & jargon to improve accuracy")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+
           // Apple Speech model status (only shown when engine = appleSpeech)
           if viewModel.selectedTranscriptEngine == .appleSpeech {
             HStack {

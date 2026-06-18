@@ -88,6 +88,13 @@ class PodcastInfoModel {
   /// Minimum episode duration in seconds; 0 = no minimum.
   var episodeFilterMinDuration: Int = 0
 
+  /// Per-podcast transcription vocabulary: proper nouns / jargon (host & guest
+  /// names, companies, terms) applied to the SpeechAnalyzer as contextual
+  /// strings so on-device transcription spells them correctly. User-edited and
+  /// not derived from the RSS feed — it lives on the row, so it survives a feed
+  /// rename (unlike a title-keyed store). Distinct from the AI "Show Format".
+  var transcriptionTerms: [String] = []
+
   init(podcastInfo: PodcastInfo, lastUpdated: Date, isSubscribed: Bool = true) {
     self.id = UUID()
     self.podcastInfo = podcastInfo

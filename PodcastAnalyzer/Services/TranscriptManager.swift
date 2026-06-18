@@ -51,9 +51,25 @@ class TranscriptManager {
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "TranscriptManager")
   private let fileStorage = FileStorageManager.shared
 
+  /// Set at launch so transcription can read each podcast's `transcriptionTerms`
+  /// (the SpeechAnalyzer contextual-strings vocabulary) from SwiftData.
+  private var modelContainer: ModelContainer?
+  func setModelContainer(_ container: ModelContainer) { self.modelContainer = container }
+
   // Helper to create job ID matching episode key format
   private func makeJobId(podcastTitle: String, episodeTitle: String) -> String {
     return "\(podcastTitle)\(Self.episodeKeyDelimiter)\(episodeTitle)"
+  }
+
+  /// Per-podcast transcription vocabulary, looked up by title from SwiftData.
+  /// Empty when no container is set or the podcast/terms aren't found.
+  private func transcriptionTerms(for podcastTitle: String) -> [String] {
+    guard let context = modelContainer?.mainContext else { return [] }
+    var descriptor = FetchDescriptor<PodcastInfoModel>(
+      predicate: #Predicate { $0.title == podcastTitle }
+    )
+    descriptor.fetchLimit = 1
+    return (try? context.fetch(descriptor))?.first?.transcriptionTerms ?? []
   }
 
   var activeJobs: [String: TranscriptJob] = [:]
@@ -369,7 +385,13 @@ class TranscriptManager {
 
         try Task.checkCancellation()
 
-        let transcriptService = TranscriptService(language: job.language ?? "en-us")
+        // Bias on-device recognition toward this show's proper nouns / jargon,
+        // from the per-podcast Transcription Context vocabulary (PodcastInfoModel).
+        let contextTerms = transcriptionTerms(for: job.podcastTitle)
+        let contextualStrings = TranscriptService.buildContextualStrings(
+          podcastTitle: job.podcastTitle, terms: contextTerms)
+        let transcriptService = TranscriptService(
+          language: job.language ?? "en-us", contextualStrings: contextualStrings)
 
         let modelReady = await transcriptService.isModelReady()
         if !modelReady {

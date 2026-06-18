@@ -1,8 +1,13 @@
 
+import SwiftData
 import SwiftUI
 
 struct EpisodeTranscriptStatusView: View {
     @Bindable var viewModel: EpisodeDetailViewModel
+
+    @Environment(\.modelContext) private var modelContext
+    @State private var contextPodcast: PodcastInfoModel?
+    @State private var showContextEditor = false
 
     private var effectiveEngine: TranscriptEngine {
         viewModel.transcript.selectedTranscriptEngine ?? TranscriptEngine(
@@ -131,11 +136,72 @@ struct EpisodeTranscriptStatusView: View {
 
             engineHint
 
+            contextTermsSection
+
             Divider()
 
             // Primary action
             primaryActionView
         }
+        .onAppear(perform: loadContextPodcast)
+    }
+
+    // MARK: - Recognition terms (Apple Speech contextual strings)
+
+    @ViewBuilder
+    private var contextTermsSection: some View {
+        if effectiveEngine == .appleSpeech, let podcast = contextPodcast {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Recognition Terms", systemImage: "character.book.closed")
+                        .font(.subheadline)
+                    Spacer()
+                    Button(podcast.transcriptionTerms.isEmpty ? "Add" : "Edit") {
+                        showContextEditor = true
+                    }
+                    .font(.caption)
+                }
+                if podcast.transcriptionTerms.isEmpty {
+                    Text("Add host/guest names & jargon so they're transcribed correctly.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 6) {
+                            ForEach(podcast.transcriptionTerms, id: \.self) { term in
+                                Text(term)
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(.regularMaterial, in: Capsule())
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sheet(isPresented: $showContextEditor) {
+                NavigationStack {
+                    TranscriptContextEditorView(podcast: podcast)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showContextEditor = false }
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    private func loadContextPodcast() {
+        let title = viewModel.podcastTitle
+        guard !title.isEmpty else { return }
+        var descriptor = FetchDescriptor<PodcastInfoModel>(
+            predicate: #Predicate { $0.title == title }
+        )
+        descriptor.fetchLimit = 1
+        contextPodcast = try? modelContext.fetch(descriptor).first
     }
 
     @ViewBuilder

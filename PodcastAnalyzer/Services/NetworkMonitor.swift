@@ -7,6 +7,7 @@
 //  auto-transcript jobs so they don't run over cellular.
 //
 
+import Foundation
 import Network
 
 /// Tracks network interface type for auto-download and auto-transcript gating.
@@ -43,6 +44,7 @@ final class NetworkMonitor {
       Task { @MainActor [weak self] in
         guard let self else { return }
         let wasEligible = self.isOnWiFiOrEthernet
+        let wasConnected = self.isConnected && self.hasReceivedFirstUpdate
         self.isOnWiFiOrEthernet = wifi || ethernet
         self.isConnected = connected
         self.isCellular = cellular && !wifi && !ethernet
@@ -53,6 +55,12 @@ final class NetworkMonitor {
         // arrive on their own Tasks.
         if !wasEligible && self.isOnWiFiOrEthernet {
           await AutoDownloadCoordinator.shared.run(reason: .networkBecameEligible)
+        }
+        // Connectivity restored (offline → online, any interface). Let discovery
+        // surfaces refresh stale cached content. Distinct from the Wi-Fi-only
+        // signal above so browsing refreshes over cellular too.
+        if !wasConnected && connected {
+          NotificationCenter.default.post(name: .networkDidReconnect, object: nil)
         }
       }
     }

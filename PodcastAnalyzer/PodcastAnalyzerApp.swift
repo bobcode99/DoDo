@@ -113,6 +113,7 @@ struct PodcastAnalyzerApp: App {
           PodcastImportManager.shared.setModelContainer(sharedModelContainer)
           NotificationNavigationManager.shared.setModelContainer(sharedModelContainer)
           DownloadManager.shared.setModelContainer(sharedModelContainer)
+          TranscriptManager.shared.setModelContainer(sharedModelContainer)
 
           // Migrate flat caption files to podcast subfolders (one-time, safe to re-run)
           Task.detached(priority: .utility) {

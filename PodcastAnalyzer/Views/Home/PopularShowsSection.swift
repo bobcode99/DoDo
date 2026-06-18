@@ -12,14 +12,36 @@ struct PopularShowsSection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      header
-        .padding(.horizontal)
+      VStack(alignment: .leading, spacing: 2) {
+        header
+        freshnessCaption
+      }
+      .padding(.horizontal)
 
       if viewModel.topPodcasts.isEmpty && !viewModel.isLoadingTopPodcasts {
         emptyState
       } else {
         list
       }
+    }
+    // Silent swap: when fresh data lands (reconnect / pull-to-refresh) the list
+    // updates in place with a gentle crossfade rather than a hard cut.
+    .animation(.smooth(duration: 0.25), value: viewModel.popularShowsFetchedAt)
+  }
+
+  /// "Updated 2h ago" online, "Offline · saved 2h ago" when showing saved data.
+  @ViewBuilder
+  private var freshnessCaption: some View {
+    if let fetchedAt = viewModel.popularShowsFetchedAt {
+      HStack(spacing: 4) {
+        if viewModel.isOffline {
+          Image(systemName: "wifi.slash")
+        }
+        Text(viewModel.isOffline ? "Offline · saved " : "Updated ")
+          + Text(fetchedAt, format: .relative(presentation: .named))
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
     }
   }
 
@@ -48,12 +70,18 @@ struct PopularShowsSection: View {
 
   private var emptyState: some View {
     VStack(spacing: 8) {
-      Image(systemName: "chart.line.uptrend.xyaxis")
+      Image(systemName: viewModel.isOffline ? "wifi.slash" : "chart.line.uptrend.xyaxis")
         .font(.system(size: 40))
         .foregroundStyle(.gray)
-      Text("Unable to load popular shows")
+      Text(viewModel.isOffline ? "You're offline" : "Unable to load popular shows")
         .font(.subheadline)
         .foregroundStyle(.secondary)
+      if viewModel.isOffline {
+        Text("Popular shows will appear once you're back online.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+      }
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, 32)

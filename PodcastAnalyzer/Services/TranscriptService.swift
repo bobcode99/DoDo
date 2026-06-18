@@ -23,6 +23,12 @@ public actor TranscriptService {
   var needsAudioTimeRange: Bool
   var targetLocale: Locale
 
+  /// Per-podcast bias phrases (proper nouns / jargon) attached to the analyzer
+  /// via `AnalysisContext` so on-device recognition spells host/guest names and
+  /// recurring terms correctly. Sourced from the show's Transcription Context
+  /// vocabulary — separate from the AI "Show Format" hint.
+  let contextualStrings: [String]
+
   var transcriber: SpeechTranscriber?
   var analyzer: SpeechAnalyzer?
   var assetSetupError: Error?
@@ -44,10 +50,16 @@ public actor TranscriptService {
   // MARK: - Init
 
   /// Creates a TranscriptService for the given podcast language code (e.g. "zh-tw", "en-us").
-  public init(language: String, censor: Bool = false, needsAudioTimeRange: Bool = true) {
+  public init(
+    language: String,
+    censor: Bool = false,
+    needsAudioTimeRange: Bool = true,
+    contextualStrings: [String] = []
+  ) {
     self.censor = censor
     self.needsAudioTimeRange = needsAudioTimeRange
     self.targetLocale = TranscriptLocaleResolver.locale(fromPodcastLanguage: language)
+    self.contextualStrings = contextualStrings
   }
 
   /// Convenience passthrough kept for callers that already resolved the locale.
@@ -89,7 +101,7 @@ public actor TranscriptService {
     logger.info("Installed locales: \(installed.map { $0.identifier }.joined(separator: ", "))")
 
     if installed.map({ $0.identifier(.bcp47) }).contains(targetLocale.identifier(.bcp47)) {
-      self.analyzer = SpeechAnalyzer(modules: modules)
+      self.analyzer = await makeConfiguredAnalyzer(modules: modules)
       assert(self.analyzer != nil, "Analyzer should be set before finishing")
       continuation.yield(1.0)
       continuation.finish()
@@ -113,7 +125,7 @@ public actor TranscriptService {
       self.assetSetupError = error
     }
 
-    self.analyzer = SpeechAnalyzer(modules: modules)
+    self.analyzer = await makeConfiguredAnalyzer(modules: modules)
     assert(self.analyzer != nil, "Analyzer should be set before finishing")
     continuation.finish()
   }
@@ -148,6 +160,41 @@ public actor TranscriptService {
       logger.error("Failed to reserve locale: \(error.localizedDescription)")
       throw error
     }
+  }
+
+  // MARK: - Analyzer configuration
+
+  /// Creates the analyzer and, when contextual strings are present, attaches an
+  /// `AnalysisContext` so recognition is biased toward this show's proper nouns
+  /// and jargon. Called wherever the analyzer is (re)created during setup.
+  private func makeConfiguredAnalyzer(modules: [any SpeechModule]) async -> SpeechAnalyzer {
+    let analyzer = SpeechAnalyzer(modules: modules)
+    if !contextualStrings.isEmpty {
+      let context = AnalysisContext()
+      context.contextualStrings = [.general: contextualStrings]
+      do {
+        try await analyzer.setContext(context)
+        logger.info("Applied \(self.contextualStrings.count) contextual strings to analyzer")
+      } catch {
+        logger.error("Failed to apply contextual strings: \(error.localizedDescription)")
+      }
+    }
+    return analyzer
+  }
+
+  /// Builds the bias-phrase list for a podcast from the show title plus its
+  /// user-curated Transcription Context vocabulary (proper nouns / jargon).
+  /// Trims, drops sentence-length fragments, dedupes, and caps the list so the
+  /// bias stays focused.
+  public static func buildContextualStrings(podcastTitle: String, terms: [String]) -> [String] {
+    var phrases: [String] = []
+    let title = podcastTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !title.isEmpty { phrases.append(title) }
+    phrases.append(contentsOf: terms
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty && $0.count <= 60 })
+    var seen = Set<String>()
+    return Array(phrases.filter { seen.insert($0.lowercased()).inserted }.prefix(100))
   }
 
   /// Downloads remote URLs to a temp file; returns local URLs unchanged.

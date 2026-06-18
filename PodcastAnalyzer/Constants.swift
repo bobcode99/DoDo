@@ -5,6 +5,9 @@ import Foundation
 extension Notification.Name {
   static let podcastRegionChanged = Notification.Name("podcastRegionChanged")
   static let episodeDownloadCompleted = Notification.Name("episodeDownloadCompleted")
+  /// Posted by NetworkMonitor when connectivity is restored (offline → online).
+  /// Lets discovery surfaces (Home) refresh stale cached content automatically.
+  static let networkDidReconnect = Notification.Name("networkDidReconnect")
 }
 
 struct Constants {
