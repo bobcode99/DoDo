@@ -208,7 +208,7 @@ final class AIAnalysisCoordinator {
         logger.info("Quick tags generated successfully")
       } catch {
         self.quickTagsState = .error("Failed: \(error.localizedDescription)")
-        logger.error("Quick tags generation failed: \(error.localizedDescription)")
+        logger.error("Quick tags generation failed: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -249,7 +249,7 @@ final class AIAnalysisCoordinator {
         logger.info("Brief summary generated successfully")
       } catch {
         self.quickTagsState = .error("Failed: \(error.localizedDescription)")
-        logger.error("Brief summary generation failed: \(error.localizedDescription)")
+        logger.error("Brief summary generation failed: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -373,7 +373,7 @@ final class AIAnalysisCoordinator {
         logger.info("Cloud Q&A completed successfully - Provider: \(result.provider.displayName), Model: \(result.model)")
       } catch {
         self.cloudQuestionState = .error(error.localizedDescription)
-        logger.error("Cloud Q&A failed: \(error.localizedDescription)")
+        logger.error("Cloud Q&A failed: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -527,7 +527,7 @@ final class AIAnalysisCoordinator {
       try context.save()
       logger.info("Quick tags saved to SwiftData")
     } catch {
-      logger.error("Failed to save quick tags: \(error.localizedDescription)")
+      logger.error("Failed to save quick tags: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -560,7 +560,7 @@ final class AIAnalysisCoordinator {
       try context.save()
       logger.info("Q&A saved to SwiftData - Provider: \(result.provider.displayName), Model: \(result.model)")
     } catch {
-      logger.error("Failed to save Q&A: \(error.localizedDescription)")
+      logger.error("Failed to save Q&A: \(error.localizedDescription, privacy: .public)")
     }
   }
 

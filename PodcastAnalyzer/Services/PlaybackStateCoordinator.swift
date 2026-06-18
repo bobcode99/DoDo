@@ -69,7 +69,7 @@ class PlaybackStateCoordinator {
     do {
       try context.delete(model: QueueItemModel.self)
     } catch {
-      logger.error("Failed to delete old queue items: \(error.localizedDescription)")
+      logger.error("Failed to delete old queue items: \(error.localizedDescription, privacy: .public)")
     }
 
     // Insert new items with position indices
@@ -82,7 +82,7 @@ class PlaybackStateCoordinator {
       try context.save()
       logger.debug("Saved \(queue.count) queue items")
     } catch {
-      logger.error("Failed to save queue: \(error.localizedDescription)")
+      logger.error("Failed to save queue: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -100,7 +100,7 @@ class PlaybackStateCoordinator {
       logger.info("Restored \(episodes.count) queue items")
       return episodes
     } catch {
-      logger.error("Failed to restore queue: \(error.localizedDescription)")
+      logger.error("Failed to restore queue: \(error.localizedDescription, privacy: .public)")
       return []
     }
   }
@@ -173,7 +173,7 @@ class PlaybackStateCoordinator {
       )
 
     } catch {
-      logger.error("Failed to save playback position: \(error.localizedDescription)")
+      logger.error("Failed to save playback position: \(error.localizedDescription, privacy: .public)")
     }
   }
 }

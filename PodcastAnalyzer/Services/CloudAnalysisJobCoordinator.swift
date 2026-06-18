@@ -19,7 +19,7 @@ import SwiftData
 import UIKit
 #endif
 
-private let logger = Logger(subsystem: "com.podcastanalyzer", category: "CloudAnalysisJobCoordinator")
+private let logger = Logger(subsystem: "com.podcast.analyzer", category: "CloudAnalysisJobCoordinator")
 
 extension Notification.Name {
     /// Posted when a coordinator-owned analysis finishes (success or error) and the
@@ -225,7 +225,7 @@ final class CloudAnalysisJobCoordinator {
             model.updatedAt = Date()
             try context.save()
         } catch {
-            logger.error("Coordinator save failed: \(error.localizedDescription)")
+            logger.error("Coordinator save failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

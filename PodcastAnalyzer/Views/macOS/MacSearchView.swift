@@ -6,8 +6,11 @@
 //
 
 #if os(macOS)
+import OSLog
 import SwiftData
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.podcast.analyzer", category: "MacSearchView")
 
 struct MacSearchView: View {
   @State private var viewModel = PodcastSearchViewModel()
@@ -226,7 +229,7 @@ struct MacSearchView: View {
         modelContext.insert(podcastInfoModel)
         try? modelContext.save()
       } catch {
-        print("Failed to subscribe: \(error)")
+        logger.error("Failed to subscribe: \(error.localizedDescription, privacy: .public)")
       }
     }
   }

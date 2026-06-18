@@ -459,7 +459,7 @@ final class EpisodeListViewModel {
       }
       episodeModels = models
     } catch {
-      print("Failed to load episode models: \(error)")
+      viewModelLogger.error("Failed to load episode models: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -495,7 +495,7 @@ final class EpisodeListViewModel {
       try? modelContext?.save()
       lastRefreshDate = Date()
     } catch {
-      print("Failed to refresh podcast: \(error)")
+      viewModelLogger.error("Failed to refresh podcast: \(error.localizedDescription, privacy: .public)")
     }
   }
 

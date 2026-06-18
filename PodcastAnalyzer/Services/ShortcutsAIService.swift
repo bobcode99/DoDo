@@ -15,7 +15,7 @@ import UIKit
 import AppKit
 #endif
 
-private let logger = Logger(subsystem: "com.podcastanalyzer", category: "ShortcutsAIService")
+private let logger = Logger(subsystem: "com.podcast.analyzer", category: "ShortcutsAIService")
 
 // MARK: - Shortcuts AI Service
 
@@ -239,7 +239,7 @@ class ShortcutsAIService {
     }
 
     private func handleError(_ error: String) {
-        logger.error("Shortcut error: \(error)")
+        logger.error("Shortcut error: \(error, privacy: .public)")
         isProcessing = false
         lastError = error
         timeoutTask?.cancel()
@@ -281,7 +281,7 @@ class ShortcutsAIService {
             return try await runShortcutViaCLI(input: input, timeout: timeout)
         } catch {
             // CLI failed - fall back to URL scheme (opens Shortcuts app briefly)
-            logger.warning("CLI method failed: \(error.localizedDescription). Falling back to URL scheme.")
+            logger.warning("CLI method failed: \(error.localizedDescription, privacy: .public). Falling back to URL scheme.")
             return try await runShortcutViaURLScheme(input: input, timeout: timeout)
         }
     }

@@ -92,7 +92,7 @@ public actor TranscriptService {
     do {
       try await releaseAndReserveLocales()
     } catch {
-      logger.error("Failed to reserve locale: \(error.localizedDescription)")
+      logger.error("Failed to reserve locale: \(error.localizedDescription, privacy: .public)")
       self.assetSetupError = error
     }
 
@@ -121,7 +121,7 @@ public actor TranscriptService {
         continuation.yield(1.0)
       }
     } catch {
-      logger.error("Asset setup failed: \(error.localizedDescription)")
+      logger.error("Asset setup failed: \(error.localizedDescription, privacy: .public)")
       self.assetSetupError = error
     }
 
@@ -157,7 +157,7 @@ public actor TranscriptService {
     do {
       try await AssetInventory.reserve(locale: targetLocale)
     } catch {
-      logger.error("Failed to reserve locale: \(error.localizedDescription)")
+      logger.error("Failed to reserve locale: \(error.localizedDescription, privacy: .public)")
       throw error
     }
   }
@@ -176,7 +176,7 @@ public actor TranscriptService {
         try await analyzer.setContext(context)
         logger.info("Applied \(self.contextualStrings.count) contextual strings to analyzer")
       } catch {
-        logger.error("Failed to apply contextual strings: \(error.localizedDescription)")
+        logger.error("Failed to apply contextual strings: \(error.localizedDescription, privacy: .public)")
       }
     }
     return analyzer

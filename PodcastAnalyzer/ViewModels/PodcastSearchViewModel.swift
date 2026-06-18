@@ -7,6 +7,9 @@
 
 import SwiftUI
 import Observation
+import OSLog
+
+private let logger = Logger(subsystem: "com.podcast.analyzer", category: "PodcastSearchViewModel")
 
 @MainActor
 @Observable
@@ -48,7 +51,7 @@ final class PodcastSearchViewModel {
         }
       } catch {
         if !Task.isCancelled {
-          print("Search error: \(error)")
+          logger.error("Search error: \(error.localizedDescription, privacy: .public)")
         }
       }
       if !Task.isCancelled {
@@ -72,7 +75,7 @@ final class PodcastSearchViewModel {
         }
       } catch {
         if !Task.isCancelled {
-          print("RSS error: \(error)")
+          logger.error("RSS error: \(error.localizedDescription, privacy: .public)")
         }
       }
       if !Task.isCancelled {

@@ -76,7 +76,7 @@ nonisolated enum MusicDetectionService {
       try analyzer.add(request, withObserver: observer)
       await analyzer.analyze()
     } catch {
-      logger.warning("Music detection failed (continuing without): \(error.localizedDescription)")
+      logger.warning("Music detection failed (continuing without): \(error.localizedDescription, privacy: .public)")
       return []
     }
     let ranges = await observer.finish()

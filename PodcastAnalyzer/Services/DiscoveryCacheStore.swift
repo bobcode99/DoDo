@@ -49,7 +49,7 @@ enum DiscoveryCacheStore {
       let data = try JSONEncoder().encode(payload)
       try data.write(to: fileURL(region: region), options: .atomic)
     } catch {
-      logger.warning("Failed to cache top podcasts for \(region): \(error.localizedDescription)")
+      logger.warning("Failed to cache top podcasts for \(region): \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -62,7 +62,7 @@ enum DiscoveryCacheStore {
       let payload = try JSONDecoder().decode(CachedTopPodcasts.self, from: data)
       return payload.podcasts.isEmpty ? nil : payload
     } catch {
-      logger.warning("Failed to read cached top podcasts for \(region): \(error.localizedDescription)")
+      logger.warning("Failed to read cached top podcasts for \(region): \(error.localizedDescription, privacy: .public)")
       return nil
     }
   }

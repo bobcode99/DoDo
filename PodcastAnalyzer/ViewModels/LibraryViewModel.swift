@@ -548,7 +548,7 @@ final class LibraryViewModel {
       refreshTask?.cancel()
       refreshTask = Task { await loadDownloadedEpisodesQuick() }
     } catch {
-      logger.error("Failed to update download model: \(error.localizedDescription)")
+      logger.error("Failed to update download model: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -787,7 +787,7 @@ final class LibraryViewModel {
 
       logger.info("Loaded \(self.allPodcasts.count) total podcasts for episode lookups")
     } catch {
-      logger.error("Failed to load all podcasts: \(error.localizedDescription)")
+      logger.error("Failed to load all podcasts: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -830,7 +830,7 @@ final class LibraryViewModel {
       }
       logger.info("Loaded \(self.savedEpisodes.count) saved episodes")
     } catch {
-      logger.error("Failed to load saved episodes: \(error.localizedDescription)")
+      logger.error("Failed to load saved episodes: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -871,7 +871,7 @@ final class LibraryViewModel {
       }
       logger.info("Quick loaded \(self.downloadedEpisodes.count) downloaded episodes")
     } catch {
-      logger.error("Download fetch failed: \(error)")
+      logger.error("Download fetch failed: \(error, privacy: .public)")
     }
   }
 
@@ -906,7 +906,7 @@ final class LibraryViewModel {
       self.downloadedEpisodes = results
       logger.info("Loaded \(self.downloadedEpisodes.count) downloaded episodes")
     } catch {
-      logger.error("Download fetch failed: \(error)")
+      logger.error("Download fetch failed: \(error, privacy: .public)")
     }
   }
 
@@ -945,7 +945,7 @@ final class LibraryViewModel {
     do {
       allModels = try context.fetch(descriptor)
     } catch {
-      logger.error("Failed to fetch models for sync: \(error)")
+      logger.error("Failed to fetch models for sync: \(error, privacy: .public)")
       return
     }
 
@@ -1139,7 +1139,7 @@ final class LibraryViewModel {
       }
       episodeDataDict = Dictionary(keyValues, uniquingKeysWith: { _, latest in latest })
     } catch {
-      logger.error("Failed to fetch episode models: \(error)")
+      logger.error("Failed to fetch episode models: \(error, privacy: .public)")
       return
     }
 
@@ -1426,7 +1426,7 @@ final class LibraryViewModel {
       try context.save()
       logger.info("Saved all podcast updates")
     } catch {
-      logger.error("Failed to save updates: \(error.localizedDescription)")
+      logger.error("Failed to save updates: \(error.localizedDescription, privacy: .public)")
     }
 
     // Reload all data

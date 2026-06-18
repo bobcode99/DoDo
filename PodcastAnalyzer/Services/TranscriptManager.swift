@@ -598,7 +598,7 @@ class TranscriptManager {
       logger.info("Transcript cancelled for: \(job.episodeTitle)")
     } catch {
       activeJobs[job.id]?.status = .failed(error: error.localizedDescription)
-      logger.error("Transcript failed for \(job.episodeTitle): \(error.localizedDescription)")
+      logger.error("Transcript failed for \(job.episodeTitle): \(error.localizedDescription, privacy: .public)")
       // Track consecutive yap failures to gate auto-queuing.
       let engine = job.engine ?? TranscriptEngine(
         rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""

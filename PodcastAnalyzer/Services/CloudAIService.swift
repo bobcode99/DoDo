@@ -18,7 +18,7 @@ final class CloudAIService {
     static let shared = CloudAIService()
 
     private let settings = AISettingsManager.shared
-    private let logger = Logger(subsystem: "com.podcastanalyzer", category: "CloudAIService")
+    private let logger = Logger(subsystem: "com.podcast.analyzer", category: "CloudAIService")
 
     // MARK: - Provider Registry
 
@@ -587,7 +587,7 @@ final class CloudAIService {
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
-            logger.error("JSON parsing failed: \(error.localizedDescription)")
+            logger.error("JSON parsing failed: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }

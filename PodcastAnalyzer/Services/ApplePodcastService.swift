@@ -174,7 +174,7 @@ class ApplePodcastService: Sendable {
             } catch {
                 // Log and skip malformed items instead of failing completely
                 let name = item["name"] as? String ?? "unknown"
-                logger.warning("Skipping malformed podcast at index \(index) (\(name)): \(error.localizedDescription)")
+                logger.warning("Skipping malformed podcast at index \(index) (\(name)): \(error.localizedDescription, privacy: .public)")
             }
         }
 

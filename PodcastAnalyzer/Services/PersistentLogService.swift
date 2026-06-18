@@ -8,7 +8,6 @@
 
 import Foundation
 import OSLog
-import OSLog
 
 @MainActor
 final class PersistentLogService {
@@ -16,8 +15,8 @@ final class PersistentLogService {
 
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "PersistentLog")
 
-  /// Subsystems used across the app
-  private let appSubsystems = ["com.podcast.analyzer", "com.podcastanalyzer"]
+  /// The single subsystem all app loggers use.
+  private let appSubsystems = ["com.podcast.analyzer"]
 
   private var logsDirectory: URL {
     FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -30,8 +29,10 @@ final class PersistentLogService {
 
   // MARK: - Public API
 
-  /// Exports logs from the previous session in a background task.
-  /// Call this early in app launch (e.g., in App.init()).
+  /// Exports the current session's logs in a background task. Call this when the
+  /// session is ending (e.g. scenePhase → .background): OSLogStore with
+  /// `.currentProcessIdentifier` scope can only see the running process, so
+  /// calling it at launch would capture nothing.
   func exportLogsInBackground() {
     let subsystems = appSubsystems
     let logsDir = logsDirectory
@@ -43,7 +44,7 @@ final class PersistentLogService {
         try PersistentLogService.exportLogs(subsystems: subsystems, logsDirectory: logsDir, logger: log)
         PersistentLogService.cleanupOldLogs(logsDirectory: logsDir, keeping: 7, logger: log)
       } catch {
-        log.error("Failed to export logs: \(error.localizedDescription)")
+        log.error("Failed to export logs: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -75,7 +76,7 @@ final class PersistentLogService {
 
     // Format entries
     let dateFormatter = DateFormatter()
-    dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS Z"
     dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
     var lines: [String] = []
@@ -86,7 +87,7 @@ final class PersistentLogService {
       let level = levelString(for: entry.level)
       let category = entry.category
       let message = entry.composedMessage
-      lines.append("[\(timestamp)] [\(level)] [\(category)] \(message)")
+      lines.append("[\(timestamp)] [\(level)] [\(entry.subsystem)/\(category)] \(message)")
     }
 
     let content = lines.joined(separator: "\n")
@@ -140,7 +141,7 @@ final class PersistentLogService {
         logger.info("Removed old log file: \(file.lastPathComponent)")
       }
     } catch {
-      logger.error("Failed to cleanup old logs: \(error.localizedDescription)")
+      logger.error("Failed to cleanup old logs: \(error.localizedDescription, privacy: .public)")
     }
   }
 

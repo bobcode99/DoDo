@@ -209,7 +209,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
       try FileManager.default.copyItem(at: location, to: ourTempFile)
       logger.info("Copied download to temp location: \(ourTempFile.lastPathComponent)")
     } catch {
-      logger.error("Failed to copy temp file: \(error.localizedDescription)")
+      logger.error("Failed to copy temp file: \(error.localizedDescription, privacy: .public)")
       // Update state asynchronously
       Task {
         if let episodeKey = await downloadTracker.getDownloadKey(for: downloadTask) {
@@ -355,7 +355,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
               )
               logger.info("Auto-downloaded RSS transcript for: \(episodeTitle)")
             } catch {
-              logger.warning("Auto-download RSS transcript failed: \(error.localizedDescription)")
+              logger.warning("Auto-download RSS transcript failed: \(error.localizedDescription, privacy: .public)")
             }
           }
         }
@@ -370,7 +370,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
           DownloadManager.shared.inFlightProgress.removeValue(forKey: episodeKey)
           DownloadManager.shared.downloadStates[episodeKey] = .failed(error: error.localizedDescription)
         }
-        logger.error("Download save failed: \(error.localizedDescription)")
+        logger.error("Download save failed: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -422,7 +422,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
         DownloadManager.shared.inFlightProgress.removeValue(forKey: episodeKey)
         DownloadManager.shared.downloadStates[episodeKey] = .failed(error: error.localizedDescription)
       }
-      logger.error("Download failed: \(error.localizedDescription)")
+      logger.error("Download failed: \(error.localizedDescription, privacy: .public)")
     }
   }
 }
@@ -604,7 +604,7 @@ final class DownloadManager {
           return
         }
       } catch {
-        logger.warning("Could not check disk space: \(error.localizedDescription)")
+        logger.warning("Could not check disk space: \(error.localizedDescription, privacy: .public)")
         // Proceed anyway — disk space check is best-effort
       }
 
@@ -657,7 +657,7 @@ final class DownloadManager {
         diskCheckedKeys.remove(episodeKey)
         logger.info("Deleted download: \(episodeTitle)")
       } catch {
-        logger.error("Failed to delete download: \(error.localizedDescription)")
+        logger.error("Failed to delete download: \(error.localizedDescription, privacy: .public)")
       }
     }
   }

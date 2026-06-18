@@ -146,7 +146,7 @@ final class MCPServerManager {
         logger.info("MCP server running at \(url.absoluteString)")
       }
     } catch {
-      logger.error("MCP server failed to start: \(error.localizedDescription)")
+      logger.error("MCP server failed to start: \(error.localizedDescription, privacy: .public)")
       status = .error(error.localizedDescription)
       await server.stop()
       self.server = nil

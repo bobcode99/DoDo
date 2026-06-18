@@ -211,7 +211,7 @@ class EnhancedAudioManager: NSObject {
       // Don't activate session here - only activate when actually playing
       logger.info("Audio session configured (will activate when playing)")
     } catch {
-      logger.error("Audio session setup failed: \(error.localizedDescription)")
+      logger.error("Audio session setup failed: \(error.localizedDescription, privacy: .public)")
     }
     #else
     // macOS doesn't require AVAudioSession configuration
@@ -225,7 +225,7 @@ class EnhancedAudioManager: NSObject {
       try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
       logger.info("Audio session activated")
     } catch {
-      logger.error("Failed to activate audio session: \(error.localizedDescription)")
+      logger.error("Failed to activate audio session: \(error.localizedDescription, privacy: .public)")
     }
     #endif
   }
@@ -236,7 +236,7 @@ class EnhancedAudioManager: NSObject {
       try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
       logger.info("Audio session deactivated - other apps can now play")
     } catch {
-      logger.error("Failed to deactivate audio session: \(error.localizedDescription)")
+      logger.error("Failed to deactivate audio session: \(error.localizedDescription, privacy: .public)")
     }
     #endif
   }
@@ -324,7 +324,7 @@ private func handleAudioInterruption(_ notification: Notification) {
                     }
                 }
             } catch {
-                logger.error("Failed to reactivate session after interruption: \(error.localizedDescription)")
+                logger.error("Failed to reactivate session after interruption: \(error.localizedDescription, privacy: .public)")
             }
         } else {
             wasPlayingBeforeInterruption = false
@@ -929,7 +929,7 @@ private func handleAudioInterruption(_ notification: Notification) {
           self.captionSegments = segments
           logger.info("Loaded \(segments.count) caption segments")
         } catch {
-          logger.error("Failed to load captions: \(error.localizedDescription)")
+          logger.error("Failed to load captions: \(error.localizedDescription, privacy: .public)")
         }
       }
     }
@@ -1101,7 +1101,7 @@ private func handleAudioInterruption(_ notification: Notification) {
           }
           #endif
         } catch {
-          self?.logger.error("Failed to load artwork: \(error.localizedDescription)")
+          self?.logger.error("Failed to load artwork: \(error.localizedDescription, privacy: .public)")
         }
       }
     }

@@ -405,12 +405,12 @@ final class SettingsViewModel {
           }
         }
       } catch let error as PodcastServiceError {
-        logger.error("RSS validation failed: \(error.localizedDescription)")
+        logger.error("RSS validation failed: \(error.localizedDescription, privacy: .public)")
         errorMessage = "Invalid RSS feed: \(error.localizedDescription)"
         successMessage = ""
         isValidating = false
       } catch {
-        logger.error("Unexpected error: \(error.localizedDescription)")
+        logger.error("Unexpected error: \(error.localizedDescription, privacy: .public)")
         errorMessage = "Error: \(error.localizedDescription)"
         successMessage = ""
         isValidating = false
@@ -427,7 +427,7 @@ final class SettingsViewModel {
       self.logger.info("Feed deleted: \(podcastInfoModel.podcastInfo.title)")
     } catch {
       errorMessage = "Failed to delete feed: \(error.localizedDescription)"
-      self.logger.error("Failed to delete feed: \(error.localizedDescription)")
+      self.logger.error("Failed to delete feed: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -442,7 +442,7 @@ final class SettingsViewModel {
       self.logger.info("Loaded \(self.podcastInfoModelList.count) feeds")
     } catch {
       errorMessage = "Failed to load feeds: \(error.localizedDescription)"
-      self.logger.error("Failed to load feeds: \(error.localizedDescription)")
+      self.logger.error("Failed to load feeds: \(error.localizedDescription, privacy: .public)")
     }
   }
 

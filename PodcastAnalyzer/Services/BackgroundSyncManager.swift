@@ -142,7 +142,7 @@ class BackgroundSyncManager {
       try BGTaskScheduler.shared.submit(request)
       logger.info("Background refresh scheduled for 4 hours from now")
     } catch {
-      logger.error("Failed to schedule background refresh: \(error.localizedDescription)")
+      logger.error("Failed to schedule background refresh: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -348,7 +348,7 @@ class BackgroundSyncManager {
 
     } catch {
       lastSyncError = error.localizedDescription
-      logger.error("Sync failed: \(error.localizedDescription)")
+      logger.error("Sync failed: \(error.localizedDescription, privacy: .public)")
       return false
     }
   }
@@ -364,7 +364,7 @@ class BackgroundSyncManager {
     let podcast = podcasts[result.index]
 
     if let error = result.error {
-      logger.error("Failed to sync \(podcast.podcastInfo.title): \(error.localizedDescription)")
+      logger.error("Failed to sync \(podcast.podcastInfo.title): \(error.localizedDescription, privacy: .public)")
       return
     }
 
@@ -455,7 +455,7 @@ class BackgroundSyncManager {
           logger.info("Notification permission denied")
         }
       } catch {
-        logger.error("Failed to request notification permission: \(error.localizedDescription)")
+        logger.error("Failed to request notification permission: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -507,7 +507,7 @@ class BackgroundSyncManager {
       try await UNUserNotificationCenter.current().add(request)
       logger.info("Notification sent for \(totalCount) new episodes")
     } catch {
-      logger.error("Failed to send notification: \(error.localizedDescription)")
+      logger.error("Failed to send notification: \(error.localizedDescription, privacy: .public)")
     }
   }
 

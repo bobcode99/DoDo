@@ -11,7 +11,7 @@ import Foundation
 import FoundationModels
 import OSLog
 
-private nonisolated let logger = Logger(subsystem: "com.podcastanalyzer", category: "AppleFoundationModelsService")
+private nonisolated let logger = Logger(subsystem: "com.podcast.analyzer", category: "AppleFoundationModelsService")
 
 /// Service for on-device AI features using Apple Foundation Models (iOS 26+)
 /// Uses only episode title, description, duration, and release date - NOT the full transcript

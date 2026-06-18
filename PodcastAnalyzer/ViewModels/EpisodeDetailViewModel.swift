@@ -488,7 +488,7 @@ final class EpisodeDetailViewModel {
         createEpisodeModel(context: context)
       }
     } catch {
-      logger.error("Failed to load episode model: \(error.localizedDescription)")
+      logger.error("Failed to load episode model: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -508,7 +508,7 @@ final class EpisodeDetailViewModel {
       try context.save()
       episodeModel = model
     } catch {
-      logger.error("Failed to create episode model: \(error.localizedDescription)")
+      logger.error("Failed to create episode model: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -529,7 +529,7 @@ final class EpisodeDetailViewModel {
     do {
       try modelContext?.save()
     } catch {
-      logger.error("Failed to save playback position: \(error.localizedDescription)")
+      logger.error("Failed to save playback position: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -549,7 +549,7 @@ final class EpisodeDetailViewModel {
     do {
       try modelContext?.save()
     } catch {
-      logger.error("Failed to update last played: \(error.localizedDescription)")
+      logger.error("Failed to update last played: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -668,7 +668,7 @@ final class EpisodeDetailViewModel {
     do {
       try modelContext?.save()
     } catch {
-      logger.error("Failed to save star state: \(error.localizedDescription)")
+      logger.error("Failed to save star state: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -690,7 +690,7 @@ final class EpisodeDetailViewModel {
     do {
       try modelContext?.save()
     } catch {
-      logger.error("Failed to save played state: \(error.localizedDescription)")
+      logger.error("Failed to save played state: \(error.localizedDescription, privacy: .public)")
     }
   }
 

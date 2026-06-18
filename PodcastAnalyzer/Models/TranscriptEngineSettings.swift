@@ -235,7 +235,7 @@ final class WhisperModelManager {
                 modelStatuses[variant] = .notDownloaded
             } catch {
                 modelStatuses[variant] = .error(error.localizedDescription)
-                logger.error("Whisper model download failed: \(error.localizedDescription)")
+                logger.error("Whisper model download failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

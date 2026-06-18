@@ -277,7 +277,7 @@ final class TranslationCoordinator {
     } catch is CancellationError {
       return
     } catch {
-      logger.error("Translation failed: \(error.localizedDescription)")
+      logger.error("Translation failed: \(error.localizedDescription, privacy: .public)")
       translationStatus = .failed(error.localizedDescription)
       return
     }
@@ -296,7 +296,7 @@ final class TranslationCoordinator {
         targetLanguage: targetLang
       )
     } catch {
-      logger.error("Failed to save translation: \(error.localizedDescription)")
+      logger.error("Failed to save translation: \(error.localizedDescription, privacy: .public)")
     }
 
     self.transcript?.applyTranslations(translatedSegments)
@@ -319,7 +319,7 @@ final class TranslationCoordinator {
       translatedDescription = response.targetText
       logger.info("Translated description for \(self.episode.title)")
     } catch {
-      logger.error("Description translation failed: \(error.localizedDescription)")
+      logger.error("Description translation failed: \(error.localizedDescription, privacy: .public)")
     }
     #endif
   }
@@ -334,7 +334,7 @@ final class TranslationCoordinator {
       translatedEpisodeTitle = response.targetText
       logger.info("Translated title for \(self.episode.title)")
     } catch {
-      logger.error("Title translation failed: \(error.localizedDescription)")
+      logger.error("Title translation failed: \(error.localizedDescription, privacy: .public)")
     }
     #endif
   }
@@ -349,7 +349,7 @@ final class TranslationCoordinator {
       translatedPodcastTitle = response.targetText
       logger.info("Translated podcast title: \(title)")
     } catch {
-      logger.error("Podcast title translation failed: \(error.localizedDescription)")
+      logger.error("Podcast title translation failed: \(error.localizedDescription, privacy: .public)")
     }
     #endif
   }

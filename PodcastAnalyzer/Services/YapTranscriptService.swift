@@ -184,7 +184,7 @@ actor YapTranscriptService {
                 logger.warning("[YapServer] DELETE /transcriptions/\(serverJobID) returned HTTP \(status)")
             }
         } catch {
-            logger.warning("[YapServer] cancel request failed for id=\(serverJobID): \(error.localizedDescription)")
+            logger.warning("[YapServer] cancel request failed for id=\(serverJobID): \(error.localizedDescription, privacy: .public)")
         }
     }
 

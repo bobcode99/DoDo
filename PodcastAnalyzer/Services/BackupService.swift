@@ -136,7 +136,7 @@ final class BackupService {
             decoder.dateDecodingStrategy = .iso8601
             archive = try decoder.decode(BackupArchive.self, from: data)
         } catch {
-            logger.error("Backup decode failed: \(error.localizedDescription)")
+            logger.error("Backup decode failed: \(error.localizedDescription, privacy: .public)")
             lastError = BackupError.decodeFailed.errorDescription
             return
         }
@@ -220,7 +220,7 @@ final class BackupService {
             try ctx.save()
         } catch {
             summary.warnings.append("Save failed: \(error.localizedDescription)")
-            logger.error("Restore save failed: \(error.localizedDescription)")
+            logger.error("Restore save failed: \(error.localizedDescription, privacy: .public)")
         }
 
         progress = 1

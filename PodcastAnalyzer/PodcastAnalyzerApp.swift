@@ -58,7 +58,7 @@ struct PodcastAnalyzerApp: App {
       // the app on a migration failure, delete the incompatible store (and its
       // -wal/-shm sidecars) and rebuild it from scratch. This is what makes
       // future schema changes (indexes, #Unique, new properties) safe to ship.
-      logger.error("ModelContainer init failed, rebuilding store: \(error.localizedDescription)")
+      logger.error("ModelContainer init failed, rebuilding store: \(error.localizedDescription, privacy: .public)")
       let storeURL = modelConfiguration.url
       let fm = FileManager.default
       try? fm.removeItem(at: storeURL)
@@ -67,7 +67,7 @@ struct PodcastAnalyzerApp: App {
       do {
         return try ModelContainer(for: schema, configurations: [modelConfiguration])
       } catch {
-        logger.error("ModelContainer rebuild failed: \(error.localizedDescription)")
+        logger.error("ModelContainer rebuild failed: \(error.localizedDescription, privacy: .public)")
         fatalError("Could not create ModelContainer even after store reset: \(error)")
       }
     }
@@ -85,9 +85,6 @@ struct PodcastAnalyzerApp: App {
     // path update fires — touching it here kicks off monitoring during init
     // so playback gating later sees an accurate value.
     _ = NetworkMonitor.shared
-
-    // Export previous session's os.log entries to Documents/Logs
-    PersistentLogService.shared.exportLogsInBackground()
   }
 
   var body: some Scene {
@@ -209,6 +206,11 @@ struct PodcastAnalyzerApp: App {
         if BackgroundSyncManager.shared.isBackgroundSyncEnabled {
           BackgroundSyncManager.shared.scheduleBackgroundRefresh()
         }
+        // Export this session's os.log entries to Documents/Logs now, while the
+        // process is still alive. OSLogStore(.currentProcessIdentifier) can only
+        // see the current process, so this must run at the end of a session — not
+        // at launch, when nothing has been logged yet.
+        PersistentLogService.shared.exportLogsInBackground()
         #if os(iOS)
         // Remember whether we left mid-playback so .active can decide whether
         // to auto-open the player on return.

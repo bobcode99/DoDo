@@ -101,7 +101,7 @@ final class MCPHTTPServer {
         try await app.run()
       } catch {
         if !(error is CancellationError) {
-          logger.error("Hummingbird server exited: \(error.localizedDescription)")
+          logger.error("Hummingbird server exited: \(error.localizedDescription, privacy: .public)")
         }
       }
     }

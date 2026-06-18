@@ -313,7 +313,7 @@ final class TranscriptCoordinator {
       } catch {
         guard !Task.isCancelled else { return }
         self.rssTranscriptState = .failed(error: error.localizedDescription)
-        logger.error("RSS transcript download failed: \(error.localizedDescription)")
+        logger.error("RSS transcript download failed: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -331,7 +331,7 @@ final class TranscriptCoordinator {
       let results = try context.fetch(descriptor)
       if let lang = results.first?.podcastInfo.language, !lang.isEmpty { return lang }
     } catch {
-      logger.error("Failed to fetch podcast language: \(error.localizedDescription)")
+      logger.error("Failed to fetch podcast language: \(error.localizedDescription, privacy: .public)")
     }
     return nil
   }
@@ -461,7 +461,7 @@ final class TranscriptCoordinator {
       parseTranscriptSegments()
       await host?.loadTranslationsAfterParsing()
     } catch {
-      logger.error("Failed to load transcript: \(error.localizedDescription)")
+      logger.error("Failed to load transcript: \(error.localizedDescription, privacy: .public)")
       transcriptState = .error("Failed to load transcript: \(error.localizedDescription)")
     }
   }

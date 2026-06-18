@@ -350,7 +350,7 @@ final class HomeViewModel {
       podcastInfoModelList = try context.fetch(descriptor)
       logger.info("Loaded \(self.podcastInfoModelList.count) subscribed podcasts")
     } catch {
-      logger.error("Failed to load podcasts: \(error.localizedDescription)")
+      logger.error("Failed to load podcasts: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -640,7 +640,7 @@ final class HomeViewModel {
           hasFreshPopularShowsThisSession = true
         }
       } catch {
-        logger.error("Joined task failed: \(error.localizedDescription)")
+        logger.error("Joined task failed: \(error.localizedDescription, privacy: .public)")
       }
       isLoadingTopPodcasts = false
       return
@@ -674,7 +674,7 @@ final class HomeViewModel {
           let isServerError = (error as NSError).domain == NSURLErrorDomain ||
                               (error as? URLError)?.code == .badServerResponse
           if isServerError {
-            logger.warning("Region \(regionToLoad) failed with limit \(limit), trying smaller: \(error.localizedDescription)")
+            logger.warning("Region \(regionToLoad) failed with limit \(limit), trying smaller: \(error.localizedDescription, privacy: .public)")
             try? await Task.sleep(for: .milliseconds(300))
             continue
           }
@@ -702,7 +702,7 @@ final class HomeViewModel {
       }
       logger.info("Loaded \(podcasts.count) top podcasts for \(regionToLoad)")
     } catch {
-      logger.error("Failed to load top podcasts: \(error.localizedDescription)")
+      logger.error("Failed to load top podcasts: \(error.localizedDescription, privacy: .public)")
     }
 
     // Cleanup static state if it's still ours
@@ -783,7 +783,7 @@ final class HomeViewModel {
         await loadUpNextEpisodes()
         logger.info("Successfully subscribed to \(podcastInfo.title)")
       } catch {
-        logger.error("Failed to subscribe: \(error.localizedDescription)")
+        logger.error("Failed to subscribe: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -883,7 +883,7 @@ final class HomeViewModel {
           resolveRecommendedEpisodes()
         }
       } catch {
-        logger.error("Failed to generate recommendations: \(error.localizedDescription)")
+        logger.error("Failed to generate recommendations: \(error.localizedDescription, privacy: .public)")
       }
       isLoadingRecommendations = false
     }
@@ -967,7 +967,7 @@ final class HomeViewModel {
       }
       logger.info("Loaded \(episodes.count) trending episodes for \(regionToLoad)")
     } catch {
-      logger.error("Failed to load trending episodes: \(error.localizedDescription)")
+      logger.error("Failed to load trending episodes: \(error.localizedDescription, privacy: .public)")
     }
     isLoadingTrendingEpisodes = false
   }

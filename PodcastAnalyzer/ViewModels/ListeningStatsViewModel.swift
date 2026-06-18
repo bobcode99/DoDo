@@ -158,7 +158,7 @@ final class ListeningStatsViewModel {
 
       logger.info("Stats loaded: \(self.totalEpisodesPlayed) episodes, \(String(format: "%.1f", self.totalHoursListened))h, \(self.topPodcasts.count) top podcasts")
     } catch {
-      logger.error("Failed to load listening stats: \(error.localizedDescription)")
+      logger.error("Failed to load listening stats: \(error.localizedDescription, privacy: .public)")
     }
 
     isLoading = false

@@ -8,12 +8,15 @@
 import SwiftUI
 import Observation
 import SwiftData
+import OSLog
 
 #if os(iOS)
 import UIKit
 #else
 import AppKit
 #endif
+
+private let logger = Logger(subsystem: "com.podcast.analyzer", category: "ExpandedPlayerViewModel")
 
 @MainActor
 @Observable
@@ -145,7 +148,7 @@ final class ExpandedPlayerViewModel {
         isCompleted = false
       }
     } catch {
-      print("Failed to load episode state: \(error)")
+      logger.error("Failed to load episode state: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -160,7 +163,7 @@ final class ExpandedPlayerViewModel {
     do {
       podcastModel = try context.fetch(descriptor).first
     } catch {
-      print("Failed to load podcast model: \(error)")
+      logger.error("Failed to load podcast model: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -190,7 +193,7 @@ final class ExpandedPlayerViewModel {
         return model
       }
     } catch {
-      print("Failed to get/create episode model: \(error)")
+      logger.error("Failed to get/create episode model: \(error.localizedDescription, privacy: .public)")
       return nil
     }
   }
