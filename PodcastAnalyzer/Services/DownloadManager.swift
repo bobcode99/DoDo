@@ -123,28 +123,12 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
     }
   }
 
-  // Use Unit Separator (U+001F) as delimiter
-  private static let episodeKeyDelimiter = "\u{1F}"
-
   func makeKey(episode: String, podcast: String) -> String {
-    "\(podcast)\(Self.episodeKeyDelimiter)\(episode)"
+    EpisodeKeyUtils.makeKey(podcastTitle: podcast, episodeTitle: episode)
   }
 
   private func parseEpisodeKey(_ episodeKey: String) -> (podcastTitle: String, episodeTitle: String)? {
-    if let delimiterIndex = episodeKey.range(of: Self.episodeKeyDelimiter) {
-      let podcastTitle = String(episodeKey[..<delimiterIndex.lowerBound])
-      let episodeTitle = String(episodeKey[delimiterIndex.upperBound...])
-      return (podcastTitle, episodeTitle)
-    }
-
-    // Fall back to old format (|) for backward compatibility
-    if let lastPipeIndex = episodeKey.lastIndex(of: "|") {
-      let podcastTitle = String(episodeKey[..<lastPipeIndex])
-      let episodeTitle = String(episodeKey[episodeKey.index(after: lastPipeIndex)...])
-      return (podcastTitle, episodeTitle)
-    }
-
-    return nil
+    EpisodeKeyUtils.parseKey(episodeKey)
   }
 
   // MARK: - Public Methods (called from DownloadManager)

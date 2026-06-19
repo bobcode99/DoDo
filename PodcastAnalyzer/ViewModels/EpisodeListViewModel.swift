@@ -32,6 +32,7 @@ final class EpisodeListViewModel {
   var selectedFilter: EpisodeFilter = .all {
     didSet {
       isShowingAllEpisodes = false  // collapse back to the window for the new set
+      transcriptKeySnapshot = nil   // re-scan transcript presence when the chip is (re)selected
       recomputeFilteredEpisodes()
     }
   }
@@ -67,9 +68,6 @@ final class EpisodeListViewModel {
   @ObservationIgnored private var progressTimer: Timer?
   @ObservationIgnored private var lastRefreshDate: Date?
 
-  // Use Unit Separator (U+001F) as delimiter - same as DownloadManager
-  private static let episodeKeyDelimiter = "\u{1F}"
-
   // MARK: - Throttled Download States Snapshot
   //
   // PERFORMANCE: Exposing a throttled snapshot here means EpisodeRowView rows no
@@ -82,6 +80,15 @@ final class EpisodeListViewModel {
   /// Updated at most once per 250 ms of aggregate progress, mirroring the
   /// throttle already applied in DownloadManager's URLSession delegate.
   private(set) var downloadStatesSnapshot: [String: DownloadState] = [:]
+
+  /// Episode keys that have a transcript `.srt` on disk, scanned once when the
+  /// Transcript filter is engaged (nil = not built / stale). The background
+  /// transcription pipeline writes the caption file but does NOT set the
+  /// model's `transcriptSource`/`captionPath`, so the filter must read disk
+  /// truth — the same `EpisodeStatusChecker.hasTranscript` the row badge uses —
+  /// or freshly transcribed episodes stay hidden until their screen is opened.
+  /// Cached so search keystrokes don't re-scan the filesystem.
+  @ObservationIgnored private var transcriptKeySnapshot: Set<String>?
 
   // MARK: - Cached Filtered Episodes
 
@@ -104,10 +111,6 @@ final class EpisodeListViewModel {
   /// cached struct everywhere else. This is what keeps a 600+ episode list fast.
   private(set) var podcastInfo: PodcastInfo
 
-  var filteredEpisodeCount: Int {
-    filteredEpisodes.count
-  }
-
   /// Episodes actually rendered by the List — a capped window until "Show All".
   var displayedEpisodes: [PodcastEpisodeInfo] {
     isShowingAllEpisodes
@@ -118,6 +121,23 @@ final class EpisodeListViewModel {
   /// True when more episodes exist beyond the initial window.
   var hasMoreEpisodesToShow: Bool {
     !isShowingAllEpisodes && filteredEpisodes.count > Self.initialEpisodeDisplayCount
+  }
+
+  /// Episode keys with a transcript `.srt` on disk. Scanned once per Transcript-
+  /// filter engagement via the same `EpisodeStatusChecker` the row badge uses,
+  /// then cached so repeated recomputes (e.g. search keystrokes) don't re-hit
+  /// the filesystem.
+  // ponytail: O(N) fileExists once per engagement; swap to a single directory
+  // scan if a feed ever has enough episodes to make this drag.
+  private func episodeKeysWithTranscript() -> Set<String> {
+    if let cached = transcriptKeySnapshot { return cached }
+    var keys: Set<String> = []
+    for episode in podcastInfo.episodes {
+      let checker = EpisodeStatusChecker(episode: episode, podcastTitle: podcastInfo.title)
+      if checker.hasTranscript { keys.insert(makeEpisodeKey(episode)) }
+    }
+    transcriptKeySnapshot = keys
+    return keys
   }
 
   private func recomputeFilteredEpisodes() {
@@ -164,14 +184,13 @@ final class EpisodeListViewModel {
         return false
       }
     case .transcript:
+      let withTranscript = episodeKeysWithTranscript()
       episodes = episodes.filter { episode in
         // RSS-advertised transcript (downloadable on demand).
         if let url = episode.transcriptURL, !url.isEmpty { return true }
-        // Locally stored: either a .srt was generated (transcriptSource set)
-        // or a captionPath has been written.
-        let key = makeEpisodeKey(episode)
-        guard let model = episodeModels[key] else { return false }
-        return !model.transcriptSource.isEmpty || (model.captionPath?.isEmpty == false)
+        // A generated/fetched .srt exists on disk — same source of truth as the
+        // row's transcript badge.
+        return withTranscript.contains(makeEpisodeKey(episode))
       }
     case .custom:
       // Reuses the auto-download evaluator — same include/exclude/min-duration
@@ -357,7 +376,7 @@ final class EpisodeListViewModel {
   private func updateEpisodeDownloadModel(episodeTitle: String, podcastTitle: String, localPath: String) {
     guard let context = modelContext else { return }
 
-    let episodeKey = "\(podcastTitle)\(Self.episodeKeyDelimiter)\(episodeTitle)"
+    let episodeKey = EpisodeKeyUtils.makeKey(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
 
     // Check if model already exists
     if let existingModel = episodeModels[episodeKey] {
@@ -438,7 +457,7 @@ final class EpisodeListViewModel {
   // MARK: - Episode Key Helper
 
   func makeEpisodeKey(_ episode: PodcastEpisodeInfo) -> String {
-    return "\(podcastInfo.title)\(Self.episodeKeyDelimiter)\(episode.title)"
+    EpisodeKeyUtils.makeKey(podcastTitle: podcastInfo.title, episodeTitle: episode.title)
   }
 
   // MARK: - Data Loading
@@ -491,6 +510,7 @@ final class EpisodeListViewModel {
         updatedFrom: updatedPodcast, preservedKeys: preservedKeys)
       podcastModel.applyPodcastInfo(merged)
       podcastInfo = merged  // refresh the cache from the value we just built (no re-decode)
+      transcriptKeySnapshot = nil  // episodes changed — re-scan transcript presence on next use
       recomputeFilteredEpisodes()
       try? modelContext?.save()
       lastRefreshDate = Date()
@@ -501,27 +521,30 @@ final class EpisodeListViewModel {
 
   // MARK: - Episode Actions
 
-  func toggleStar(for episode: PodcastEpisodeInfo) {
-    guard let context = modelContext else { return }
-
+  /// Returns the existing download model for `episode`, or creates, inserts, and
+  /// caches a fresh one. nil only when there's no model context or the episode
+  /// has no audio URL. Callers mutate the result and save.
+  @discardableResult
+  private func ensureModel(for episode: PodcastEpisodeInfo) -> EpisodeDownloadModel? {
     let key = makeEpisodeKey(episode)
-    if let model = episodeModels[key] {
-      model.isStarred.toggle()
-      try? context.save()
-    } else {
-      guard let audioURL = episode.audioURL else { return }
-      let model = EpisodeDownloadModel(
-        episodeTitle: episode.title,
-        podcastTitle: podcastInfo.title,
-        audioURL: audioURL,
-        imageURL: episode.imageURL ?? podcastInfo.imageURL,
-        pubDate: episode.pubDate
-      )
-      model.isStarred = true
-      context.insert(model)
-      try? context.save()
-      episodeModels[key] = model
-    }
+    if let existing = episodeModels[key] { return existing }
+    guard let context = modelContext, let audioURL = episode.audioURL else { return nil }
+    let model = EpisodeDownloadModel(
+      episodeTitle: episode.title,
+      podcastTitle: podcastInfo.title,
+      audioURL: audioURL,
+      imageURL: episode.imageURL ?? podcastInfo.imageURL,
+      pubDate: episode.pubDate
+    )
+    context.insert(model)
+    episodeModels[key] = model
+    return model
+  }
+
+  func toggleStar(for episode: PodcastEpisodeInfo) {
+    guard let model = ensureModel(for: episode) else { return }
+    model.isStarred.toggle()
+    try? modelContext?.save()
   }
 
   func downloadEpisode(_ episode: PodcastEpisodeInfo) {
@@ -540,29 +563,12 @@ final class EpisodeListViewModel {
   }
 
   func togglePlayed(for episode: PodcastEpisodeInfo) {
-    guard let context = modelContext else { return }
-
-    let key = makeEpisodeKey(episode)
-    if let model = episodeModels[key] {
-      model.isCompleted.toggle()
-      if !model.isCompleted {
-        model.lastPlaybackPosition = 0
-      }
-      try? context.save()
-    } else {
-      guard let audioURL = episode.audioURL else { return }
-      let model = EpisodeDownloadModel(
-        episodeTitle: episode.title,
-        podcastTitle: podcastInfo.title,
-        audioURL: audioURL,
-        imageURL: episode.imageURL ?? podcastInfo.imageURL,
-        pubDate: episode.pubDate
-      )
-      model.isCompleted = true
-      context.insert(model)
-      try? context.save()
-      episodeModels[key] = model
+    guard let model = ensureModel(for: episode) else { return }
+    model.isCompleted.toggle()
+    if !model.isCompleted {
+      model.lastPlaybackPosition = 0
     }
+    try? modelContext?.save()
   }
 
   // MARK: - Cleanup

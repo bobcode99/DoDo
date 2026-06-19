@@ -45,9 +45,6 @@ struct TranscriptJob: Identifiable {
 class TranscriptManager {
   static let shared = TranscriptManager()
 
-  // Use Unit Separator (U+001F) as delimiter - same as DownloadManager for consistency
-  private static let episodeKeyDelimiter = "\u{1F}"
-
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "TranscriptManager")
   private let fileStorage = FileStorageManager.shared
 
@@ -58,7 +55,7 @@ class TranscriptManager {
 
   // Helper to create job ID matching episode key format
   private func makeJobId(podcastTitle: String, episodeTitle: String) -> String {
-    return "\(podcastTitle)\(Self.episodeKeyDelimiter)\(episodeTitle)"
+    EpisodeKeyUtils.makeKey(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
   }
 
   /// Per-podcast transcription vocabulary, looked up by title from SwiftData.

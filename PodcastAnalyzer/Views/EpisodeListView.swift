@@ -371,18 +371,15 @@ struct EpisodeListView: View {
       // MARK: - Episodes List
       Section {
         ForEach(viewModel.displayedEpisodes) { episode in
+          let key = viewModel.makeEpisodeKey(episode)
           EpisodeRowView(
             episode: episode,
             podcastTitle: viewModel.podcastInfo.title,
             fallbackImageURL: viewModel.podcastInfo.imageURL,
             podcastLanguage: viewModel.podcastInfo.language,
             downloadManager: downloadManager,
-            episodeModel: viewModel.episodeModels[
-              viewModel.makeEpisodeKey(episode)
-            ],
-            precomputedDownloadState: viewModel.downloadStatesSnapshot[
-              viewModel.makeEpisodeKey(episode)
-            ],
+            episodeModel: viewModel.episodeModels[key],
+            precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
             showArtwork: showEpisodeArtwork,
             onToggleStar: {
               viewModel.toggleStar(for: episode)
@@ -407,7 +404,7 @@ struct EpisodeListView: View {
             .listRowSeparator(.hidden)
         }
       } header: {
-        Text("Episodes (\(viewModel.filteredEpisodeCount))")
+        Text("Episodes (\(viewModel.filteredEpisodes.count))")
           .font(.subheadline)
           .fontWeight(.semibold)
           .foregroundStyle(.secondary)
@@ -574,7 +571,7 @@ struct EpisodeListView: View {
     } label: {
       HStack(spacing: 6) {
         Spacer()
-        Text("Show All (\(viewModel.filteredEpisodeCount))")
+        Text("Show All (\(viewModel.filteredEpisodes.count))")
           .font(.subheadline)
           .fontWeight(.semibold)
         Image(systemName: "chevron.down")
