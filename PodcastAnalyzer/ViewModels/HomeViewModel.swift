@@ -90,7 +90,6 @@ final class HomeViewModel {
   }
 
   // For You recommendations (on-device AI)
-  var recommendations: EpisodeRecommendations?
   var isLoadingRecommendations = false
   var recommendedEpisodes: [LibraryEpisode] = []
 
@@ -792,7 +791,6 @@ final class HomeViewModel {
 
   @available(iOS 26.0, macOS 26.0, *)
   func refreshRecommendations() {
-    recommendations = nil
     recommendedEpisodes = []
     loadRecommendations()
   }
@@ -800,15 +798,10 @@ final class HomeViewModel {
   @available(iOS 26.0, macOS 26.0, *)
   func loadRecommendations() {
     guard !isLoadingRecommendations else { return }
-
-    // Check if For You is enabled
-    guard UserDefaults.standard.object(forKey: "showForYouRecommendations") == nil ||
-          UserDefaults.standard.bool(forKey: "showForYouRecommendations") else {
-      recommendations = nil
+    guard showForYouRecommendations else {
       recommendedEpisodes = []
       return
     }
-
     guard let context = modelContext else { return }
 
     recommendationsTask?.cancel()
@@ -816,119 +809,93 @@ final class HomeViewModel {
 
     recommendationsTask = Task { [weak self] in
       guard let self else { return }
+      defer { isLoadingRecommendations = false }
 
       let service = AppleFoundationModelsService()
-      let availability = await service.checkAvailability()
-      guard availability.isAvailable else {
-        isLoadingRecommendations = false
-        return
-      }
+      guard await service.checkAvailability().isAvailable else { return }
 
-      // Query SwiftData for listening history
+      // Single fetch: feeds the listening-history signal, the completed-episode
+      // filter, and the result-card hydration below — no second pass.
       let descriptor = FetchDescriptor<EpisodeDownloadModel>(
         sortBy: [SortDescriptor(\.lastPlayedDate, order: .reverse)]
       )
-
-      guard let allModels = try? context.fetch(descriptor) else {
-        isLoadingRecommendations = false
-        return
-      }
+      guard let allModels = try? context.fetch(descriptor) else { return }
+      var modelsByKey: [String: EpisodeDownloadModel] = [:]
+      for model in allModels { modelsByKey[model.id] = model }
 
       let playedModels = allModels.filter { $0.playCount > 0 || $0.lastPlayedDate != nil }
-      let listeningHistory: [(title: String, podcastTitle: String, completed: Bool)] = playedModels.prefix(10).map {
+      let listeningHistory = playedModels.prefix(10).map {
         (title: $0.episodeTitle, podcastTitle: $0.podcastTitle, completed: $0.isCompleted)
       }
+      guard !listeningHistory.isEmpty else { return }
 
-      guard !listeningHistory.isEmpty else {
-        isLoadingRecommendations = false
-        return
-      }
-
-      // Build available episodes from subscribed podcasts (unplayed)
-      // Reuse allModels already fetched above as a dictionary for O(1) lookup
-      var modelsByKey: [String: EpisodeDownloadModel] = [:]
-      for model in allModels {
-        modelsByKey[model.id] = model
-      }
-
-      var availableEpisodes: [(title: String, podcastTitle: String, description: String)] = []
+      // Ordered candidate list (recent, unplayed). Keep each episode + its
+      // podcast so the model's chosen list numbers map straight back to real
+      // episodes — no brittle title-string matching.
+      var candidates: [(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)] = []
       for podcastModel in podcastInfoModelList {
         for episode in podcastModel.podcastInfo.episodes.prefix(5) {
           let key = Self.makeEpisodeKey(podcastTitle: podcastModel.podcastInfo.title, episodeTitle: episode.title)
           if modelsByKey[key]?.isCompleted != true {
-            availableEpisodes.append((
-              title: episode.title,
-              podcastTitle: podcastModel.podcastInfo.title,
-              description: episode.podcastEpisodeDescription ?? ""
-            ))
+            candidates.append((episode, podcastModel))
           }
         }
       }
+      let limited = Array(candidates.prefix(15))
+      guard !limited.isEmpty else { return }
 
-      let candidateEpisodes = Array(availableEpisodes.prefix(15))
-      guard !candidateEpisodes.isEmpty else {
-        isLoadingRecommendations = false
-        return
+      let availableEpisodes = limited.map {
+        (title: $0.episode.title,
+         podcastTitle: $0.podcast.podcastInfo.title,
+         description: $0.episode.podcastEpisodeDescription ?? "")
       }
 
-      if Task.isCancelled { isLoadingRecommendations = false; return }
+      guard !Task.isCancelled else { return }
 
       do {
         let result = try await service.generateEpisodeRecommendations(
           listeningHistory: listeningHistory,
-          availableEpisodes: candidateEpisodes
+          availableEpisodes: availableEpisodes
         )
-        if !Task.isCancelled {
-          recommendations = result
-          resolveRecommendedEpisodes()
-        }
+        guard !Task.isCancelled else { return }
+        recommendedEpisodes = Self.buildRecommendedEpisodes(
+          from: result.recommendedNumbers, candidates: limited, modelsByKey: modelsByKey)
       } catch {
         logger.error("Failed to generate recommendations: \(error.localizedDescription, privacy: .public)")
       }
-      isLoadingRecommendations = false
     }
   }
 
-  /// Match recommended titles against subscribed podcast episodes and build LibraryEpisode array
-  private func resolveRecommendedEpisodes() {
-    guard let recommendations, let context = modelContext else {
-      recommendedEpisodes = []
-      return
-    }
-
-    // Batch fetch all models once
-    let allDescriptor = FetchDescriptor<EpisodeDownloadModel>()
-    let allModels = (try? context.fetch(allDescriptor)) ?? []
-    var modelsByKey: [String: EpisodeDownloadModel] = [:]
-    for model in allModels {
-      modelsByKey[model.id] = model
-    }
-
+  /// Maps the model's 1-based list numbers back to real episodes, skipping
+  /// out-of-range or duplicate picks. Index-based, so a paraphrased or
+  /// truncated title can't silently drop a recommendation.
+  private static func buildRecommendedEpisodes(
+    from numbers: [Int],
+    candidates: [(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)],
+    modelsByKey: [String: EpisodeDownloadModel]
+  ) -> [LibraryEpisode] {
     var resolved: [LibraryEpisode] = []
-    for title in recommendations.recommendedTitles {
-      // Search through subscribed podcasts for the episode
-      for podcastModel in podcastInfoModelList {
-        if let episode = podcastModel.podcastInfo.episodes.first(where: { $0.title == title }) {
-          let key = Self.makeEpisodeKey(podcastTitle: podcastModel.podcastInfo.title, episodeTitle: episode.title)
-          let model = modelsByKey[key]
-
-          resolved.append(LibraryEpisode(
-            id: key,
-            podcastTitle: podcastModel.podcastInfo.title,
-            imageURL: episode.imageURL ?? podcastModel.podcastInfo.imageURL,
-            language: podcastModel.podcastInfo.language,
-            episodeInfo: episode,
-            isStarred: model?.isStarred ?? false,
-            isDownloaded: Self.hasLocalAudioFile(model?.localAudioPath),
-            isCompleted: model?.isCompleted ?? false,
-            lastPlaybackPosition: model?.lastPlaybackPosition ?? 0,
-            savedDuration: model?.duration ?? 0
-          ))
-          break
-        }
-      }
+    var seen = Set<Int>()
+    for number in numbers {
+      let index = number - 1  // the model is shown a 1-based list
+      guard candidates.indices.contains(index), seen.insert(index).inserted else { continue }
+      let (episode, podcastModel) = candidates[index]
+      let key = makeEpisodeKey(podcastTitle: podcastModel.podcastInfo.title, episodeTitle: episode.title)
+      let model = modelsByKey[key]
+      resolved.append(LibraryEpisode(
+        id: key,
+        podcastTitle: podcastModel.podcastInfo.title,
+        imageURL: episode.imageURL ?? podcastModel.podcastInfo.imageURL,
+        language: podcastModel.podcastInfo.language,
+        episodeInfo: episode,
+        isStarred: model?.isStarred ?? false,
+        isDownloaded: hasLocalAudioFile(model?.localAudioPath),
+        isCompleted: model?.isCompleted ?? false,
+        lastPlaybackPosition: model?.lastPlaybackPosition ?? 0,
+        savedDuration: model?.duration ?? 0
+      ))
     }
-    recommendedEpisodes = resolved
+    return resolved
   }
 
   // MARK: - Trending Episodes

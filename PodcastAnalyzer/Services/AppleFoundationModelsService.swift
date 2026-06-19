@@ -204,7 +204,7 @@ actor AppleFoundationModelsService {
         Available episodes:
         \(availableList)
 
-        Recommend 3-5 episodes from the available list that best match my interests.
+        Reply with the numbers (from the Available episodes list) of the 3-5 episodes I'd enjoy most, ordered best first.
         """
 
         let response = try await session.respond(to: prompt, generating: EpisodeRecommendations.self)
