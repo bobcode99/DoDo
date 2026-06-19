@@ -340,6 +340,7 @@ struct PlaybackSettingsTab: View {
 struct TranscriptSettingsTab: View {
   @State private var viewModel = SettingsViewModel()
   @State private var showAutoTranscribeManagement = false
+  @State private var showTranscriptionContext = false
 
   var body: some View {
     @Bindable var viewModel = viewModel
@@ -400,6 +401,29 @@ struct TranscriptSettingsTab: View {
       Section {
         Toggle("Auto-Generate Transcripts", isOn: $subtitleSettings.autoGenerateTranscripts)
 
+        Toggle("Detect Music", isOn: $subtitleSettings.enableMusicDetection)
+        if subtitleSettings.enableMusicDetection {
+          Picker("Music Sensitivity", selection: $subtitleSettings.musicDetectionSensitivity) {
+            ForEach(MusicDetectionSensitivity.allCases, id: \.self) { level in
+              Text(level.displayName).tag(level)
+            }
+          }
+        }
+
+        Button {
+          showTranscriptionContext = true
+        } label: {
+          HStack {
+            Label("Transcription Context", systemImage: "character.book.closed")
+            Spacer()
+            Image(systemName: "chevron.right")
+              .font(.caption)
+              .foregroundStyle(.tertiary)
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
         Button {
           showAutoTranscribeManagement = true
         } label: {
@@ -416,7 +440,7 @@ struct TranscriptSettingsTab: View {
       } header: {
         Text("Automation")
       } footer: {
-        Text("Manage which podcasts auto-transcribe new episodes. Engine is resolved at run time: YAP server when configured, otherwise local (gated by charging).")
+        Text("Detect Music marks music ranges as [♪ Music] instead of transcribing them. Transcription Context adds per-podcast names & jargon to improve accuracy. Auto-transcribe resolves the engine at run time: YAP server when configured, otherwise local (gated by charging).")
       }
 
       // MARK: Whisper models list
@@ -450,6 +474,17 @@ struct TranscriptSettingsTab: View {
           .toolbar {
             ToolbarItem(placement: .cancellationAction) {
               Button("Done") { showAutoTranscribeManagement = false }
+            }
+          }
+      }
+      .frame(minWidth: 520, minHeight: 480)
+    }
+    .sheet(isPresented: $showTranscriptionContext) {
+      NavigationStack {
+        TranscriptContextManagementView()
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button("Done") { showTranscriptionContext = false }
             }
           }
       }
