@@ -37,8 +37,7 @@ struct PopularShowsSection: View {
         if viewModel.isOffline {
           Image(systemName: "wifi.slash")
         }
-        Text(viewModel.isOffline ? "Offline · saved " : "Updated ")
-          + Text(fetchedAt, format: .relative(presentation: .named))
+        Text("\(viewModel.isOffline ? "Offline · saved " : "Updated ")\(fetchedAt, format: .relative(presentation: .named))")
       }
       .font(.caption)
       .foregroundStyle(.secondary)
@@ -101,3 +100,4 @@ struct PopularShowsSection: View {
     .padding(.horizontal)
   }
 }
+
