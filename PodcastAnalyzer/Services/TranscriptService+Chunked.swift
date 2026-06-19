@@ -27,6 +27,7 @@ extension TranscriptService {
         let censor = await self.censor
         let isCJK = await self.isCJKLocale
         let defaultMaxLen = await self.defaultMaxLength
+        let contextualStrings = self.contextualStrings
         let effectiveMaxLength = maxLength ?? defaultMaxLen
 
         let audioURL = try await self.resolveAudioURL(inputFile)
@@ -101,6 +102,7 @@ extension TranscriptService {
                 let segments = try await ChunkedTranscriptionService.transcribeChunkParallel(
                   chunk: chunk, locale: locale, censor: censor, isCJK: isCJK,
                   maxSegmentLength: effectiveMaxLength,
+                  contextualStrings: contextualStrings,
                   onProgress: { chunkProgress in
                     let overall = progressTracker.updateProgress(
                       chunkIndex: chunkIndex, progress: chunkProgress)
@@ -126,6 +128,7 @@ extension TranscriptService {
                   let segments = try await ChunkedTranscriptionService.transcribeChunkParallel(
                     chunk: chunk, locale: locale, censor: censor, isCJK: isCJK,
                     maxSegmentLength: effectiveMaxLength,
+                    contextualStrings: contextualStrings,
                     onProgress: { chunkProgress in
                       let overall = progressTracker.updateProgress(
                         chunkIndex: nextChunkIndex, progress: chunkProgress)

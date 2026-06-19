@@ -101,6 +101,7 @@ nonisolated enum ChunkedTranscriptionService {
     censor: Bool,
     isCJK: Bool,
     maxSegmentLength: Int,
+    contextualStrings: [String],
     onProgress: @Sendable (Double) -> Void
   ) async throws -> [ChunkSegment] {
     let transcriber = SpeechTranscriber(
@@ -110,6 +111,15 @@ nonisolated enum ChunkedTranscriptionService {
       attributeOptions: [.audioTimeRange]
     )
     let analyzer = SpeechAnalyzer(modules: [transcriber])
+
+    // Bias recognition toward this show's proper nouns / jargon (per-podcast
+    // Transcription Context). Best-effort: a context failure must not fail the
+    // chunk. Must be set before `analyzer.start`.
+    if !contextualStrings.isEmpty {
+      let context = AnalysisContext()
+      context.contextualStrings = [.general: contextualStrings]
+      try? await analyzer.setContext(context)
+    }
 
     let audioFile = try AVAudioFile(forReading: chunk.fileURL)
     try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
@@ -144,71 +154,28 @@ nonisolated enum ChunkedTranscriptionService {
 
     // Apply Chinese punctuation restoration for CJK locales
     if isCJK {
-      let restorer = ChinesePunctuationRestorer()
-      transcript = restorer.restore(transcript: transcript)
+      transcript = ChinesePunctuationRestorer().restore(transcript: transcript)
     }
 
-    // Extract segments by grouping runs into appropriately-sized chunks.
-    var segments: [ChunkSegment] = []
-    var currentText = ""
-    var segmentStartTime: Double?
-    var segmentEndTime: Double = 0
-
-    for run in transcript.runs {
-      let word = String(transcript[run.range].characters)
-      let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty, let timeRange = run.audioTimeRange else { continue }
-
-      let wordStart = timeRange.start.seconds
-      let wordEnd = timeRange.end.seconds
-
-      // Guard against NaN/infinity timestamps from the Speech framework
-      guard wordStart.isFinite && wordEnd.isFinite else { continue }
-
-      if segmentStartTime == nil {
-        segmentStartTime = wordStart
-      }
-      segmentEndTime = wordEnd
-      currentText += word
-
-      // Split at maxSegmentLength or sentence boundaries
-      let shouldSplit = currentText.count >= maxSegmentLength
-        || isSentenceEndChar(trimmed.last)
-
-      if shouldSplit, let start = segmentStartTime {
-        let text = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty {
-          segments.append(ChunkSegment(
-            startTime: start + chunk.startTime,
-            endTime: segmentEndTime + chunk.startTime,
-            text: text
-          ))
-        }
-        currentText = ""
-        segmentStartTime = nil
-      }
+    // Reuse the shared segmenter (NLTokenizer sentence/word boundaries + CJK
+    // clause splitting) rather than a separate hand-rolled run-grouping loop, so
+    // chunked transcripts break the same way as short sequential ones. The
+    // segmenter's time ranges are chunk-relative; offset them onto the global
+    // timeline with `chunk.startTime`.
+    let segmenter = TranscriptSegmenter(isCJK: isCJK, maxLength: maxSegmentLength)
+    return segmenter.splitTranscriptIntoSegments(transcript: transcript).compactMap { segment in
+      guard let timeRange = segment.audioTimeRange else { return nil }
+      let text = String(segment.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !text.isEmpty else { return nil }
+      let start = timeRange.start.seconds
+      let end = timeRange.end.seconds
+      guard start.isFinite, end.isFinite else { return nil }
+      return ChunkSegment(
+        startTime: start + chunk.startTime,
+        endTime: end + chunk.startTime,
+        text: text
+      )
     }
-
-    // Flush remaining text
-    if let start = segmentStartTime {
-      let text = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !text.isEmpty {
-        segments.append(ChunkSegment(
-          startTime: start + chunk.startTime,
-          endTime: segmentEndTime + chunk.startTime,
-          text: text
-        ))
-      }
-    }
-
-    return segments
-  }
-
-  /// Checks for sentence-ending characters (pure function, no actor state needed)
-  static func isSentenceEndChar(_ char: Character?) -> Bool {
-    guard let char else { return false }
-    let terminators: Set<Character> = [".", "!", "?", "。", "！", "？"]
-    return terminators.contains(char)
   }
 
   /// Merges segment results from multiple chunks, de-duplicating the
