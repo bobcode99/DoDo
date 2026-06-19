@@ -1534,6 +1534,7 @@ private struct PromptPreviewSheet: View {
   @State private var isBuilding: Bool = true
   @State private var includeTimestamps: Bool = false
   @State private var transcriptOnly: Bool = false
+  @State private var plainTextReply: Bool = false
 
   // SwiftUI `Text` lays out synchronously on the main thread; a 50–100 KB
   // monospaced prompt freezes the UI. Truncate the preview — copy carries the
@@ -1593,6 +1594,17 @@ private struct PromptPreviewSheet: View {
                   Image(systemName: "text.alignleft")
                 }
               }
+              Toggle(isOn: $plainTextReply) {
+                Label {
+                  Text("Plain-text answer")
+                  Text("Ask for a readable reply instead of app JSON — for chatting with an LLM about this episode")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                } icon: {
+                  Image(systemName: "text.bubble")
+                }
+              }
+              .disabled(transcriptOnly)
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1670,6 +1682,9 @@ private struct PromptPreviewSheet: View {
       .onChange(of: transcriptOnly) { _, _ in
         Task { await buildPrompts() }
       }
+      .onChange(of: plainTextReply) { _, _ in
+        Task { await buildPrompts() }
+      }
     }
   }
 
@@ -1728,7 +1743,8 @@ private struct PromptPreviewSheet: View {
         podcastTitle: podcastTitle,
         podcastLanguage: podcastLanguage,
         formatHint: formatHint,
-        transcriptFormatOverride: format
+        transcriptFormatOverride: format,
+        plainText: plainTextReply
       )
       systemPrompt = pair.system
       userPrompt = pair.user

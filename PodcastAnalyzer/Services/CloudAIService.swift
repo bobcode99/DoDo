@@ -722,7 +722,8 @@ final class CloudAIService {
         podcastTitle: String,
         podcastLanguage: String? = nil,
         formatHint: String? = nil,
-        transcriptFormatOverride: TranscriptFormatForAI? = nil
+        transcriptFormatOverride: TranscriptFormatForAI? = nil,
+        plainText: Bool = false
     ) -> (system: String, user: String) {
         let effectiveFormat = transcriptFormatOverride ?? settings.transcriptFormat
         // Match the real analyze path: format the raw SRT into the chosen shape
@@ -732,7 +733,8 @@ final class CloudAIService {
             for: type,
             podcastLanguage: podcastLanguage,
             formatHint: formatHint,
-            transcriptFormatOverride: effectiveFormat
+            transcriptFormatOverride: effectiveFormat,
+            plainText: plainText
         )
         let user = buildUserPrompt(
             transcript: formattedTranscript,
@@ -747,7 +749,7 @@ final class CloudAIService {
 
     // MARK: - Private: Build Prompts
 
-    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil, transcriptFormatOverride: TranscriptFormatForAI? = nil) -> String {
+    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil, transcriptFormatOverride: TranscriptFormatForAI? = nil, plainText: Bool = false) -> String {
         // Get language instruction based on user setting
         let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
@@ -764,6 +766,20 @@ final class CloudAIService {
         switch type {
         case .analysis:
             let useTimestamps = effectiveFormat == .segmentBased
+
+            // Plain-text variant: a readable answer for users chatting with an LLM
+            // about the episode, rather than the JSON the app parses.
+            if plainText {
+                let quoteTimestampNote = useTimestamps
+                    ? " (include the [MM:SS] timestamp for each quote)"
+                    : ""
+                return """
+                You are an expert podcast analyst. Answer in clear, readable plain text — use short headings and bullet points where helpful. Do NOT return JSON or code blocks; write it as if explaining the episode to a curious listener.
+
+                Cover: a 2–3 paragraph overview; the main topics with their key points; key takeaways and insights; notable people, organizations, products, and resources mentioned; highlights; memorable quotes\(quoteTimestampNote); any action items; and a short conclusion on who would benefit.\(formatHintLine)\(languageLine)
+                """
+            }
+
             let quotesSchema = useTimestamps
                 ? #""notableQuotes": [{"text": "quote 1", "timestamp": "MM:SS"}, {"text": "quote 2", "timestamp": "MM:SS"}]"#
                 : #""notableQuotes": ["quote 1", "quote 2"]"#
