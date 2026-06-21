@@ -120,12 +120,35 @@ struct EpisodeTranscriptView: View {
             && viewModel.transcript.transcriptSearchQuery.isEmpty
     }
 
+    /// Audio file duration vs. the transcript's last timestamp. Non-nil only
+    /// when they differ enough to actually drift the highlight — a transcript
+    /// normally ends a little before the audio (outro/credits aren't
+    /// transcribed), so we require both an absolute (90s) and relative (5%)
+    /// gap before warning. The usual real cause is Dynamic Ad Insertion: the
+    /// played mp3 was re-stitched with ads after the transcript was generated.
+    private var durationMismatch: (audio: TimeInterval, transcript: TimeInterval)? {
+        let audio = (viewModel.isCurrentEpisode && viewModel.audioManager.duration > 0)
+            ? viewModel.audioManager.duration
+            : viewModel.savedDuration
+        guard audio > 0,
+              let transcriptEnd = viewModel.transcript.transcriptSentences.last?.endTime,
+              transcriptEnd > 0 else { return nil }
+        let diff = abs(audio - transcriptEnd)
+        guard diff > 90, diff > audio * 0.05 else { return nil }
+        return (audio, transcriptEnd)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if viewModel.transcriptSource == "rss" && viewModel.hasTranscript {
                 RSSTranscriptWarningBanner(
                     showRegenerateConfirmation: $showRegenerateConfirmation,
                     hasLocalAudio: viewModel.hasLocalAudio
+                )
+            } else if viewModel.hasTranscript, let mismatch = durationMismatch {
+                TranscriptDurationMismatchBanner(
+                    audioDuration: mismatch.audio,
+                    transcriptDuration: mismatch.transcript
                 )
             }
 
