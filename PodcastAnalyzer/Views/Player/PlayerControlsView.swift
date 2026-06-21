@@ -165,7 +165,7 @@ struct PlayerControlsView: View {
                 }
             }
             .frame(width: 48, height: 48)
-            .glassEffect(viewModel.isSleepTimerActive ? .regular.tint(.blue) : .regular, in: .circle)
+            .glassEffect(viewModel.isSleepTimerActive ? .regular.tint(.white.opacity(0.35)) : .regular, in: .circle)
             .frame(width: 56, height: 56)
             .contentShape(Rectangle())
         }

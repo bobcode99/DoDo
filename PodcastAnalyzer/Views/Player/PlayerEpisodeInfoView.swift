@@ -21,7 +21,7 @@ struct PlayerEpisodeInfoView: View {
                         Text(viewModel.podcastTitle)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity)

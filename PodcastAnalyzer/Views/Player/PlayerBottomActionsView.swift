@@ -18,7 +18,7 @@ struct PlayerBottomActionsView: View {
                     Text("Detail")
                 }
                 .font(.subheadline)
-                .foregroundStyle(.blue)
+                .foregroundStyle(.primary)
             }
 
             Spacer()
