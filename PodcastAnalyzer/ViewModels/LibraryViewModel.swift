@@ -446,7 +446,6 @@ final class LibraryViewModel {
 
   /// Poll inFlightProgress and update downloadingEpisodes with latest values.
   private func updateDownloadingProgress() {
-    var changed = false
     for i in downloadingEpisodes.indices {
       let ep = downloadingEpisodes[i]
       if let newProgress = downloadManager.inFlightProgress[ep.id],
@@ -459,7 +458,6 @@ final class LibraryViewModel {
           progress: newProgress,
           state: .downloading(progress: newProgress)
         )
-        changed = true
       }
     }
     // Stop timer if no more active downloads
@@ -467,7 +465,6 @@ final class LibraryViewModel {
       progressTimer?.invalidate()
       progressTimer = nil
     }
-    _ = changed // suppress unused warning
   }
 
   /// Parse episode key for downloading episodes

@@ -304,19 +304,8 @@ struct MacContentView: View {
   private struct TranscribingSidebarLabel: View {
     @State private var manager = TranscriptManager.shared
 
-    private var activeCount: Int {
-      var count = 0
-      for job in manager.activeJobs.values {
-        switch job.status {
-        case .queued, .downloadingModel, .transcribing: count += 1
-        case .completed, .failed: break
-        }
-      }
-      return count
-    }
-
     var body: some View {
-      let count = activeCount
+      let count = manager.activeJobCount
       Label {
         HStack {
           Text("Transcribing")

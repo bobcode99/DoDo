@@ -14,7 +14,9 @@ struct LibraryQuickAccessSection: View {
   /// LibraryView.body and the whole podcast grid below it.
   let viewModel: LibraryViewModel
 
-  @State private var showTranscriptProgressSheet = false
+  /// Owned by LibraryView so the toolbar badge and this card present a single
+  /// shared transcript-progress sheet instead of two duplicate presenters.
+  @Binding var showTranscriptProgressSheet: Bool
 
   var body: some View {
     let savedCount = viewModel.savedEpisodes.count
@@ -78,9 +80,6 @@ struct LibraryQuickAccessSection: View {
       }
       .buttonStyle(.plain)
     }
-    .sheet(isPresented: $showTranscriptProgressSheet) {
-      TranscriptGenerationProgressOverallView()
-    }
   }
 }
 
@@ -93,19 +92,8 @@ private struct TranscriptingCard: View {
   @Binding var showSheet: Bool
   @State private var manager = TranscriptManager.shared
 
-  private var activeCount: Int {
-    var count = 0
-    for job in manager.activeJobs.values {
-      switch job.status {
-      case .queued, .downloadingModel, .transcribing: count += 1
-      case .completed, .failed: break
-      }
-    }
-    return count
-  }
-
   var body: some View {
-    let count = activeCount
+    let count = manager.activeJobCount
     if count > 0 {
       Button { showSheet = true } label: {
         HStack {

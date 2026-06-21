@@ -77,9 +77,6 @@ struct UpNextSuggestionEngine {
 
     // MARK: Tuning constants
 
-    /// Legacy ratio threshold (kept for `bonusInProgressProgress` scaling; no longer used as a gate).
-    static let inProgressMinRatio: Double = 0.05
-
     /// Absolute seconds-played gate for in-progress detection.
     /// Apple-Podcasts-style: any episode listened to past this many seconds sticks to Up Next.
     static let inProgressMinSeconds: Double = 15

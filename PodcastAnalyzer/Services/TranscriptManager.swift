@@ -72,6 +72,18 @@ class TranscriptManager {
   var activeJobs: [String: TranscriptJob] = [:]
   var isProcessing: Bool = false
 
+  /// Jobs still in flight (queued / downloading model / transcribing). Shared so
+  /// the Library, quick-access, and macOS transcribing badges don't each
+  /// re-derive the same loop.
+  var activeJobCount: Int {
+    activeJobs.values.reduce(into: 0) { count, job in
+      switch job.status {
+      case .queued, .downloadingModel, .transcribing: count += 1
+      case .completed, .failed: break
+      }
+    }
+  }
+
   // Maximum concurrent transcript jobs
   private let maxConcurrentJobs: Int = {
     let processorCount = ProcessInfo.processInfo.processorCount

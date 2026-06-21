@@ -45,18 +45,15 @@ func configureImagePipeline() {
 /// Drop-in replacement for the previous custom CachedAsyncImage, backed by Nuke.
 nonisolated struct CachedAsyncImage<Content: View, Placeholder: View>: View {
   let url: URL?
-  let scale: CGFloat
   @ViewBuilder let content: (Image) -> Content
   @ViewBuilder let placeholder: () -> Placeholder
 
   init(
     url: URL?,
-    scale: CGFloat = 1,
     @ViewBuilder content: @escaping (Image) -> Content,
     @ViewBuilder placeholder: @escaping () -> Placeholder
   ) {
     self.url = url
-    self.scale = scale
     self.content = content
     self.placeholder = placeholder
   }
@@ -77,16 +74,15 @@ nonisolated struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 extension CachedAsyncImage where Placeholder == ProgressView<EmptyView, EmptyView> {
   init(
     url: URL?,
-    scale: CGFloat = 1,
     @ViewBuilder content: @escaping (Image) -> Content
   ) {
-    self.init(url: url, scale: scale, content: content, placeholder: { ProgressView() })
+    self.init(url: url, content: content, placeholder: { ProgressView() })
   }
 }
 
 extension CachedAsyncImage where Content == Image, Placeholder == ProgressView<EmptyView, EmptyView> {
-  init(url: URL?, scale: CGFloat = 1) {
-    self.init(url: url, scale: scale, content: { $0 }, placeholder: { ProgressView() })
+  init(url: URL?) {
+    self.init(url: url, content: { $0 }, placeholder: { ProgressView() })
   }
 }
 
@@ -175,10 +171,6 @@ nonisolated struct CachedArtworkImage: View {
 /// Convenience for clearing and inspecting Nuke's image caches.
 nonisolated enum ImageCacheUtility {
   static func clearAllCache() {
-    ImagePipeline.shared.cache.removeAll()
-  }
-
-  static func clearMemoryCache() {
     ImagePipeline.shared.cache.removeAll()
   }
 

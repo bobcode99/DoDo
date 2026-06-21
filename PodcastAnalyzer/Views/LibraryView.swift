@@ -45,8 +45,11 @@ struct LibraryView: View {
     ZStack {
       ScrollView {
         VStack(spacing: 24) {
-          LibraryQuickAccessSection(viewModel: viewModel)
-            .padding(.horizontal, 16)
+          LibraryQuickAccessSection(
+            viewModel: viewModel,
+            showTranscriptProgressSheet: $showTranscriptProgressSheet
+          )
+          .padding(.horizontal, 16)
 
           LibraryPodcastsGrid(
             sortedPodcasts: sortedPodcasts,
@@ -229,19 +232,8 @@ private struct TranscriptToolbarBadge: View {
   @Binding var showSheet: Bool
   @State private var manager = TranscriptManager.shared
 
-  private var activeCount: Int {
-    var count = 0
-    for job in manager.activeJobs.values {
-      switch job.status {
-      case .queued, .downloadingModel, .transcribing: count += 1
-      case .completed, .failed: break
-      }
-    }
-    return count
-  }
-
   var body: some View {
-    let count = activeCount
+    let count = manager.activeJobCount
     if count > 0 {
       Button {
         showSheet = true
