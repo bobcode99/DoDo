@@ -583,6 +583,11 @@ private struct EpisodeRowTranscriptIndicator: View {
           Text("\(Int(progress * 100))%")
             .font(.system(size: 8))
             .foregroundStyle(.purple)
+          if let parts = job.partProgress {
+            Text("\(min(parts.completed + 1, parts.total))/\(parts.total)")
+              .font(.system(size: 8))
+              .foregroundStyle(.purple.opacity(0.7))
+          }
         }
       case .queued:
         HStack(spacing: 2) {

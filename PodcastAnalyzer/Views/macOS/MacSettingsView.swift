@@ -410,6 +410,8 @@ struct TranscriptSettingsTab: View {
           }
         }
 
+        Toggle("Split Long Audio", isOn: $subtitleSettings.splitLongAudio)
+
         Button {
           showTranscriptionContext = true
         } label: {
@@ -440,7 +442,7 @@ struct TranscriptSettingsTab: View {
       } header: {
         Text("Automation")
       } footer: {
-        Text("Detect Music marks music ranges as [♪ Music] instead of transcribing them. Transcription Context adds per-podcast names & jargon to improve accuracy. Auto-transcribe resolves the engine at run time: YAP server when configured, otherwise local (gated by charging).")
+        Text("Detect Music marks music ranges as [♪ Music] instead of transcribing them. Split Long Audio transcribes in parallel parts (faster on Apple Speech); turn off for one single-pass run. Transcription Context adds per-podcast names & jargon to improve accuracy. Auto-transcribe resolves the engine at run time: YAP server when configured, otherwise local (gated by charging).")
       }
 
       // MARK: Whisper models list

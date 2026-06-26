@@ -17,7 +17,7 @@ extension TranscriptService {
   public func audioToSRTChunkedWithProgress(
     inputFile: URL,
     maxLength: Int? = nil,
-    chunkDuration: TimeInterval = 60
+    chunkDuration: TimeInterval = 300
   ) -> AsyncThrowingStream<TranscriptionProgress, Error> {
     let (stream, continuation) = AsyncThrowingStream.makeStream(of: TranscriptionProgress.self)
     let task = Task.detached(priority: .userInitiated) { [weak self] in
@@ -83,6 +83,14 @@ extension TranscriptService {
         self.logger.info("Exported \(chunks.count) chunks")
         defer { ChunkedTranscriptionService.cleanupTempFiles(chunks) }
 
+        // Announce the part count as soon as it's known so the UI can show
+        // "split into N parts" before per-chunk progress starts arriving.
+        continuation.yield(TranscriptionProgress(
+          progress: 0.0, currentTimeSeconds: 0,
+          totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil,
+          totalParts: chunks.count, completedParts: 0
+        ))
+
         // Apple Speech allows ~2 simultaneous recognition sessions.
         let maxConcurrent = 2
         let progressTracker = ChunkProgressTracker(totalChunks: chunks.count)
@@ -104,13 +112,14 @@ extension TranscriptService {
                   maxSegmentLength: effectiveMaxLength,
                   contextualStrings: contextualStrings,
                   onProgress: { chunkProgress in
-                    let overall = progressTracker.updateProgress(
+                    let (overall, completed) = progressTracker.updateProgress(
                       chunkIndex: chunkIndex, progress: chunkProgress)
                     continuation.yield(TranscriptionProgress(
                       progress: min(overall, 0.99),
                       currentTimeSeconds: overall * audioFileDuration,
                       totalDurationSeconds: audioFileDuration,
-                      isComplete: false, srtContent: nil
+                      isComplete: false, srtContent: nil,
+                      totalParts: chunks.count, completedParts: completed
                     ))
                   }
                 )
@@ -130,13 +139,14 @@ extension TranscriptService {
                     maxSegmentLength: effectiveMaxLength,
                     contextualStrings: contextualStrings,
                     onProgress: { chunkProgress in
-                      let overall = progressTracker.updateProgress(
+                      let (overall, completed) = progressTracker.updateProgress(
                         chunkIndex: nextChunkIndex, progress: chunkProgress)
                       continuation.yield(TranscriptionProgress(
                         progress: min(overall, 0.99),
                         currentTimeSeconds: overall * audioFileDuration,
                         totalDurationSeconds: audioFileDuration,
-                        isComplete: false, srtContent: nil
+                        isComplete: false, srtContent: nil,
+                        totalParts: chunks.count, completedParts: completed
                       ))
                     }
                   )
@@ -174,7 +184,8 @@ extension TranscriptService {
 
         continuation.yield(TranscriptionProgress(
           progress: 1.0, currentTimeSeconds: audioFileDuration,
-          totalDurationSeconds: audioFileDuration, isComplete: true, srtContent: srtContent
+          totalDurationSeconds: audioFileDuration, isComplete: true, srtContent: srtContent,
+          totalParts: chunks.count, completedParts: chunks.count
         ))
         continuation.finish()
       } catch {

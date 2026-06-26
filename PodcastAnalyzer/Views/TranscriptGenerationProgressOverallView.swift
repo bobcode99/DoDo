@@ -211,7 +211,11 @@ private struct TranscriptJobRow: View {
       }
     case .transcribing(let p):
       ProgressView(value: p) {
-        Text("Transcribing… \(Int(p * 100))%")
+        if let parts = job.partProgress {
+          Text("Transcribing… \(Int(p * 100))% · part \(min(parts.completed + 1, parts.total))/\(parts.total)")
+        } else {
+          Text("Transcribing… \(Int(p * 100))%")
+        }
       }
     case .completed:
       Text("Done")

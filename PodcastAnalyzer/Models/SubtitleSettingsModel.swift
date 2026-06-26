@@ -216,6 +216,13 @@ final class SubtitleSettingsManager {
     didSet { saveSettings() }
   }
 
+  /// Split long audio into parallel parts for Apple Speech transcription.
+  /// On (default): faster on multi-core, but the audio is processed in chunks.
+  /// Off: one single-pass transcription end-to-end — slower, no chunk seams.
+  var splitLongAudio: Bool = true {
+    didSet { saveSettings() }
+  }
+
   // MARK: - UserDefaults Keys
 
   private enum Keys {
@@ -226,6 +233,7 @@ final class SubtitleSettingsManager {
     static let autoGenerateTranscripts = "subtitle_auto_generate_transcripts"
     static let enableMusicDetection = "subtitle_enable_music_detection"
     static let musicDetectionSensitivity = "subtitle_music_detection_sensitivity"
+    static let splitLongAudio = "subtitle_split_long_audio"
   }
 
   // MARK: - Initialization
@@ -271,6 +279,11 @@ final class SubtitleSettingsManager {
        let value = MusicDetectionSensitivity(rawValue: raw) {
       musicDetectionSensitivity = value
     }
+
+    // Default to true if not previously set.
+    if defaults.object(forKey: Keys.splitLongAudio) != nil {
+      splitLongAudio = defaults.bool(forKey: Keys.splitLongAudio)
+    }
   }
 
   private func saveSettings() {
@@ -282,6 +295,7 @@ final class SubtitleSettingsManager {
     defaults.set(autoGenerateTranscripts, forKey: Keys.autoGenerateTranscripts)
     defaults.set(enableMusicDetection, forKey: Keys.enableMusicDetection)
     defaults.set(musicDetectionSensitivity.rawValue, forKey: Keys.musicDetectionSensitivity)
+    defaults.set(splitLongAudio, forKey: Keys.splitLongAudio)
   }
 
   // MARK: - Translation Availability

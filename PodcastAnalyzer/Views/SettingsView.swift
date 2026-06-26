@@ -541,6 +541,23 @@ struct SettingsView: View {
               }
             }
           }
+
+          Toggle(isOn: Binding(
+            get: { SubtitleSettingsManager.shared.splitLongAudio },
+            set: { SubtitleSettingsManager.shared.splitLongAudio = $0 }
+          )) {
+            HStack {
+              Image(systemName: "square.split.2x1")
+                .foregroundStyle(.pink)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Split Long Audio")
+                Text("Transcribe in parallel parts (faster); off = one single-pass run")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
         } header: {
           Text("Transcript")
         } footer: {

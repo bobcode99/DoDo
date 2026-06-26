@@ -270,11 +270,14 @@ nonisolated final class ChunkProgressTracker: Sendable {
     self.state = Mutex([:])
   }
 
-  /// Updates progress for a specific chunk and returns the overall progress (0.0–1.0)
-  func updateProgress(chunkIndex: Int, progress: Double) -> Double {
+  /// Updates progress for a specific chunk and returns the overall progress
+  /// (0.0–1.0) plus how many chunks have fully finished (progress ≥ 1.0).
+  func updateProgress(chunkIndex: Int, progress: Double) -> (overall: Double, completed: Int) {
     state.withLock { progresses in
       progresses[chunkIndex] = progress
-      return progresses.values.reduce(0, +) / Double(totalChunks)
+      let overall = progresses.values.reduce(0, +) / Double(totalChunks)
+      let completed = progresses.values.reduce(into: 0) { $0 += ($1 >= 1.0 ? 1 : 0) }
+      return (overall, completed)
     }
   }
 }

@@ -19,6 +19,13 @@ enum TranscriptJobStatus: Equatable {
   case failed(error: String)
 }
 
+/// Parallel-part progress for split (chunked) Apple Speech transcription.
+/// Absent when the audio is short or the user disabled splitting (single pass).
+struct TranscriptPartProgress: Equatable, Sendable {
+  let completed: Int
+  let total: Int
+}
+
 /// Represents a transcript generation job
 struct TranscriptJob: Identifiable {
   let id: String  // podcastTitle + Unit Separator + episodeTitle (same format as episode keys)
@@ -31,6 +38,7 @@ struct TranscriptJob: Identifiable {
   var status: TranscriptJobStatus = .queued
   var yapServerJobID: String?    // Set once the yap HTTP job is accepted; used to cancel server-side
   var detectedLanguage: String?  // Populated by Whisper auto-detect before full transcription
+  var partProgress: TranscriptPartProgress?  // Split-transcription part counts (Apple Speech, chunked)
 }
 
 /// Manages background transcript generation with parallel processing.
@@ -425,17 +433,28 @@ class TranscriptManager {
         try Task.checkCancellation()
         activeJobs[job.id]?.status = .transcribing(progress: 0)
 
+        // Single-pass when the user turned off splitting; otherwise chunked
+        // parallel parts (which itself falls back to single-pass under 1 min).
+        let splitLongAudio = SubtitleSettingsManager.shared.splitLongAudio
+        let progressStream = splitLongAudio
+          ? await transcriptService.audioToSRTChunkedWithProgress(inputFile: audioURL)
+          : await transcriptService.audioToSRTWithProgress(inputFile: audioURL)
+
         var finalSRTContent: String?
         var lastUIUpdate = Date.distantPast
-        for try await progressUpdate in await transcriptService.audioToSRTChunkedWithProgress(
-          inputFile: audioURL)
-        {
+        for try await progressUpdate in progressStream {
+          let parts = progressUpdate.totalParts > 1
+            ? TranscriptPartProgress(
+                completed: progressUpdate.completedParts, total: progressUpdate.totalParts)
+            : nil
           if progressUpdate.isComplete {
             finalSRTContent = progressUpdate.srtContent
+            activeJobs[job.id]?.partProgress = parts
             activeJobs[job.id]?.status = .transcribing(progress: 1.0)
           } else {
             let now = Date()
             if now.timeIntervalSince(lastUIUpdate) >= 0.25 {
+              activeJobs[job.id]?.partProgress = parts
               activeJobs[job.id]?.status = .transcribing(progress: progressUpdate.progress)
               lastUIUpdate = now
             }

@@ -23,6 +23,10 @@ extension TranscriptService {
     public let isComplete: Bool
     /// Set only when `isComplete == true`.
     public let srtContent: String?
+    /// How many parallel parts the audio was split into (1 = single pass).
+    public var totalParts: Int = 1
+    /// How many of those parts have fully finished transcribing.
+    public var completedParts: Int = 0
   }
 
   // MARK: - Streaming SRT
