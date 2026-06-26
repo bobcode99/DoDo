@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.podcast.analyzer", category: "Expand
 struct ExpandedPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var viewModel = ExpandedPlayerViewModel()
     @State private var showQueue = false
 
@@ -23,58 +24,22 @@ struct ExpandedPlayerView: View {
                 )
                 .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: 0) {
-                        VStack(spacing: 0) {
-                            PlayerArtworkView(imageURL: viewModel.imageURL, isPlaying: viewModel.isPlaying)
-                                .padding(.top, 16)
-
-                            PlayerEpisodeInfoView(
-                                viewModel: viewModel,
-                                onNavigateToEpisodeDetail: navigateToEpisodeDetail,
-                                onNavigateToPodcast: navigateToPodcast
-                            )
-                            .padding(.top, 24)
-                        }
-
-                        Spacer(minLength: 20)
-
-                        VStack(spacing: 32) {
-                            SmoothScrubber(
-                                currentTime: viewModel.currentTime,
-                                duration: viewModel.duration,
-                                isDurationLoading: viewModel.isDurationLoading,
-                                onSeek: viewModel.seekToProgress
-                            )
-                            .padding(.horizontal, 32)
-
-                            PlayerControlsView(viewModel: viewModel)
-
-                            #if os(iOS)
-                            HStack(spacing: 12) {
-                                Image(systemName: "speaker.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
-                                SystemVolumeSlider()
-                                    .frame(height: 32)
-                                Image(systemName: "speaker.wave.3.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 32)
-                            #endif
-                        }
-
-                        Spacer(minLength: 32)
-
-                        PlayerBottomActionsView(
-                            queueCount: viewModel.queue.count,
+                Group {
+                    if hSizeClass == .regular {
+                        ExpandedPlayerPadContent(
+                            viewModel: viewModel,
                             onNavigateToEpisodeDetail: navigateToEpisodeDetail,
+                            onNavigateToPodcast: navigateToPodcast,
                             onOpenQueue: openQueue
                         )
-                        .padding(.bottom, 40)
+                    } else {
+                        ExpandedPlayerContent(
+                            viewModel: viewModel,
+                            onNavigateToEpisodeDetail: navigateToEpisodeDetail,
+                            onNavigateToPodcast: navigateToPodcast,
+                            onOpenQueue: openQueue
+                        )
                     }
-                    .containerRelativeFrame(.vertical, alignment: .center)
                 }
                 .blur(radius: showQueue ? 3 : 0)
 
@@ -157,6 +122,15 @@ struct ExpandedPlayerView: View {
     }
 }
 
+// Presented the same way the app does (sheet + page sizing) so the canvas
+// shows real sizing on iPad/iPhone. Player chrome renders; episode text is
+// empty here because the view model reads the live audio manager singleton.
 #Preview {
-    ExpandedPlayerView()
+    @Previewable @State var show = true
+    Color.platformBackground
+        .ignoresSafeArea()
+        .sheet(isPresented: $show) {
+            ExpandedPlayerView()
+                .presentationSizing(.page)
+        }
 }

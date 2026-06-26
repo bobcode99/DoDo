@@ -49,10 +49,17 @@ private struct WelcomeOnboardingPage: View {
     VStack(spacing: 0) {
       Spacer()
 
-      Image(systemName: "waveform.circle.fill")
-        .font(.system(size: 96))
-        .foregroundStyle(.blue.gradient)
-        .padding(.bottom, 28)
+      ZStack {
+        RoundedRectangle(cornerRadius: 26)
+          .fill(Color(.displayP3, red: 0.137, green: 0.216, blue: 0.188).gradient)
+        Image("DoDoLogo")
+          .resizable()
+          .scaledToFit()
+          .padding(16)
+      }
+      .frame(width: 116, height: 116)
+      .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
+      .padding(.bottom, 28)
 
       VStack(spacing: 6) {
         Text("Welcome to\nDoDo")
@@ -107,8 +114,9 @@ private struct WelcomeOnboardingPage: View {
           .background(.blue, in: .rect(cornerRadius: 14))
 
         Text("Named after 兜 (Dōu), the Sand Dollar Cactus.")
-          .font(.caption2)
-          .foregroundStyle(.tertiary)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
       }
       .padding(.horizontal, 24)
       .padding(.bottom, 40)
