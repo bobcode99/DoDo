@@ -10,7 +10,7 @@ import Foundation
 import Speech
 import Synchronization
 
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 nonisolated enum ChunkedTranscriptionService {
 
   /// Represents an audio chunk for parallel transcription
@@ -101,6 +101,7 @@ nonisolated enum ChunkedTranscriptionService {
     censor: Bool,
     isCJK: Bool,
     maxSegmentLength: Int,
+    contextualStrings: [String],
     onProgress: @Sendable (Double) -> Void
   ) async throws -> [ChunkSegment] {
     let transcriber = SpeechTranscriber(
@@ -110,6 +111,15 @@ nonisolated enum ChunkedTranscriptionService {
       attributeOptions: [.audioTimeRange]
     )
     let analyzer = SpeechAnalyzer(modules: [transcriber])
+
+    // Bias recognition toward this show's proper nouns / jargon (per-podcast
+    // Transcription Context). Best-effort: a context failure must not fail the
+    // chunk. Must be set before `analyzer.start`.
+    if !contextualStrings.isEmpty {
+      let context = AnalysisContext()
+      context.contextualStrings = [.general: contextualStrings]
+      try? await analyzer.setContext(context)
+    }
 
     let audioFile = try AVAudioFile(forReading: chunk.fileURL)
     try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
@@ -144,78 +154,45 @@ nonisolated enum ChunkedTranscriptionService {
 
     // Apply Chinese punctuation restoration for CJK locales
     if isCJK {
-      let restorer = ChinesePunctuationRestorer()
-      transcript = restorer.restore(transcript: transcript)
+      transcript = ChinesePunctuationRestorer().restore(transcript: transcript)
     }
 
-    // Extract segments by grouping runs into appropriately-sized chunks.
-    var segments: [ChunkSegment] = []
-    var currentText = ""
-    var segmentStartTime: Double?
-    var segmentEndTime: Double = 0
-
-    for run in transcript.runs {
-      let word = String(transcript[run.range].characters)
-      let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty, let timeRange = run.audioTimeRange else { continue }
-
-      let wordStart = timeRange.start.seconds
-      let wordEnd = timeRange.end.seconds
-
-      // Guard against NaN/infinity timestamps from the Speech framework
-      guard wordStart.isFinite && wordEnd.isFinite else { continue }
-
-      if segmentStartTime == nil {
-        segmentStartTime = wordStart
-      }
-      segmentEndTime = wordEnd
-      currentText += word
-
-      // Split at maxSegmentLength or sentence boundaries
-      let shouldSplit = currentText.count >= maxSegmentLength
-        || isSentenceEndChar(trimmed.last)
-
-      if shouldSplit, let start = segmentStartTime {
-        let text = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty {
-          segments.append(ChunkSegment(
-            startTime: start + chunk.startTime,
-            endTime: segmentEndTime + chunk.startTime,
-            text: text
-          ))
-        }
-        currentText = ""
-        segmentStartTime = nil
-      }
+    // Reuse the shared segmenter (NLTokenizer sentence/word boundaries + CJK
+    // clause splitting) rather than a separate hand-rolled run-grouping loop, so
+    // chunked transcripts break the same way as short sequential ones. The
+    // segmenter's time ranges are chunk-relative; offset them onto the global
+    // timeline with `chunk.startTime`.
+    let segmenter = TranscriptSegmenter(isCJK: isCJK, maxLength: maxSegmentLength)
+    return segmenter.splitTranscriptIntoSegments(transcript: transcript).compactMap { segment in
+      guard let timeRange = segment.audioTimeRange else { return nil }
+      let text = String(segment.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !text.isEmpty else { return nil }
+      let start = timeRange.start.seconds
+      let end = timeRange.end.seconds
+      guard start.isFinite, end.isFinite else { return nil }
+      return ChunkSegment(
+        startTime: start + chunk.startTime,
+        endTime: end + chunk.startTime,
+        text: text
+      )
     }
-
-    // Flush remaining text
-    if let start = segmentStartTime {
-      let text = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !text.isEmpty {
-        segments.append(ChunkSegment(
-          startTime: start + chunk.startTime,
-          endTime: segmentEndTime + chunk.startTime,
-          text: text
-        ))
-      }
-    }
-
-    return segments
   }
 
-  /// Checks for sentence-ending characters (pure function, no actor state needed)
-  static func isSentenceEndChar(_ char: Character?) -> Bool {
-    guard let char else { return false }
-    let terminators: Set<Character> = [".", "!", "?", "。", "！", "？"]
-    return terminators.contains(char)
-  }
-
-  /// Merges segment results from multiple chunks, de-duplicating overlap regions.
-  /// Segments from the earlier chunk are preferred in overlap regions.
+  /// Merges segment results from multiple chunks, de-duplicating the
+  /// overlap-region audio (which both chunks transcribed).
+  ///
+  /// Earlier chunks own the overlap region: for chunk N+1, anything whose
+  /// startTime is before `chunks[N].endTime` (the previous chunk's nominal
+  /// end) was already produced by chunk N and is discarded here.
+  ///
+  /// Why nominal end and not last-segment end: a previous version used the
+  /// last segment's `endTime`, which is well below the chunk boundary when
+  /// speech ends mid-chunk and right at it when speech runs into the
+  /// overlap. The latter case let duplicate boundary segments survive,
+  /// producing repeated words with offset timestamps.
   static func mergeChunkSegments(
     _ chunkResults: [[ChunkSegment]],
-    overlap: TimeInterval = 2.0
+    chunks: [AudioChunk]
   ) -> [ChunkSegment] {
     guard !chunkResults.isEmpty else { return [] }
     guard chunkResults.count > 1 else { return chunkResults[0] }
@@ -226,14 +203,8 @@ nonisolated enum ChunkedTranscriptionService {
       if chunkIndex == 0 {
         merged.append(contentsOf: segments)
       } else {
-        // Skip segments that fall within the overlap region of the previous chunk
-        let previousChunkNominalEnd = chunkResults[chunkIndex - 1].last?.endTime ?? 0
-        let overlapThreshold = previousChunkNominalEnd - 1.0
-
-        for segment in segments {
-          if segment.startTime < overlapThreshold {
-            continue
-          }
+        let previousChunkEnd = chunks[chunkIndex - 1].endTime
+        for segment in segments where segment.startTime >= previousChunkEnd {
           merged.append(segment)
         }
       }
@@ -241,6 +212,38 @@ nonisolated enum ChunkedTranscriptionService {
 
     merged.sort { $0.startTime < $1.startTime }
     return merged
+  }
+
+  /// Replaces transcribed segments that fall mostly inside detected music
+  /// ranges with explicit `[♪ Music]` marker segments. Apple Speech produces
+  /// garbage on pure music; this keeps the SRT honest by dropping those
+  /// segments and surfacing the music ranges directly.
+  ///
+  /// A segment is dropped when `musicOverlapRatio` (≥ 0.7 by default) of its
+  /// duration lies inside any music range. The previous midpoint-only check
+  /// dropped real speech that crossed a music boundary (e.g. host starting to
+  /// talk before the intro music tag fully ended).
+  static func annotateMusicSegments(
+    speechSegments: [ChunkSegment],
+    musicRanges: [MusicDetectionService.TimeRange],
+    marker: String = MusicDetectionService.markerText,
+    musicOverlapRatio: Double = 0.7
+  ) -> [ChunkSegment] {
+    guard !musicRanges.isEmpty else { return speechSegments }
+
+    let speechOnly = speechSegments.filter { segment in
+      let duration = max(segment.endTime - segment.startTime, 0.001)
+      let overlap = musicRanges.reduce(0.0) { acc, range in
+        acc + max(0, min(segment.endTime, range.end) - max(segment.startTime, range.start))
+      }
+      return overlap / duration < musicOverlapRatio
+    }
+
+    let markers = musicRanges.map { range in
+      ChunkSegment(startTime: range.start, endTime: range.end, text: marker)
+    }
+
+    return (speechOnly + markers).sorted { $0.startTime < $1.startTime }
   }
 
   /// Removes temporary chunk files
@@ -257,7 +260,7 @@ nonisolated enum ChunkedTranscriptionService {
 /// Thread-safe progress tracker for parallel chunk processing.
 /// Uses Mutex instead of actor to allow synchronous access from onProgress callbacks,
 /// eliminating the need for unstructured Task {} per progress update.
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 nonisolated final class ChunkProgressTracker: Sendable {
   private let totalChunks: Int
   private let state: Mutex<[Int: Double]>
@@ -267,11 +270,14 @@ nonisolated final class ChunkProgressTracker: Sendable {
     self.state = Mutex([:])
   }
 
-  /// Updates progress for a specific chunk and returns the overall progress (0.0–1.0)
-  func updateProgress(chunkIndex: Int, progress: Double) -> Double {
+  /// Updates progress for a specific chunk and returns the overall progress
+  /// (0.0–1.0) plus how many chunks have fully finished (progress ≥ 1.0).
+  func updateProgress(chunkIndex: Int, progress: Double) -> (overall: Double, completed: Int) {
     state.withLock { progresses in
       progresses[chunkIndex] = progress
-      return progresses.values.reduce(0, +) / Double(totalChunks)
+      let overall = progresses.values.reduce(0, +) / Double(totalChunks)
+      let completed = progresses.values.reduce(into: 0) { $0 += ($1 >= 1.0 ? 1 : 0) }
+      return (overall, completed)
     }
   }
 }

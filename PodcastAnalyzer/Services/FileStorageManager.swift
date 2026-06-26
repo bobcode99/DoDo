@@ -180,7 +180,7 @@ actor FileStorageManager {
         )
         logger.info("Created audio directory: \(directoryURL.path)")
       } catch {
-        logger.error("Failed to create audio directory: \(error.localizedDescription)")
+        logger.error("Failed to create audio directory: \(error.localizedDescription, privacy: .public)")
         throw FileStorageError.directoryCreationFailed(error)
       }
     } else {
@@ -233,7 +233,7 @@ actor FileStorageManager {
         return destinationURL
       } catch {
         // If move fails (e.g., cross-volume), try copy + delete
-        logger.warning("Move failed, trying copy: \(error.localizedDescription)")
+        logger.warning("Move failed, trying copy: \(error.localizedDescription, privacy: .public)")
         try fileManager.copyItem(at: sourceURL, to: destinationURL)
         // Try to remove source, but don't fail if it doesn't exist
         try? fileManager.removeItem(at: sourceURL)
@@ -242,7 +242,7 @@ actor FileStorageManager {
         return destinationURL
       }
     } catch {
-      logger.error("Failed to save audio: \(error.localizedDescription)")
+      logger.error("Failed to save audio: \(error.localizedDescription, privacy: .public)")
       throw FileStorageError.saveFailed(error)
     }
   }
@@ -261,7 +261,7 @@ actor FileStorageManager {
           logger.info("Deleted audio file: \(path.lastPathComponent)")
           deleted = true
         } catch {
-          logger.error("Failed to delete audio: \(error.localizedDescription)")
+          logger.error("Failed to delete audio: \(error.localizedDescription, privacy: .public)")
           throw FileStorageError.deleteFailed(error)
         }
       }
@@ -288,7 +288,7 @@ actor FileStorageManager {
       try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
       logger.info("Created captions subfolder: \(dir.path)")
     } catch {
-      logger.error("Failed to create captions subfolder: \(error.localizedDescription)")
+      logger.error("Failed to create captions subfolder: \(error.localizedDescription, privacy: .public)")
       throw FileStorageError.directoryCreationFailed(error)
     }
   }
@@ -308,7 +308,7 @@ actor FileStorageManager {
         includingPropertiesForKeys: [.isDirectoryKey]
       )
     } catch {
-      logger.error("Migration: failed to list Captions directory: \(error.localizedDescription)")
+      logger.error("Migration: failed to list Captions directory: \(error.localizedDescription, privacy: .public)")
       return
     }
 
@@ -427,7 +427,7 @@ actor FileStorageManager {
       }
       return attributes[.creationDate] as? Date
     } catch {
-      logger.error("Failed to get caption file date: \(error.localizedDescription)")
+      logger.error("Failed to get caption file date: \(error.localizedDescription, privacy: .public)")
       return nil
     }
   }
@@ -443,7 +443,7 @@ actor FileStorageManager {
       logger.info("Saved caption file: \(destinationURL.lastPathComponent)")
       return destinationURL
     } catch {
-      logger.error("Failed to save caption: \(error.localizedDescription)")
+      logger.error("Failed to save caption: \(error.localizedDescription, privacy: .public)")
       throw FileStorageError.saveFailed(error)
     }
   }
@@ -459,7 +459,7 @@ actor FileStorageManager {
     do {
       return try String(contentsOf: path, encoding: .utf8)
     } catch {
-      logger.error("Failed to load caption: \(error.localizedDescription)")
+      logger.error("Failed to load caption: \(error.localizedDescription, privacy: .public)")
       throw error
     }
   }
@@ -476,7 +476,7 @@ actor FileStorageManager {
       try fileManager.removeItem(at: path)
       logger.info("Deleted caption file: \(path.lastPathComponent)")
     } catch {
-      logger.error("Failed to delete caption: \(error.localizedDescription)")
+      logger.error("Failed to delete caption: \(error.localizedDescription, privacy: .public)")
       throw FileStorageError.deleteFailed(error)
     }
   }
@@ -508,7 +508,7 @@ actor FileStorageManager {
       logger.info("Saved word timing file: \(destinationURL.lastPathComponent)")
       return destinationURL
     } catch {
-      logger.error("Failed to save word timing: \(error.localizedDescription)")
+      logger.error("Failed to save word timing: \(error.localizedDescription, privacy: .public)")
       throw FileStorageError.saveFailed(error)
     }
   }
@@ -605,7 +605,7 @@ actor FileStorageManager {
       logger.info("Saved translated caption file: \(destinationURL.lastPathComponent)")
       return destinationURL
     } catch {
-      logger.error("Failed to save translated caption: \(error.localizedDescription)")
+      logger.error("Failed to save translated caption: \(error.localizedDescription, privacy: .public)")
       throw FileStorageError.saveFailed(error)
     }
   }
@@ -629,7 +629,7 @@ actor FileStorageManager {
     do {
       return try String(contentsOf: path, encoding: .utf8)
     } catch {
-      logger.error("Failed to load translated caption: \(error.localizedDescription)")
+      logger.error("Failed to load translated caption: \(error.localizedDescription, privacy: .public)")
       throw error
     }
   }
@@ -654,7 +654,7 @@ actor FileStorageManager {
       try fileManager.removeItem(at: path)
       logger.info("Deleted translated caption file: \(path.lastPathComponent)")
     } catch {
-      logger.error("Failed to delete translated caption: \(error.localizedDescription)")
+      logger.error("Failed to delete translated caption: \(error.localizedDescription, privacy: .public)")
       throw FileStorageError.deleteFailed(error)
     }
   }
@@ -682,7 +682,7 @@ actor FileStorageManager {
       }
       return attributes[.creationDate] as? Date
     } catch {
-      logger.error("Failed to get translated caption file date: \(error.localizedDescription)")
+      logger.error("Failed to get translated caption file date: \(error.localizedDescription, privacy: .public)")
       return nil
     }
   }
@@ -736,7 +736,7 @@ actor FileStorageManager {
 
       return languageCodes
     } catch {
-      logger.error("Failed to list available translations: \(error.localizedDescription)")
+      logger.error("Failed to list available translations: \(error.localizedDescription, privacy: .public)")
       return []
     }
   }
@@ -789,7 +789,7 @@ actor FileStorageManager {
       }
       logger.info("Cleared all audio files (\(contents.count) files)")
     } catch {
-      logger.error("Failed to clear audio files: \(error.localizedDescription)")
+      logger.error("Failed to clear audio files: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -803,7 +803,7 @@ actor FileStorageManager {
       }
       logger.info("Cleared all caption files/folders (\(contents.count) items)")
     } catch {
-      logger.error("Failed to clear caption files: \(error.localizedDescription)")
+      logger.error("Failed to clear caption files: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -816,7 +816,7 @@ actor FileStorageManager {
       }
       logger.info("Cleared all log files (\(contents.count) files)")
     } catch {
-      logger.error("Failed to clear log files: \(error.localizedDescription)")
+      logger.error("Failed to clear log files: \(error.localizedDescription, privacy: .public)")
     }
   }
 

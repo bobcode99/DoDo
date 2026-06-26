@@ -11,7 +11,7 @@ import SwiftUI
 
 struct MacSettingsView: View {
   private enum SettingsTab: Hashable, CaseIterable {
-    case general, appearance, sync, playback, transcript, ai, storage
+    case general, appearance, sync, playback, transcript, ai, mcp, storage
 
     var title: LocalizedStringKey {
       switch self {
@@ -21,6 +21,7 @@ struct MacSettingsView: View {
       case .playback: "Playback"
       case .transcript: "Transcript"
       case .ai: "AI"
+      case .mcp: "MCP"
       case .storage: "Storage"
       }
     }
@@ -33,6 +34,7 @@ struct MacSettingsView: View {
       case .playback: "play.circle"
       case .transcript: "text.bubble"
       case .ai: "sparkles"
+      case .mcp: "network"
       case .storage: "internaldrive"
       }
     }
@@ -61,6 +63,7 @@ struct MacSettingsView: View {
     case .playback: PlaybackSettingsTab()
     case .transcript: TranscriptSettingsTab()
     case .ai: AISettingsTab()
+    case .mcp: MacMCPSettingsView()
     case .storage: StorageSettingsTab()
     }
   }
@@ -204,6 +207,16 @@ struct AppearanceSettingsTab: View {
 
 struct SyncSettingsTab: View {
   @State private var viewModel = SettingsViewModel()
+  @AppStorage("allowAutoDownloadOnBattery") private var allowAutoDownloadOnBattery = false
+  @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
+
+  private let cacheLimitOptions: [(label: String, value: Int)] = [
+    ("Unlimited", 0),
+    ("5 episodes", 5),
+    ("10 episodes", 10),
+    ("25 episodes", 25),
+    ("50 episodes", 50)
+  ]
 
   var body: some View {
     @Bindable var syncManager = BackgroundSyncManager.shared
@@ -239,6 +252,27 @@ struct SyncSettingsTab: View {
         Text("Sync Settings")
       } footer: {
         Text("Automatically check for new episodes periodically while the app is running.")
+      }
+
+      Section {
+        Toggle(isOn: $allowAutoDownloadOnBattery) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Download on Battery")
+            Text("Allow auto-downloads when the Mac isn't plugged in")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+
+        Picker("Episode Cache Limit", selection: $episodeCacheLimit) {
+          ForEach(cacheLimitOptions, id: \.value) { option in
+            Text(option.label).tag(option.value)
+          }
+        }
+      } header: {
+        Text("Auto-Download")
+      } footer: {
+        Text("Per-podcast settings (Always / Never / Use Global) are in each podcast's context menu. Cache limit caps total auto-downloaded episodes; 0 = unlimited.")
       }
     }
     .formStyle(.grouped)
@@ -305,6 +339,8 @@ struct PlaybackSettingsTab: View {
 
 struct TranscriptSettingsTab: View {
   @State private var viewModel = SettingsViewModel()
+  @State private var showAutoTranscribeManagement = false
+  @State private var showTranscriptionContext = false
 
   var body: some View {
     @Bindable var viewModel = viewModel
@@ -364,10 +400,49 @@ struct TranscriptSettingsTab: View {
       // MARK: Auto-generate
       Section {
         Toggle("Auto-Generate Transcripts", isOn: $subtitleSettings.autoGenerateTranscripts)
+
+        Toggle("Detect Music", isOn: $subtitleSettings.enableMusicDetection)
+        if subtitleSettings.enableMusicDetection {
+          Picker("Music Sensitivity", selection: $subtitleSettings.musicDetectionSensitivity) {
+            ForEach(MusicDetectionSensitivity.allCases, id: \.self) { level in
+              Text(level.displayName).tag(level)
+            }
+          }
+        }
+
+        Toggle("Split Long Audio", isOn: $subtitleSettings.splitLongAudio)
+
+        Button {
+          showTranscriptionContext = true
+        } label: {
+          HStack {
+            Label("Transcription Context", systemImage: "character.book.closed")
+            Spacer()
+            Image(systemName: "chevron.right")
+              .font(.caption)
+              .foregroundStyle(.tertiary)
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
+        Button {
+          showAutoTranscribeManagement = true
+        } label: {
+          HStack {
+            Label("Auto-transcribe Podcasts", systemImage: "waveform.badge.plus")
+            Spacer()
+            Image(systemName: "chevron.right")
+              .font(.caption)
+              .foregroundStyle(.tertiary)
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
       } header: {
         Text("Automation")
       } footer: {
-        Text("Automatically generate transcripts when episodes are downloaded.")
+        Text("Detect Music marks music ranges as [♪ Music] instead of transcribing them. Split Long Audio transcribes in parallel parts (faster on Apple Speech); turn off for one single-pass run. Transcription Context adds per-podcast names & jargon to improve accuracy. Auto-transcribe resolves the engine at run time: YAP server when configured, otherwise local (gated by charging).")
       }
 
       // MARK: Whisper models list
@@ -382,16 +457,50 @@ struct TranscriptSettingsTab: View {
           Text("On macOS, Medium and Large v3 Turbo offer the best accuracy. Models are stored in ~/Library/Caches.")
         }
       }
+
+      // MARK: YAP server config
+      if viewModel.selectedTranscriptEngine == .yapServer {
+        YapServerSection()
+      }
     }
     .formStyle(.grouped)
     .padding()
-    .frame(minHeight: viewModel.selectedTranscriptEngine == .whisper ? 500 : 300)
+    .frame(minHeight: minTranscriptTabHeight(for: viewModel.selectedTranscriptEngine))
     .onAppear {
       viewModel.checkTranscriptModelStatus()
       WhisperModelManager.shared.checkAllModelStatuses()
     }
+    .sheet(isPresented: $showAutoTranscribeManagement) {
+      NavigationStack {
+        AutoTranscribeManagementView()
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button("Done") { showAutoTranscribeManagement = false }
+            }
+          }
+      }
+      .frame(minWidth: 520, minHeight: 480)
+    }
+    .sheet(isPresented: $showTranscriptionContext) {
+      NavigationStack {
+        TranscriptContextManagementView()
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button("Done") { showTranscriptionContext = false }
+            }
+          }
+      }
+      .frame(minWidth: 520, minHeight: 480)
+    }
   }
 
+  private func minTranscriptTabHeight(for engine: TranscriptEngine) -> CGFloat {
+    switch engine {
+    case .whisper: 500
+    case .yapServer: 360
+    default: 300
+    }
+  }
 }
 
 // MARK: - Apple Speech Status View
@@ -525,43 +634,11 @@ struct MacWhisperModelRow: View {
 
 // MARK: - AI Settings Tab
 
+/// Renders the AI provider configuration UI inline in the Settings tab
+/// instead of pushing a sheet — keeps every Settings pane on one page.
 struct AISettingsTab: View {
-  @State private var showAISettings = false
-
   var body: some View {
-    Form {
-      Section {
-        Button(action: { showAISettings = true }) {
-          LabeledContent("Configure AI Providers") {
-            if AISettingsManager.shared.hasConfiguredProvider {
-              Text(AISettingsManager.shared.selectedProvider.displayName)
-                .foregroundStyle(.secondary)
-            } else {
-              Text("Not configured")
-                .foregroundStyle(.orange)
-            }
-          }
-        }
-        .buttonStyle(.plain)
-      } header: {
-        Text("AI Analysis")
-      } footer: {
-        Text("Configure cloud AI providers (OpenAI, Claude, Gemini, Grok) for transcript analysis.")
-      }
-    }
-    .formStyle(.grouped)
-    .padding()
-    .sheet(isPresented: $showAISettings) {
-      NavigationStack {
-        AISettingsView()
-          .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button("Close") { showAISettings = false }
-            }
-          }
-      }
-      .frame(minWidth: 500, minHeight: 400)
-    }
+    AISettingsView()
   }
 }
 

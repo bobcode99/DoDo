@@ -5,7 +5,6 @@
 //  Created by Bob on 2026/3/14.
 //
 
-import NukeUI
 import SwiftData
 import SwiftUI
 
@@ -57,14 +56,8 @@ struct PodcastPreviewSheet: View {
   // MARK: - Artwork
 
   private var artworkSection: some View {
-    CachedAsyncImage(url: URL(string: podcast.safeArtworkUrl.replacingOccurrences(of: "100x100", with: "600x600"))) { image in
-      image.resizable().scaledToFit()
-    } placeholder: {
-      Color.gray
-    }
-    .frame(width: 200, height: 200)
-    .clipShape(.rect(cornerRadius: 16))
-    .shadow(radius: 8)
+    CachedArtworkImage(urlString: podcast.safeArtworkUrl, size: 200, cornerRadius: 16)
+      .shadow(radius: 8)
   }
 
   // MARK: - Title

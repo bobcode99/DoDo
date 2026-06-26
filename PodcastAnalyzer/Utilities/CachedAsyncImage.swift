@@ -13,17 +13,22 @@ import Nuke
 
 /// Call once at app launch to configure Nuke's image pipeline with a persistent data cache.
 func configureImagePipeline() {
-  let dataCache = try? DataCache(name: "com.podcast.analyzer.images")
   var config = ImagePipeline.Configuration()
-  if let dataCache {
+
+  if let dataCache = try? DataCache(name: "com.podcast.analyzer.images") {
     dataCache.sizeLimit = 200 * 1024 * 1024
-  }
-  if let dataCache {
     config.dataCache = dataCache
   }
+
+  // `.storeAll` persists both the original bytes *and* the encoded resized
+  // variant (CachedArtworkImage adds a Resize processor). With the default
+  // `.automatic` policy the processed thumbnail wasn't always rehydrated on
+  // cold launch — every grid cell would re-decode from the original, so the
+  // Library tab visibly re-loaded its artwork on every relaunch.
+  config.dataCachePolicy = .storeAll
+
   let imageCache = ImageCache()
   #if os(macOS)
-  // The default shared cache can grow very large on desktop-class RAM.
   imageCache.costLimit = 80 * 1024 * 1024
   imageCache.countLimit = 200
   #else
@@ -31,6 +36,7 @@ func configureImagePipeline() {
   imageCache.countLimit = 300
   #endif
   config.imageCache = imageCache
+
   ImagePipeline.shared = ImagePipeline(configuration: config)
 }
 
@@ -39,18 +45,15 @@ func configureImagePipeline() {
 /// Drop-in replacement for the previous custom CachedAsyncImage, backed by Nuke.
 nonisolated struct CachedAsyncImage<Content: View, Placeholder: View>: View {
   let url: URL?
-  let scale: CGFloat
   @ViewBuilder let content: (Image) -> Content
   @ViewBuilder let placeholder: () -> Placeholder
 
   init(
     url: URL?,
-    scale: CGFloat = 1,
     @ViewBuilder content: @escaping (Image) -> Content,
     @ViewBuilder placeholder: @escaping () -> Placeholder
   ) {
     self.url = url
-    self.scale = scale
     self.content = content
     self.placeholder = placeholder
   }
@@ -71,16 +74,43 @@ nonisolated struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 extension CachedAsyncImage where Placeholder == ProgressView<EmptyView, EmptyView> {
   init(
     url: URL?,
-    scale: CGFloat = 1,
     @ViewBuilder content: @escaping (Image) -> Content
   ) {
-    self.init(url: url, scale: scale, content: content, placeholder: { ProgressView() })
+    self.init(url: url, content: content, placeholder: { ProgressView() })
   }
 }
 
 extension CachedAsyncImage where Content == Image, Placeholder == ProgressView<EmptyView, EmptyView> {
-  init(url: URL?, scale: CGFloat = 1) {
-    self.init(url: url, scale: scale, content: { $0 }, placeholder: { ProgressView() })
+  init(url: URL?) {
+    self.init(url: url, content: { $0 }, placeholder: { ProgressView() })
+  }
+}
+
+// MARK: - Apple Artwork URL Upgrade
+
+/// Rewrites Apple iTunes/mzstatic artwork URLs to a higher resolution.
+///
+/// Apple serves podcast artwork at `https://.../{N}x{N}bb.{ext}`; the source
+/// image is the same regardless of the requested size, so requesting a larger
+/// path gives back a sharper image. For non-Apple URLs the string is returned
+/// unchanged.
+nonisolated enum AppleArtworkURL {
+  /// Cap on the rewritten dimension. Apple's CDN typically serves up to ~3000px.
+  static let maxDimension = 1200
+
+  /// Returns the URL string rewritten to `targetPixels x targetPixels` if the
+  /// URL matches the Apple `{N}x{N}bb` pattern. Caps the result at `maxDimension`.
+  static func upgrade(_ urlString: String, targetPixels: Int) -> String {
+    let clamped = min(max(targetPixels, 100), maxDimension)
+    guard let regex = try? NSRegularExpression(pattern: "[0-9]{2,4}x[0-9]{2,4}bb") else {
+      return urlString
+    }
+    let range = NSRange(urlString.startIndex..., in: urlString)
+    return regex.stringByReplacingMatches(
+      in: urlString,
+      range: range,
+      withTemplate: "\(clamped)x\(clamped)bb"
+    )
   }
 }
 
@@ -97,9 +127,13 @@ nonisolated struct CachedArtworkImage: View {
     self.cornerRadius = cornerRadius
   }
 
+  /// Target pixel dimension for the source image — aim for @3x quality so
+  /// retina displays get a sharp result after Nuke downsamples.
+  private var targetPixels: Int { Int(size * 3) }
+
   private var url: URL? {
     guard let urlString else { return nil }
-    return URL(string: urlString)
+    return URL(string: AppleArtworkURL.upgrade(urlString, targetPixels: targetPixels))
   }
 
   private var request: ImageRequest? {
@@ -137,10 +171,6 @@ nonisolated struct CachedArtworkImage: View {
 /// Convenience for clearing and inspecting Nuke's image caches.
 nonisolated enum ImageCacheUtility {
   static func clearAllCache() {
-    ImagePipeline.shared.cache.removeAll()
-  }
-
-  static func clearMemoryCache() {
     ImagePipeline.shared.cache.removeAll()
   }
 

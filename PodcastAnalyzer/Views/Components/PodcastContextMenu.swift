@@ -15,6 +15,8 @@ struct PodcastContextMenu: ViewModifier {
   var onUnsubscribed: (() -> Void)?
 
   @State private var showUnsubscribeConfirmation = false
+  @State private var showEpisodeFilterSheet = false
+  @State private var showTranscribeBackfillSheet = false
 
   func body(content: Content) -> some View {
     content
@@ -41,11 +43,64 @@ struct PodcastContextMenu: ViewModifier {
 
         Divider()
 
+        // Auto-transcribe new episodes — engine resolved at run time (YAP → local).
+        Toggle(isOn: Binding(
+          get: { podcast.autoTranscribeNewEpisodes },
+          set: { newValue in
+            let wasOff = !podcast.autoTranscribeNewEpisodes
+            podcast.autoTranscribeNewEpisodes = newValue
+            try? modelContext.save()
+            if newValue && wasOff {
+              showTranscribeBackfillSheet = true
+            }
+          }
+        )) {
+          Label("Auto-transcribe new episodes", systemImage: "waveform.badge.plus")
+        }
+
+        // Three-state auto-download setting (AntennaPod pattern)
+        Menu {
+          ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
+            Button {
+              podcast.autoDownloadSetting = setting.rawValue
+              try? modelContext.save()
+            } label: {
+              Label(
+                setting.displayName,
+                systemImage: podcast.autoDownloadSetting == setting.rawValue ? "checkmark" : ""
+              )
+            }
+          }
+        } label: {
+          Label(
+            "Auto Download: \(AutoDownloadSetting(rawValue: podcast.autoDownloadSetting)?.displayName ?? "—")",
+            systemImage: "arrow.down.circle"
+          )
+        }
+
+        Button {
+          showEpisodeFilterSheet = true
+        } label: {
+          Label("Episode Filter…", systemImage: "line.3.horizontal.decrease.circle")
+        }
+
+        Divider()
+
         Button(role: .destructive) {
           showUnsubscribeConfirmation = true
         } label: {
           Label("Unsubscribe", systemImage: "minus.circle")
         }
+      }
+      .sheet(isPresented: $showEpisodeFilterSheet) {
+        PodcastEpisodeFilterView(podcast: podcast, modelContext: modelContext)
+      }
+      .sheet(isPresented: $showTranscribeBackfillSheet) {
+        TranscribeBackfillSheet(
+          podcastTitle: podcast.podcastInfo.title,
+          podcastLanguage: podcast.podcastInfo.language,
+          episodes: podcast.podcastInfo.episodes
+        )
       }
       .confirmationDialog(
         "Unsubscribe from Podcast",
@@ -65,7 +120,7 @@ struct PodcastContextMenu: ViewModifier {
     let rssService = PodcastRssService()
     do {
       let updatedPodcast = try await rssService.fetchPodcast(from: podcast.podcastInfo.rssUrl)
-      podcast.podcastInfo = updatedPodcast
+      podcast.applyPodcastInfo(updatedPodcast)
       podcast.lastUpdated = Date()
       try modelContext.save()
     } catch {

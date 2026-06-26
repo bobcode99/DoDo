@@ -6,7 +6,6 @@
 //
 
 
-import NukeUI
 import SwiftData
 import SwiftUI
 #if os(iOS)

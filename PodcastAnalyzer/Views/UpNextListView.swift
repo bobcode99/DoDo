@@ -16,26 +16,26 @@ struct UpNextListView: View {
   let onTogglePlayed: (LibraryEpisode) -> Void
   let onDownload: (LibraryEpisode) -> Void
   let onDeleteDownload: (LibraryEpisode) -> Void
+  let onDismiss: (LibraryEpisode) -> Void
 
   @Environment(\.modelContext) private var modelContext
   @State private var episodeToDelete: LibraryEpisode?
   @State private var showDeleteConfirmation = false
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
 
+  // Access singleton directly to determine now-playing without creating a timer
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  // Episodes arrive pre-ordered by HomeViewModel as a single composite-scored list:
+  // now-playing pinned at position 0, then everything else by score (which already
+  // privileges fresh-from-engaged > in-progress > suggestions).
+  private var nowPlayingId: String? { audioManager.currentEpisode?.id }
+
   var body: some View {
-    List(episodes) { episode in
-      EpisodeRowView(
-        libraryEpisode: episode,
-        episodeModel: episodeModels[episode.id],
-        onToggleStar: { onToggleStar(episode) },
-        onDownload: { onDownload(episode) },
-        onDeleteRequested: {
-          episodeToDelete = episode
-          showDeleteConfirmation = true
-        },
-        onTogglePlayed: { onTogglePlayed(episode) }
-      )
-      .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+    List {
+      ForEach(episodes) { episode in
+        episodeRow(episode)
+      }
     }
     .listStyle(.plain)
     .onAppear { batchFetchEpisodeModels() }
@@ -64,6 +64,23 @@ struct UpNextListView: View {
     } message: {
       Text("Are you sure you want to delete this downloaded episode?")
     }
+  }
+
+  @ViewBuilder
+  private func episodeRow(_ episode: LibraryEpisode) -> some View {
+    EpisodeRowView(
+      libraryEpisode: episode,
+      episodeModel: episodeModels[episode.id],
+      onToggleStar: { onToggleStar(episode) },
+      onDownload: { onDownload(episode) },
+      onDeleteRequested: {
+        episodeToDelete = episode
+        showDeleteConfirmation = true
+      },
+      onTogglePlayed: { onTogglePlayed(episode) },
+      onRemoveFromUpNext: episode.id == nowPlayingId ? nil : { onDismiss(episode) }
+    )
+    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
   }
 
   // MARK: - Episode Model Fetch
@@ -127,7 +144,8 @@ struct UpNextListView: View {
       onToggleStar: { _ in },
       onTogglePlayed: { _ in },
       onDownload: { _ in },
-      onDeleteDownload: { _ in }
+      onDeleteDownload: { _ in },
+      onDismiss: { _ in }
     )
   }
   .modelContainer(for: PodcastInfoModel.self, inMemory: true)

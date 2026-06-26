@@ -28,6 +28,11 @@ import AppKit
 // MARK: - Playback State Notification
 extension Notification.Name {
   static let playbackPositionDidUpdate = Notification.Name("playbackPositionDidUpdate")
+  /// Posted when the audio manager refuses to start playback. userInfo["message"]
+  /// holds a user-facing string the UI should surface (toast/alert). Currently
+  /// fires when a remote URL is requested with no network connection and no
+  /// local copy is available.
+  static let audioPlaybackUnavailable = Notification.Name("audioPlaybackUnavailable")
 }
 
 struct PlaybackPositionUpdate: Sendable {
@@ -116,6 +121,17 @@ class EnhancedAudioManager: NSObject {
   // Audio interruption handling - track if we should resume after interruption ends
   private var wasPlayingBeforeInterruption: Bool = false
 
+  // True between handlePlaybackEnded (no-next branch) and the seek-to-zero
+  // completion. Stops the periodic time observer from overwriting the
+  // currentTime we just reset to 0 with a stale player position.
+  private var suppressTimeObserverUntilSeekLands = false
+
+  // Generation token incremented on every user-initiated playback state change
+  // (pause/play/stop/seek/play(...)). The delayed interruption-resume retry
+  // captures the token at start and bails if it changed, so a manual pause
+  // during the retry window can't be overridden by the resume retry firing.
+  private var playbackStateGeneration: UInt64 = 0
+
   // Track last values pushed to widget to avoid burning WidgetKit reload budget
   private var lastWidgetAudioURL: String?
   private var lastWidgetIsPlaying: Bool?
@@ -195,7 +211,7 @@ class EnhancedAudioManager: NSObject {
       // Don't activate session here - only activate when actually playing
       logger.info("Audio session configured (will activate when playing)")
     } catch {
-      logger.error("Audio session setup failed: \(error.localizedDescription)")
+      logger.error("Audio session setup failed: \(error.localizedDescription, privacy: .public)")
     }
     #else
     // macOS doesn't require AVAudioSession configuration
@@ -209,7 +225,7 @@ class EnhancedAudioManager: NSObject {
       try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
       logger.info("Audio session activated")
     } catch {
-      logger.error("Failed to activate audio session: \(error.localizedDescription)")
+      logger.error("Failed to activate audio session: \(error.localizedDescription, privacy: .public)")
     }
     #endif
   }
@@ -220,7 +236,7 @@ class EnhancedAudioManager: NSObject {
       try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
       logger.info("Audio session deactivated - other apps can now play")
     } catch {
-      logger.error("Failed to deactivate audio session: \(error.localizedDescription)")
+      logger.error("Failed to deactivate audio session: \(error.localizedDescription, privacy: .public)")
     }
     #endif
   }
@@ -288,8 +304,18 @@ private func handleAudioInterruption(_ notification: Notification) {
                     guard let self, !Task.isCancelled else { return }
                     self.resume()
                     self.wasPlayingBeforeInterruption = false
-                    // Verify playback actually started; retry once if not
+                    // Snapshot the generation token AFTER our resume() so any
+                    // user-initiated pause/play during the 0.5s verification
+                    // window bumps the token and aborts the retry.
+                    let tokenAtRetryStart = self.playbackStateGeneration
                     try? await Task.sleep(for: .seconds(0.5))
+                    guard !Task.isCancelled,
+                          self.playbackStateGeneration == tokenAtRetryStart
+                    else {
+                        self.logger.info(
+                            "Interruption retry aborted: user changed playback state during window")
+                        return
+                    }
                     if !self.isPlaying, self.player?.rate == 0 {
                         self.logger.warning("Interruption resume failed, retrying once")
                         self.resume()
@@ -298,7 +324,7 @@ private func handleAudioInterruption(_ notification: Notification) {
                     }
                 }
             } catch {
-                logger.error("Failed to reactivate session after interruption: \(error.localizedDescription)")
+                logger.error("Failed to reactivate session after interruption: \(error.localizedDescription, privacy: .public)")
             }
         } else {
             wasPlayingBeforeInterruption = false
@@ -318,6 +344,8 @@ private func handleAudioInterruption(_ notification: Notification) {
     commandCenter.pauseCommand.removeTarget(nil)
     commandCenter.skipForwardCommand.removeTarget(nil)
     commandCenter.skipBackwardCommand.removeTarget(nil)
+    commandCenter.nextTrackCommand.removeTarget(nil)
+    commandCenter.previousTrackCommand.removeTarget(nil)
     commandCenter.changePlaybackPositionCommand.removeTarget(nil)
 
     // Remote command handlers run on arbitrary queues, so dispatch to MainActor
@@ -347,6 +375,26 @@ private func handleAudioInterruption(_ notification: Notification) {
       return .success
     }
 
+    // AirPods physical-button gestures:
+    //   • Double-press / double-tap → nextTrackCommand
+    //   • Triple-press / triple-tap → previousTrackCommand
+    // iOS consumes these events and dispatches ONLY to the next/previous-track
+    // handlers — they don't fall through to skipForward/skipBackward — so
+    // without registering here, AirPods clicks silently do nothing. Route them
+    // through our skip handlers so the gestures behave the same way as the
+    // lock-screen skip buttons.
+    commandCenter.nextTrackCommand.isEnabled = true
+    commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+      Task { @MainActor in self?.skipForward() }
+      return .success
+    }
+
+    commandCenter.previousTrackCommand.isEnabled = true
+    commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+      Task { @MainActor in self?.skipBackward() }
+      return .success
+    }
+
     commandCenter.changePlaybackPositionCommand.isEnabled = true
     commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
       guard let event = event as? MPChangePlaybackPositionCommandEvent else {
@@ -363,11 +411,46 @@ private func handleAudioInterruption(_ notification: Notification) {
     episode: PlaybackEpisode, audioURL: String, startTime: TimeInterval = 0,
     imageURL: String? = nil, useDefaultSpeed: Bool = false
   ) {
-    guard let url = URL(string: audioURL) else { return }
+    guard let initialURL = URL(string: audioURL) else { return }
 
     if currentEpisode?.id == episode.id, player != nil {
       if isPlaying { pause() } else { resume() }
       return
+    }
+
+    // Starting a new episode invalidates any pending interruption-resume retry
+    // for the previous one.
+    playbackStateGeneration &+= 1
+
+    // Resolve the URL we will actually play. If the caller passed a remote URL
+    // but the episode is already downloaded, prefer the local file. Only block
+    // on "no network" if NWPathMonitor has actually reported back at least
+    // once and confirmed we're offline — otherwise the default `isConnected =
+    // false` would falsely refuse playback during the ~200ms window between
+    // NetworkMonitor init and the first path update.
+    let url: URL
+    if initialURL.isFileURL {
+      url = initialURL
+    } else if case .downloaded(let localPath) = DownloadManager.shared
+      .getDownloadState(episodeTitle: episode.title, podcastTitle: episode.podcastTitle),
+      FileManager.default.fileExists(atPath: localPath)
+    {
+      url = URL(fileURLWithPath: localPath)
+      logger.info("Using downloaded copy for \(episode.title)")
+    } else {
+      let monitor = NetworkMonitor.shared
+      if monitor.hasReceivedFirstUpdate && !monitor.isConnected {
+        let message =
+          "Can't reach the internet right now. Download \"\(episode.title)\" while you're on Wi-Fi to listen offline."
+        logger.warning(
+          "Refusing playback: NWPathMonitor reports offline and no local copy for \(episode.title)")
+        NotificationCenter.default.post(
+          name: .audioPlaybackUnavailable,
+          object: nil,
+          userInfo: ["message": message, "episodeTitle": episode.title])
+        return
+      }
+      url = initialURL
     }
 
     cleanup()
@@ -423,6 +506,7 @@ private func handleAudioInterruption(_ notification: Notification) {
 
   // MARK: - Controls – always update Now Playing
   func pause() {
+    playbackStateGeneration &+= 1
     player?.pause()
     isPlaying = false
     updateNowPlayingPlaybackRate()
@@ -432,6 +516,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func resume() {
+    playbackStateGeneration &+= 1
     // If we have a restored episode but no player, start playback
     if player == nil, let episode = currentEpisode {
       play(
@@ -447,6 +532,19 @@ private func handleAudioInterruption(_ notification: Notification) {
     // Ensure audio session is active when resuming
     activateAudioSession()
 
+    // If the player is parked at the end of the item, AVPlayer.play() is a
+    // no-op. Seek to zero first so Replay actually starts over.
+    if let item = player?.currentItem {
+      let itemTime = item.currentTime().seconds
+      let itemDuration = item.duration.seconds
+      if itemTime.isFinite, itemDuration.isFinite, itemDuration > 0,
+        itemTime >= itemDuration - 0.5
+      {
+        player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+        currentTime = 0
+      }
+    }
+
     player?.play()
     player?.rate = playbackRate
     isPlaying = true
@@ -455,6 +553,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func stop() {
+    playbackStateGeneration &+= 1
     cleanup()
     currentEpisode = nil
     currentTime = 0
@@ -474,21 +573,28 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func seek(to time: TimeInterval) {
+    let beforeTime = currentTime
+    logger.info("seek(to:) requested target=\(String(format: "%.3f", time))s currentBefore=\(String(format: "%.3f", beforeTime))s")
     let cmTime = CMTime(seconds: time, preferredTimescale: 600)
     // Use zero tolerance so the playhead lands exactly at the requested time.
     // Without this, AVPlayer defaults to kCMTimePositiveInfinity tolerances and
     // may snap to a nearby keyframe — causing transcript taps to jump to the
     // wrong timestamp.
-    player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+    player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
       // Dispatch to main actor since completion handler runs on arbitrary queue
       Task { @MainActor in
+        guard let self else { return }
+        let landed = self.player?.currentTime().seconds ?? .nan
+        self.logger.info(
+          "seek(to:) completion target=\(String(format: "%.3f", time))s landed=\(String(format: "%.3f", landed))s drift=\(String(format: "%.3f", landed - time))s finished=\(finished)"
+        )
         // Update currentTime immediately so observers (e.g. TranscriptContentView
         // polling timer) see the seeked position rather than the stale value that
         // the periodic time observer hasn't flushed yet.
-        self?.currentTime = time
-        self?.updateNowPlayingCurrentTime()
-        self?.savePlaybackState()
-        self?.postPlaybackPositionUpdate()
+        self.currentTime = time
+        self.updateNowPlayingCurrentTime()
+        self.savePlaybackState()
+        self.postPlaybackPositionUpdate()
       }
     }
   }
@@ -823,7 +929,7 @@ private func handleAudioInterruption(_ notification: Notification) {
           self.captionSegments = segments
           logger.info("Loaded \(segments.count) caption segments")
         } catch {
-          logger.error("Failed to load captions: \(error.localizedDescription)")
+          logger.error("Failed to load captions: \(error.localizedDescription, privacy: .public)")
         }
       }
     }
@@ -954,6 +1060,10 @@ private func handleAudioInterruption(_ notification: Notification) {
     nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
     nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
     nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? playbackRate : 0.0
+    // Tell the system this is a podcast — lock screen / Control Center will
+    // prefer the skipForward/skipBackward 15/30s buttons over next/previous
+    // arrows, even though we register all four for AirPods gesture routing.
+    nowPlayingInfo[MPMediaItemPropertyMediaType] = MPMediaType.podcast.rawValue
 
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
 
@@ -991,7 +1101,7 @@ private func handleAudioInterruption(_ notification: Notification) {
           }
           #endif
         } catch {
-          self?.logger.error("Failed to load artwork: \(error.localizedDescription)")
+          self?.logger.error("Failed to load artwork: \(error.localizedDescription, privacy: .public)")
         }
       }
     }
@@ -1224,12 +1334,9 @@ private func handleAudioInterruption(_ notification: Notification) {
       Task { @MainActor in
         guard let self = self else { return }
 
-        // Throttle currentTime writes — only update when changed by >0.2s
         let newTime = time.seconds
-        if abs(newTime - self.currentTime) > 0.2 {
-          self.currentTime = newTime
-        }
 
+        // Duration updates can happen regardless of play state.
         if let newDuration = self.player?.currentItem?.duration.seconds,
           newDuration.isFinite, newDuration > 0
         {
@@ -1246,6 +1353,16 @@ private func handleAudioInterruption(_ notification: Notification) {
             self.savePlaybackState()
             self.updateWidgetPlaybackData()
           }
+        }
+
+        // Skip currentTime/caption writes while paused. After
+        // handlePlaybackEnded resets to 0 the periodic observer can still fire
+        // once with the player's pre-reset time and clobber the 0.
+        guard self.isPlaying, !self.suppressTimeObserverUntilSeekLands else { return }
+
+        // Throttle currentTime writes — only update when changed by >0.2s
+        if abs(newTime - self.currentTime) > 0.2 {
+          self.currentTime = newTime
         }
 
         // Update current caption
@@ -1298,7 +1415,16 @@ private func handleAudioInterruption(_ notification: Notification) {
   private func handlePlaybackEnded() {
     logger.info("Playback ended")
     isPlaying = false
-    currentTime = 0
+
+    // Persist a final position == duration so PlaybackStateCoordinator flips
+    // model.isCompleted = true and downstream views (EpisodeListView,
+    // Library lists) re-render to the replay state. The periodic 5s save
+    // alone can miss the actual end since the last tick may land seconds
+    // before AVPlayerItemDidPlayToEndTime fires.
+    if duration > 0 {
+      currentTime = duration
+      postPlaybackPositionUpdate()
+    }
 
     // Remove current episode from auto-play candidates (it's been fully played)
     if let currentId = currentEpisode?.id {
@@ -1310,6 +1436,7 @@ private func handleAudioInterruption(_ notification: Notification) {
       logger.info("Sleep timer: end of episode reached - stopping playback")
       sleepTimerOption = .off
       sleepTimerRemaining = 0
+      currentTime = 0
       clearPlaybackState()
       return
     }
@@ -1317,29 +1444,52 @@ private func handleAudioInterruption(_ notification: Notification) {
     // Check if there's a next episode in queue
     if !queue.isEmpty {
       logger.info("Playing next episode from queue")
+      currentTime = 0
       playNextInQueue()
-    } else {
-      // Check auto-play setting and try to play random unplayed episode
-      let autoPlayEnabled = UserDefaults.standard.bool(forKey: Keys.autoPlayNextEpisode)
-      if autoPlayEnabled, !autoPlayCandidates.isEmpty {
-        // Pick the top-scored episode (candidates are kept in Up Next order)
-        let nextEpisode = autoPlayCandidates[0]
-        let savedPosition = PlaybackStateCoordinator.savedPlaybackPosition(
-          podcastTitle: nextEpisode.podcastTitle,
-          episodeTitle: nextEpisode.title
-        )
-        logger.info("Auto-playing next episode: \(nextEpisode.title) at \(Int(savedPosition))s")
-        play(
-          episode: nextEpisode,
-          audioURL: nextEpisode.audioURL,
-          startTime: savedPosition,
-          imageURL: nextEpisode.imageURL,
-          useDefaultSpeed: savedPosition == 0
-        )
-      } else {
-        clearPlaybackState()
+      return
+    }
+
+    // Check auto-play setting and try to play random unplayed episode
+    let autoPlayEnabled = UserDefaults.standard.bool(forKey: Keys.autoPlayNextEpisode)
+    if autoPlayEnabled, !autoPlayCandidates.isEmpty {
+      // Pick the top-scored episode (candidates are kept in Up Next order)
+      let nextEpisode = autoPlayCandidates[0]
+      let savedPosition = PlaybackStateCoordinator.savedPlaybackPosition(
+        podcastTitle: nextEpisode.podcastTitle,
+        episodeTitle: nextEpisode.title
+      )
+      logger.info("Auto-playing next episode: \(nextEpisode.title) at \(Int(savedPosition))s")
+      currentTime = 0
+      play(
+        episode: nextEpisode,
+        audioURL: nextEpisode.audioURL,
+        startTime: savedPosition,
+        imageURL: nextEpisode.imageURL,
+        useDefaultSpeed: savedPosition == 0
+      )
+      return
+    }
+
+    // No follow-up — leave the episode loaded but rewind the player to zero so
+    // tapping Play actually replays from the start instead of sitting at the
+    // end of the item (where AVPlayer.play() is a no-op). The suppress flag
+    // keeps the periodic time observer from clobbering currentTime with the
+    // pre-seek position before the seek completes.
+    suppressTimeObserverUntilSeekLands = true
+    currentTime = 0
+    updateNowPlayingCurrentTime()
+    updateNowPlayingPlaybackRate()
+    player?.pause()
+    player?.seek(
+      to: .zero,
+      toleranceBefore: .zero,
+      toleranceAfter: .zero
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.suppressTimeObserverUntilSeekLands = false
       }
     }
+    clearPlaybackState()
   }
 
   // MARK: - Cleanup

@@ -1,123 +1,127 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+iOS/macOS podcast player — SwiftUI + SwiftData, MVVM.
 
-## Project Overview
-
-PodcastAnalyzer is an iOS/macOS podcast player app built with SwiftUI and SwiftData. The app supports RSS feed subscriptions, episode downloads, audio playback with background support, and has infrastructure for future transcription features.
-
-## Build & Test Commands
+## Build & Test
 
 ```bash
-# Build for iOS simulator
-xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer -destination 'platform=iOS Simulator,name=iPhone 17' build
+# Build (iOS Simulator)
+xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 
-# Build for macOS
-xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer -destination 'platform=macOS' build
+# Build (macOS)
+xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer \
+  -destination 'platform=macOS' build
 
-# Clean build folder
-xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer clean
+# All tests
+xcodebuild test -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer \
+  -destination 'platform=iOS Simulator,name=iPhone 17'
 
-# Run all tests
-xcodebuild test -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer -destination 'platform=iOS Simulator,name=iPhone 17'
-
-# Run only unit tests
-xcodebuild test -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PodcastAnalyzerTests
-
-# Run a single test
-xcodebuild test -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PodcastAnalyzerTests/PodcastAnalyzerTests/testExample
-
-# Resolve package dependencies
-xcodebuild -resolvePackageDependencies -project PodcastAnalyzer.xcodeproj
+# Single test
+xcodebuild test ... -only-testing:PodcastAnalyzerTests/SuiteName/testName
 ```
 
-## CI
+## Architecture
 
-GitHub Actions workflow (`.github/workflows/ios.yml`) runs build and tests on PRs to main branch using macOS runner with iOS Simulator.
+`View → ViewModel → Service → SwiftData Model`
 
-## Architecture Overview
+**Entry:** `PodcastAnalyzerApp.swift` → `ContentView.swift` (TabView: Home / Settings / Search + MiniPlayerBar overlay)
 
-### MVVM + SwiftUI Architecture
+**Key services (singletons unless noted):**
+| Service | Notes |
+|---------|-------|
+| `EnhancedAudioManager.shared` | AVPlayer, lock screen controls, SRT captions |
+| `PodcastRssService` | Actor — RSS parsing via FeedKit |
+| `DownloadManager.shared` | URLSession background downloads |
+| `FileStorageManager.shared` | Actor — audio (`~/Library/Audio/`), captions (`~/Documents/Captions/`) |
 
-The app follows Model-View-ViewModel (MVVM) pattern with SwiftUI's reactive bindings:
+**SwiftData models:** `PodcastInfoModel`, `EpisodeDownloadModel`, `QueueItemModel`, `EpisodeAIAnalysis`, `EpisodeQuickTagsModel`
 
+**Runtime structs:** `PodcastInfo`, `PodcastEpisodeInfo`, `PlaybackEpisode`, `LibraryEpisode`
+
+**Episode composite key:** `"\(podcastTitle)\u{1F}\(episodeTitle)"` — used as the upsert key in `EpisodeDownloadModel`.
+
+## Critical Rules
+
+- **Audio:** Never create multiple `AVPlayer` instances — always use `EnhancedAudioManager.shared`.
+- **Downloads:** Keyed by `audioURL`. States: `notDownloaded → downloading(%) → downloaded(path) | failed(error)`.
+- **Schema migrations:** Not implemented — schema changes reset data. Break old formats freely.
+- **No backward compatibility**: Break old formats freely.
+
+## Packages
+
+- **FeedKit** 10.2.0 — RSS/Atom parsing
+- **ZMarkupParser** 1.12.0 — HTML description rendering
+- **Nuke** 12.9.0 — image caching (`NukeUI.LazyImage`)
+- **WhisperKit** 0.15.0 — on-device speech-to-text
+
+## File naming
+
+- Audio: `{podcast_title}_{episode_title}.mp3` (spaces/special chars → `_`)
+- Captions: `{episode_id}.srt`
+
+---
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
 ```
-User Interaction → View → ViewModel → Service → Model/Persistence
-                    ↑         ↓
-                    └─ @Published / @Observable
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
 ```
 
-- Views in `Views/` with corresponding ViewModels in `ViewModels/`
-- ViewModels use `@Published` properties (or `@Observable` macro for newer ones like EpisodeDetailViewModel)
-- ViewModels coordinate between Views and Services (never direct service calls from Views)
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-### Entry Point & Navigation
+---
 
-- **PodcastAnalyzerApp.swift**: App entry point, initializes SwiftData ModelContainer
-- **ContentView.swift**: Root TabView with 3 tabs (Home, Settings, Search) + MiniPlayerBar overlay
-- Navigation uses SwiftUI's NavigationStack with programmatic state management
-
-### Services Layer (Singletons & Actors)
-
-| Service | Type | Purpose |
-|---------|------|---------|
-| `EnhancedAudioManager.shared` | Singleton, @Observable | Central audio playback engine (AVPlayer), background playback, lock screen controls, SRT captions |
-| `PodcastRssService` | Actor | RSS feed fetching/parsing via FeedKit |
-| `DownloadManager.shared` | Singleton, URLSessionDownloadDelegate | Episode downloads with background URLSession |
-| `FileStorageManager.shared` | Actor | File I/O for audio (`~/Library/Audio/`) and captions (`~/Documents/Captions/`) |
-| `TranscriptService` | Actor, iOS 17+ | Speech-to-text scaffolding (not fully integrated) |
-
-### Models & Persistence
-
-**SwiftData Models:**
-- `PodcastInfoModel`: Podcast metadata with UUID, episodes list (nested arrays), RSS URL
-- `EpisodeDownloadModel`: Tracks playback position, completion state, download date
-
-**Runtime Structs:**
-- `PodcastInfo`, `PodcastEpisodeInfo`: Core data structures
-- `PlaybackEpisode`: Lightweight episode representation during playback
-- `DownloadState` (enum): notDownloaded, downloading(progress), downloaded(path), failed(error)
-
-### Key Architectural Decisions
-
-1. **Singleton Services**: Audio, download, and file storage are singletons to maintain global state
-2. **Actor-Based Concurrency**: PodcastRssService, FileStorageManager, TranscriptService use Swift Actors for thread safety
-3. **Polling vs Combine**: MiniPlayerBar (0.5s) and PlayerView (0.1s) use Timer-based polling of EnhancedAudioManager
-4. **Local-First**: SwiftData provides offline-first persistence with no remote sync
-5. **Background Downloads**: URLSession background configuration for download persistence
-6. **No backward compatibility**: Break old formats freely
-
-## Critical Implementation Notes
-
-### Audio Playback
-- EnhancedAudioManager is the single source of truth for playback state
-- DO NOT create multiple AVPlayer instances - always use the shared manager
-- Playback state persists to UserDefaults (last episode, position, speed)
-
-### Download State
-- DownloadManager tracks state per episode via audioURL as key
-- State transitions: notDownloaded → downloading(%) → downloaded(path) OR failed(error)
-- Always check download state before attempting to play locally
-
-### SwiftData Schema
-- Episodes are nested arrays in PodcastInfoModel, not separate entities
-- Migration strategy: Not implemented - schema changes will reset data
-
-### Background Playback Requirements
-- AVAudioSession configured for playback category in EnhancedAudioManager
-- MediaPlayer framework updates lock screen "Now Playing" info
-
-### File Naming
-- Audio files: `{podcast_title}_{episode_title}.mp3` (sanitized: spaces/special chars → underscores)
-- Caption files: `{episode_id}.srt`
-
-## Package Dependencies
-
-- **FeedKit** (10.2.0): RSS/Atom feed parsing
-- **ZMarkupParser** (1.12.0): HTML description rendering (ZNSTextAttachment is a transitive dep)
-- **Nuke** (12.9.0): Image caching and async loading (NukeUI for SwiftUI LazyImage)
-- **WhisperKit** (0.15.0): On-device speech-to-text transcription
-
-## Constants
-
-See `PodcastAnalyzer/Constants.swift` for `maxConcurrentDownloads` (4), `supportedAudioFormats`, tab names, and SF Symbol names.
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

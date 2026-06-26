@@ -12,6 +12,8 @@ import SwiftData
 
 @Model
 final class EpisodeAIAnalysis {
+    #Index<EpisodeAIAnalysis>([\.episodeAudioURL], [\.episodeTitle])
+
     // Link to episode
     var episodeAudioURL: String = ""
     var episodeTitle: String = ""
@@ -151,6 +153,8 @@ struct QAEntry: Codable, Sendable {
 
 @Model
 final class EpisodeQuickTagsModel {
+    #Index<EpisodeQuickTagsModel>([\.episodeAudioURL])
+
     // Link to episode
     var episodeAudioURL: String = ""
     var episodeTitle: String = ""

@@ -5,8 +5,8 @@
 //  Settings for AI providers (Cloud APIs with BYOK)
 //
 
-import Foundation
 import SwiftUI
+import Foundation
 
 // MARK: - Transcript Format for AI Analysis
 
@@ -109,43 +109,108 @@ nonisolated enum TranscriptFormatForAI: String, CaseIterable, Codable {
 // MARK: - Analysis Language Setting
 
 nonisolated enum AnalysisLanguage: String, CaseIterable, Codable {
+    // Behaviour-based options
     case deviceLanguage = "Device Language"
-    case english = "English"
     case matchPodcast = "Match Podcast"
 
+    // Popular languages (alphabetical within each script family for predictable picker order)
+    case english = "English"
+    case spanish = "Spanish"
+    case french = "French"
+    case german = "German"
+    case italian = "Italian"
+    case portuguese = "Portuguese"
+    case dutch = "Dutch"
+    case russian = "Russian"
+    case arabic = "Arabic"
+    case hindi = "Hindi"
+    case chineseSimplified = "Chinese (Simplified)"
+    case chineseTraditional = "Chinese (Traditional)"
+    case japanese = "Japanese"
+    case korean = "Korean"
+
+    // Custom override — paired with `customAnalysisLanguageName` in AISettingsManager.
+    case custom = "Custom…"
+
     var displayName: String { rawValue }
+
+    /// Groups picker entries into Behaviour / Popular Languages / Custom.
+    static var behaviorCases: [AnalysisLanguage] { [.deviceLanguage, .matchPodcast] }
+    static var popularLanguageCases: [AnalysisLanguage] {
+        [.english, .spanish, .french, .german, .italian, .portuguese, .dutch,
+         .russian, .arabic, .hindi,
+         .chineseSimplified, .chineseTraditional, .japanese, .korean]
+    }
 
     var icon: String {
         switch self {
         case .deviceLanguage: return "iphone"
-        case .english: return "globe.americas"
         case .matchPodcast: return "waveform"
+        case .english: return "globe.americas"
+        case .spanish, .portuguese: return "globe.europe.africa"
+        case .french, .german, .italian, .dutch, .russian: return "globe.europe.africa"
+        case .arabic, .hindi: return "globe"
+        case .chineseSimplified, .chineseTraditional, .japanese, .korean: return "globe.asia.australia"
+        case .custom: return "pencil.line"
+        }
+    }
+
+    /// Emoji equivalent of `icon` — flags for languages, semantic glyphs for
+    /// the behavior / custom modes. Used by the Response Language picker.
+    var emoji: String {
+        switch self {
+        case .deviceLanguage: return "📱"
+        case .matchPodcast: return "🎙️"
+        case .english: return "🇬🇧"
+        case .spanish: return "🇪🇸"
+        case .french: return "🇫🇷"
+        case .german: return "🇩🇪"
+        case .italian: return "🇮🇹"
+        case .portuguese: return "🇵🇹"
+        case .dutch: return "🇳🇱"
+        case .russian: return "🇷🇺"
+        case .arabic: return "🇸🇦"
+        case .hindi: return "🇮🇳"
+        case .chineseSimplified: return "🇨🇳"
+        case .chineseTraditional: return "🇹🇼"
+        case .japanese: return "🇯🇵"
+        case .korean: return "🇰🇷"
+        case .custom: return "✏️"
         }
     }
 
     var description: String {
         switch self {
         case .deviceLanguage: return "Use your device's language settings"
-        case .english: return "Always respond in English"
         case .matchPodcast: return "Match the podcast's language"
+        case .custom: return "Type any language you want responses in"
+        default: return "Always respond in \(rawValue)"
         }
     }
 
-    /// Returns the language instruction to include in AI prompts
-    func getLanguageInstruction(podcastLanguage: String? = nil) -> String {
+    /// Returns the language instruction to include in AI prompts.
+    /// `customLanguageName` is only consulted when `self == .custom`.
+    func getLanguageInstruction(
+        podcastLanguage: String? = nil,
+        customLanguageName: String? = nil
+    ) -> String {
         switch self {
         case .deviceLanguage:
             let preferredLanguage = Locale.preferredLanguages.first ?? "en"
             let languageName = Locale.current.localizedString(forLanguageCode: preferredLanguage) ?? "English"
             return "IMPORTANT: Respond in \(languageName)."
-        case .english:
-            return "IMPORTANT: Respond in English."
         case .matchPodcast:
             if let podcastLang = podcastLanguage, !podcastLang.isEmpty {
                 let languageName = Locale.current.localizedString(forLanguageCode: podcastLang) ?? podcastLang
                 return "IMPORTANT: Respond in \(languageName) (the podcast's language)."
             }
             return "" // No instruction if podcast language unknown
+        case .custom:
+            let trimmed = (customLanguageName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return "" }
+            return "IMPORTANT: Respond in \(trimmed)."
+        default:
+            return "IMPORTANT: Respond in \(rawValue)."
         }
     }
 }
@@ -329,6 +394,13 @@ final class AISettingsManager {
         didSet { saveToKeychain(key: groqKey, for: .groq) }
     }
 
+    /// Optional Bearer token for LM Studio when its "Manage Tokens" auth is on
+    /// (LM Studio 0.4.0+). Empty string disables the Authorization header.
+    /// Stored in Keychain like other provider keys.
+    var lmstudioKey: String {
+        didSet { saveToKeychain(key: lmstudioKey, for: .lmstudio) }
+    }
+
     var selectedOpenAIModel: String {
         didSet { saveSettings() }
     }
@@ -363,6 +435,12 @@ final class AISettingsManager {
 
     var analysisLanguage: AnalysisLanguage {
         didSet { saveSettings() }
+    }
+
+    /// Free-form language name used when `analysisLanguage == .custom`.
+    /// Persisted separately so users can type any language (e.g. "Swiss German").
+    var customAnalysisLanguageName: String {
+        didSet { UserDefaults.standard.set(customAnalysisLanguageName, forKey: "ai_custom_analysis_language") }
     }
 
     var transcriptFormat: TranscriptFormatForAI {
@@ -400,6 +478,11 @@ final class AISettingsManager {
             return [:]
         }
         return hints
+    }
+
+    /// All saved per-podcast format hints, keyed by podcast title. Used by backup export.
+    var allFormatHints: [String: String] {
+        loadFormatHints()
     }
 
     // MARK: - Local Server URLs
@@ -455,6 +538,9 @@ final class AISettingsManager {
             self.analysisLanguage = .deviceLanguage // Default
         }
 
+        // Load custom analysis language name (only meaningful when analysisLanguage == .custom)
+        self.customAnalysisLanguageName = UserDefaults.standard.string(forKey: "ai_custom_analysis_language") ?? ""
+
         // Load transcript format setting
         if let formatString = UserDefaults.standard.string(forKey: "ai_transcript_format"),
            let format = TranscriptFormatForAI(rawValue: formatString) {
@@ -472,6 +558,7 @@ final class AISettingsManager {
         self.geminiKey = Self.loadKeyFromKeychain(for: .gemini)
         self.grokKey = Self.loadKeyFromKeychain(for: .grok)
         self.groqKey = Self.loadKeyFromKeychain(for: .groq)
+        self.lmstudioKey = Self.loadKeyFromKeychain(for: .lmstudio)
     }
 
     // MARK: - Computed Properties
@@ -485,7 +572,8 @@ final class AISettingsManager {
 
     var currentAPIKey: String {
         switch selectedProvider {
-        case .applePCC, .lmstudio, .ollama: return ""
+        case .applePCC, .ollama: return ""
+        case .lmstudio: return lmstudioKey  // optional Bearer token
         case .openai: return openAIKey
         case .claude: return claudeKey
         case .gemini: return geminiKey
@@ -509,7 +597,8 @@ final class AISettingsManager {
 
     func apiKey(for provider: CloudAIProvider) -> String {
         switch provider {
-        case .applePCC, .lmstudio, .ollama: return ""
+        case .applePCC, .ollama: return ""
+        case .lmstudio: return lmstudioKey
         case .openai: return openAIKey
         case .claude: return claudeKey
         case .gemini: return geminiKey
@@ -520,7 +609,8 @@ final class AISettingsManager {
 
     func setAPIKey(_ key: String, for provider: CloudAIProvider) {
         switch provider {
-        case .applePCC, .lmstudio, .ollama: break
+        case .applePCC, .ollama: break
+        case .lmstudio: lmstudioKey = key
         case .openai: openAIKey = key
         case .claude: claudeKey = key
         case .gemini: geminiKey = key

@@ -18,7 +18,7 @@ final class CloudAIService {
     static let shared = CloudAIService()
 
     private let settings = AISettingsManager.shared
-    private let logger = Logger(subsystem: "com.podcastanalyzer", category: "CloudAIService")
+    private let logger = Logger(subsystem: "com.podcast.analyzer", category: "CloudAIService")
 
     // MARK: - Provider Registry
 
@@ -53,7 +53,7 @@ final class CloudAIService {
     private func client(for provider: CloudAIProvider) -> any AIProviderClient {
         switch provider {
         case .lmstudio:
-            return OpenAICompatibleClient.lmStudio(baseURL: settings.lmstudioBaseURL)
+            return LMStudioClient(provider: .lmstudio, baseURL: settings.lmstudioBaseURL)
         case .ollama:
             return OllamaClient(provider: .ollama, baseURL: settings.ollamaBaseURL)
         default:
@@ -102,7 +102,7 @@ final class CloudAIService {
         progressCallback?("Starting Shortcuts analysis...", 0.2)
 
         // Log the language setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         logger.info("Shortcuts Analysis Request - Type: \(analysisType.rawValue), Language setting: \(self.settings.analysisLanguage.rawValue), Instruction: \(languageInstruction.isEmpty ? "None" : languageInstruction)")
 
         // Build the prompt with JSON format
@@ -212,7 +212,7 @@ final class CloudAIService {
     ) async throws -> CloudQAResult {
         progressCallback?("Preparing question for Shortcuts...", 0.2)
 
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\nLanguage: \(languageInstruction)"
 
         // Log the language setting
@@ -293,7 +293,7 @@ final class CloudAIService {
         podcastLanguage: String? = nil,
         formatHint: String? = nil
     ) -> String {
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\nLanguage: \(languageInstruction)"
 
         let formatHintLine: String
@@ -303,13 +303,10 @@ final class CloudAIService {
             formatHintLine = "\n\nNote: If the transcript contains sponsored or advertisement segments, ignore them — do not include ads in topics, takeaways, highlights, or quotes."
         }
 
-        let useTimestamps = settings.transcriptFormat == .segmentBased
-        let quotesSchema = useTimestamps
-            ? #""notableQuotes": [{"text": "quote 1", "timestamp": "MM:SS"}, {"text": "quote 2", "timestamp": "MM:SS"}]"#
-            : #""notableQuotes": ["quote 1", "quote 2"]"#
-        let quotesNote = useTimestamps
-            ? "\nFor each notable quote, include the timestamp where it appears in the transcript. Use MM:SS or H:MM:SS format."
-            : ""
+        // Analyze always uses sentence-based transcripts — QuotesFinder
+        // reattaches timestamps after parsing.
+        let quotesSchema = #""notableQuotes": ["quote 1", "quote 2"]"#
+        let quotesNote = ""
         return """
         You are an expert podcast analyst. Provide a single comprehensive analysis of this podcast episode.
 
@@ -353,7 +350,14 @@ final class CloudAIService {
 
     // MARK: - Streaming Transcript Analysis
 
-    /// Analyze transcript with streaming response
+    /// Analyze transcript with streaming response.
+    ///
+    /// The analyze path always sends a sentence-based (timestamp-free)
+    /// transcript to the model — timestamps are reattached post-hoc by
+    /// `QuotesFinder` using `transcriptSegments`, which keeps prompt tokens
+    /// down without losing the per-quote playback affordance. The user's
+    /// saved `settings.transcriptFormat` is only honoured by the "Copy
+    /// Prompt" preview path (`buildPrompt`).
     func analyzeTranscriptStreaming(
         _ transcript: String,
         episodeTitle: String,
@@ -361,6 +365,7 @@ final class CloudAIService {
         analysisType: CloudAnalysisType,
         podcastLanguage: String? = nil,
         formatHint: String? = nil,
+        transcriptSegments: [QuotesFinder.Segment] = [],
         onChunk: @escaping @Sendable (String) -> Void,
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
     ) async throws -> CloudAnalysisResult {
@@ -368,14 +373,15 @@ final class CloudAIService {
         let apiKey = settings.currentAPIKey
         let model = settings.currentModel
 
-        // Format transcript based on user's preference (segment-based vs sentence-based)
-        let formattedTranscript = settings.transcriptFormat.formatTranscript(transcript)
-        logger.info("Transcript formatted using \(self.settings.transcriptFormat.rawValue) format")
+        // Always sentence-based for AI analysis to minimise prompt tokens.
+        let analyzeFormat: TranscriptFormatForAI = .sentenceBased
+        let formattedTranscript = analyzeFormat.formatTranscript(transcript)
+        logger.info("Analyze using forced \(analyzeFormat.rawValue) format")
 
         // Handle Apple PCC via Shortcuts
         if provider == .applePCC {
             progressCallback?("Preparing for Shortcuts...", 0.2)
-            return try await analyzeWithShortcuts(
+            let result = try await analyzeWithShortcuts(
                 transcript: formattedTranscript,
                 episodeTitle: episodeTitle,
                 podcastTitle: podcastTitle,
@@ -384,6 +390,7 @@ final class CloudAIService {
                 formatHint: formatHint,
                 progressCallback: progressCallback
             )
+            return Self.enrichQuotes(in: result, segments: transcriptSegments)
         }
 
         if provider.requiresAPIKey {
@@ -395,16 +402,22 @@ final class CloudAIService {
         progressCallback?("Preparing analysis...", 0.1)
 
         // Log the language setting for streaming analysis
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         logger.info("Streaming Analysis Request - Provider: \(provider.displayName), Type: \(analysisType.rawValue), Language setting: \(self.settings.analysisLanguage.rawValue), Instruction: \(languageInstruction.isEmpty ? "None" : languageInstruction)")
 
-        let systemPrompt = buildSystemPrompt(for: analysisType, podcastLanguage: podcastLanguage, formatHint: formatHint)
+        let systemPrompt = buildSystemPrompt(
+            for: analysisType,
+            podcastLanguage: podcastLanguage,
+            formatHint: formatHint,
+            transcriptFormatOverride: analyzeFormat
+        )
         let userPrompt = buildUserPrompt(
             transcript: formattedTranscript,
             episodeTitle: episodeTitle,
             podcastTitle: podcastTitle,
             analysisType: analysisType,
-            formatHint: formatHint
+            formatHint: formatHint,
+            transcriptFormatOverride: analyzeFormat
         )
 
         progressCallback?("Connecting to \(provider.displayName)...", 0.15)
@@ -433,13 +446,60 @@ final class CloudAIService {
 
         progressCallback?("Done", 1.0)
 
-        return CloudAnalysisResult(
+        let result = CloudAnalysisResult(
             type: analysisType,
             content: fullResponse,
             parsedAnalysis: parsedAnalysis,
             provider: provider,
             model: model,
             timestamp: Date()
+        )
+        return Self.enrichQuotes(in: result, segments: transcriptSegments)
+    }
+
+    // MARK: - Quote Enrichment
+
+    /// Replace `parsedAnalysis.notableQuotes` with timestamp-enriched copies
+    /// produced by `QuotesFinder`, leaving the rest of the result untouched.
+    private static func enrichQuotes(
+        in result: CloudAnalysisResult,
+        segments: [QuotesFinder.Segment]
+    ) -> CloudAnalysisResult {
+        guard !segments.isEmpty,
+              let parsed = result.parsedAnalysis,
+              !parsed.notableQuotes.isEmpty else {
+            return result
+        }
+
+        let enriched = QuotesFinder.enrich(quotes: parsed.notableQuotes, segments: segments)
+        let updatedParsed = ParsedEpisodeAnalysisResponse(
+            overview: parsed.overview,
+            mainTopics: parsed.mainTopics,
+            keyTakeaways: parsed.keyTakeaways,
+            keyInsights: parsed.keyInsights,
+            targetAudience: parsed.targetAudience,
+            engagementLevel: parsed.engagementLevel,
+            people: parsed.people,
+            organizations: parsed.organizations,
+            products: parsed.products,
+            locations: parsed.locations,
+            resources: parsed.resources,
+            highlights: parsed.highlights,
+            notableQuotes: enriched,
+            actionItems: parsed.actionItems,
+            controversialPoints: parsed.controversialPoints,
+            entertainingMoments: parsed.entertainingMoments,
+            qaHighlights: parsed.qaHighlights,
+            conclusion: parsed.conclusion
+        )
+        return CloudAnalysisResult(
+            type: result.type,
+            content: result.content,
+            parsedAnalysis: updatedParsed,
+            provider: result.provider,
+            model: result.model,
+            timestamp: result.timestamp,
+            jsonParseWarning: result.jsonParseWarning
         )
     }
 
@@ -527,7 +587,7 @@ final class CloudAIService {
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
-            logger.error("JSON parsing failed: \(error.localizedDescription)")
+            logger.error("JSON parsing failed: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }
@@ -568,7 +628,7 @@ final class CloudAIService {
         progressCallback?("Processing question...", 0.2)
 
         // Get language instruction based on user setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
 
         // Log the language setting
@@ -645,11 +705,53 @@ final class CloudAIService {
         )
     }
 
+    // MARK: - Public: Prompt Preview
+
+    /// Assembles the same (system, user) prompt pair that would be sent to a cloud
+    /// provider for `type`, without actually invoking the model. Used by the
+    /// "Copy prompt" affordance so users can paste it into an external tool.
+    ///
+    /// - Parameter transcriptFormatOverride: When non-nil, formats the transcript and
+    ///   tailors timestamp-related instructions to this format instead of the user's
+    ///   saved `settings.transcriptFormat`. Used by the prompt preview sheet so users
+    ///   can toggle timestamps for export without changing their saved setting.
+    func buildPrompt(
+        type: CloudAnalysisType,
+        transcript: String,
+        episodeTitle: String,
+        podcastTitle: String,
+        podcastLanguage: String? = nil,
+        formatHint: String? = nil,
+        transcriptFormatOverride: TranscriptFormatForAI? = nil,
+        plainText: Bool = false
+    ) -> (system: String, user: String) {
+        let effectiveFormat = transcriptFormatOverride ?? settings.transcriptFormat
+        // Match the real analyze path: format the raw SRT into the chosen shape
+        // before embedding it in the user prompt.
+        let formattedTranscript = effectiveFormat.formatTranscript(transcript)
+        let system = buildSystemPrompt(
+            for: type,
+            podcastLanguage: podcastLanguage,
+            formatHint: formatHint,
+            transcriptFormatOverride: effectiveFormat,
+            plainText: plainText
+        )
+        let user = buildUserPrompt(
+            transcript: formattedTranscript,
+            episodeTitle: episodeTitle,
+            podcastTitle: podcastTitle,
+            analysisType: type,
+            formatHint: formatHint,
+            transcriptFormatOverride: effectiveFormat
+        )
+        return (system, user)
+    }
+
     // MARK: - Private: Build Prompts
 
-    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil) -> String {
+    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil, transcriptFormatOverride: TranscriptFormatForAI? = nil, plainText: Bool = false) -> String {
         // Get language instruction based on user setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
 
         let formatHintLine: String
@@ -659,9 +761,25 @@ final class CloudAIService {
             formatHintLine = "\n\nNote: If the transcript contains sponsored or advertisement segments, ignore them — do not include ads in topics, takeaways, highlights, or quotes."
         }
 
+        let effectiveFormat = transcriptFormatOverride ?? settings.transcriptFormat
+
         switch type {
         case .analysis:
-            let useTimestamps = settings.transcriptFormat == .segmentBased
+            let useTimestamps = effectiveFormat == .segmentBased
+
+            // Plain-text variant: a readable answer for users chatting with an LLM
+            // about the episode, rather than the JSON the app parses.
+            if plainText {
+                let quoteTimestampNote = useTimestamps
+                    ? " (include the [MM:SS] timestamp for each quote)"
+                    : ""
+                return """
+                You are an expert podcast analyst. Answer in clear, readable plain text — use short headings and bullet points where helpful. Do NOT return JSON or code blocks; write it as if explaining the episode to a curious listener.
+
+                Cover: a 2–3 paragraph overview; the main topics with their key points; key takeaways and insights; notable people, organizations, products, and resources mentioned; highlights; memorable quotes\(quoteTimestampNote); any action items; and a short conclusion on who would benefit.\(formatHintLine)\(languageLine)
+                """
+            }
+
             let quotesSchema = useTimestamps
                 ? #""notableQuotes": [{"text": "quote 1", "timestamp": "MM:SS"}, {"text": "quote 2", "timestamp": "MM:SS"}]"#
                 : #""notableQuotes": ["quote 1", "quote 2"]"#
@@ -709,7 +827,8 @@ final class CloudAIService {
         episodeTitle: String,
         podcastTitle: String,
         analysisType: CloudAnalysisType,
-        formatHint: String? = nil
+        formatHint: String? = nil,
+        transcriptFormatOverride: TranscriptFormatForAI? = nil
     ) -> String {
         let instruction: String
         switch analysisType {
@@ -717,8 +836,9 @@ final class CloudAIService {
             instruction = "Please provide one complete analysis of this podcast episode, covering summary, topics, entities, highlights, quotes, action items, and conclusion."
         }
 
+        let effectiveFormat = transcriptFormatOverride ?? settings.transcriptFormat
         // When using segment-based format, tell the AI timestamps are present so it uses them
-        let timestampNote = settings.transcriptFormat == .segmentBased
+        let timestampNote = effectiveFormat == .segmentBased
             ? "\nNote: The transcript includes timestamps in [MM:SS] or [H:MM:SS] format. Reference these timestamps when relevant (e.g. for highlights, quotes, and key moments)."
             : ""
 
@@ -869,6 +989,10 @@ enum CloudAIError: LocalizedError {
                 return "Transcript too long. Try a shorter episode or use a model with larger context."
             }
             return "Invalid request: \(message)"
+        case 0:
+            // statusCode 0 is used for non-HTTP failures (e.g. Shortcuts execution).
+            // Show the underlying message directly instead of the misleading "API error (0)" prefix.
+            return message
         default:
             return "API error (\(statusCode)): \(message)"
         }

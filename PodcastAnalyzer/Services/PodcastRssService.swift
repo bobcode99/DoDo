@@ -182,7 +182,7 @@ public actor PodcastRssService {
       episodes: episodes,
       rssUrl: rssUrl,
       imageURL: channel.iTunes?.image?.attributes?.href ?? "",
-      language: channel.language ?? "en-us"
+      language: channel.language ?? ""
     )
   }
 

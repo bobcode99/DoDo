@@ -202,8 +202,18 @@ nonisolated struct GeminiClient: AIProviderClient {
 
             let jsonString = String(line.dropFirst(6))
             guard let data = jsonString.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let candidates = json["candidates"] as? [[String: Any]],
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                continue
+            }
+
+            // Gemini can emit a safety block or quota error as a single
+            // streamed event with no candidate content. Without this check the
+            // loop silently completes and the caller treats it as ".completed".
+            if let message = AIProviderHelpers.extractStreamError(from: json) {
+                throw CloudAIError.apiError(statusCode: 200, message: message)
+            }
+
+            guard let candidates = json["candidates"] as? [[String: Any]],
                   let content = candidates.first?["content"] as? [String: Any],
                   let parts = content["parts"] as? [[String: Any]],
                   let text = parts.first?["text"] as? String else {
@@ -212,6 +222,13 @@ nonisolated struct GeminiClient: AIProviderClient {
 
             fullContent += text
             await MainActor.run { onChunk(fullContent) }
+        }
+
+        if fullContent.isEmpty {
+            throw CloudAIError.apiError(
+                statusCode: 200,
+                message: "Gemini returned an empty response. The prompt may exceed the model's context window or was blocked by a safety filter — try a shorter episode or a different model."
+            )
         }
 
         return fullContent

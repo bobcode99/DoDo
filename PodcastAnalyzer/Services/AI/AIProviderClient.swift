@@ -129,4 +129,30 @@ nonisolated enum AIProviderHelpers {
         }
         return message
     }
+
+    /// Inspect a parsed SSE `data:` JSON payload for an error envelope. Returns the
+    /// human-readable message when the event represents a failure, otherwise `nil`.
+    ///
+    /// Handles the shapes we see in practice:
+    /// - LM Studio / OpenAI-compatible:   `{"error": "..."}`  or  `{"error": {"message": "..."}}`
+    /// - Claude:                          `{"type": "error", "error": {"message": "..."}}`
+    /// - Gemini:                          `{"error": {"message": "..."}}`
+    ///                                    `{"promptFeedback": {"blockReason": "..."}}`
+    /// - Ollama native:                   `{"error": "..."}`
+    static func extractStreamError(from json: [String: Any]) -> String? {
+        if let message = (json["error"] as? [String: Any])?["message"] as? String {
+            return message
+        }
+        if let errorString = json["error"] as? String, !errorString.isEmpty {
+            return errorString
+        }
+        if (json["type"] as? String) == "error" {
+            return (json["error"] as? [String: Any])?["message"] as? String ?? "Stream error"
+        }
+        if let feedback = json["promptFeedback"] as? [String: Any],
+           let reason = feedback["blockReason"] as? String {
+            return "Request blocked: \(reason)"
+        }
+        return nil
+    }
 }

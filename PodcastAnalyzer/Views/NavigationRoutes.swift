@@ -9,12 +9,12 @@
 //  when browsing large podcast episode lists.
 //
 
-import SwiftUI
 
 // MARK: - Episode Detail Route
 
 /// Navigation route that defers EpisodeDetailView construction until the user
 /// actually taps the row. Carrying only value types keeps it cheap to create.
+import SwiftUI
 struct EpisodeDetailRoute: Hashable, Identifiable {
   let episode: PodcastEpisodeInfo
   let podcastTitle: String
@@ -26,12 +26,56 @@ struct EpisodeDetailRoute: Hashable, Identifiable {
   }
 }
 
+// MARK: - macOS sub-page routes
+//
+// On macOS the episode detail is split into three NavigationStack pages
+// (Summary / Transcript / AI Analysis). These routes push the Transcript and
+// AI sub-pages from the Summary landing page.
+
+struct EpisodeTranscriptRoute: Hashable, Identifiable {
+  let episode: PodcastEpisodeInfo
+  let podcastTitle: String
+  let fallbackImageURL: String?
+  let podcastLanguage: String?
+
+  var id: String {
+    "\(podcastTitle)\u{1F}\(episode.id)#transcript"
+  }
+}
+
+struct EpisodeAIAnalysisRoute: Hashable, Identifiable {
+  let episode: PodcastEpisodeInfo
+  let podcastTitle: String
+  let fallbackImageURL: String?
+  let podcastLanguage: String?
+
+  var id: String {
+    "\(podcastTitle)\u{1F}\(episode.id)#ai"
+  }
+}
+
+// MARK: - Up Next List Route
+
+/// Carries episodes to UpNextListView lazily — construction is deferred until navigation.
+struct UpNextListRoute: Hashable {
+  let episodes: [LibraryEpisode]
+
+  static func == (lhs: UpNextListRoute, rhs: UpNextListRoute) -> Bool {
+    lhs.episodes.map(\.id) == rhs.episodes.map(\.id)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(episodes.map(\.id))
+  }
+}
+
 // MARK: - Library Sub-page Routes
 
 /// Identifies which library sub-page to navigate to.
 enum LibrarySubpageRoute: Hashable {
   case saved
   case downloaded
+  case downloadedPodcast(String)
   case latest
   case downloadingEpisodes
 }

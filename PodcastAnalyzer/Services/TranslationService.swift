@@ -159,7 +159,7 @@ actor TranslationService {
 
       return parseAndMergeBilingualSRT(content, into: segments)
     } catch {
-      self.logger.error("Failed to load existing translation: \(error.localizedDescription)")
+      self.logger.error("Failed to load existing translation: \(error.localizedDescription, privacy: .public)")
       return nil
     }
   }

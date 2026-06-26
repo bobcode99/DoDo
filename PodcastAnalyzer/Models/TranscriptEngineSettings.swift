@@ -14,6 +14,7 @@ import OSLog
 enum TranscriptEngine: String, CaseIterable, Identifiable {
     case appleSpeech = "apple_speech"
     case whisper = "whisper"
+    case yapServer = "yap_server"
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum TranscriptEngine: String, CaseIterable, Identifiable {
         switch self {
         case .appleSpeech: "Apple Speech"
         case .whisper: "Whisper (OpenAI)"
+        case .yapServer: "Yap Server"
         }
     }
 
@@ -30,6 +32,8 @@ enum TranscriptEngine: String, CaseIterable, Identifiable {
             "Built-in on-device speech recognition. Fast setup, no extra download required."
         case .whisper:
             "OpenAI Whisper via WhisperKit. Higher accuracy, especially for technical content and accents. Requires model download."
+        case .yapServer:
+            "Remote Apple Speech transcription via a local yap HTTP server. No model download required."
         }
     }
 
@@ -37,6 +41,7 @@ enum TranscriptEngine: String, CaseIterable, Identifiable {
         switch self {
         case .appleSpeech: "waveform"
         case .whisper: "cpu"
+        case .yapServer: "server.rack"
         }
     }
 }
@@ -230,7 +235,7 @@ final class WhisperModelManager {
                 modelStatuses[variant] = .notDownloaded
             } catch {
                 modelStatuses[variant] = .error(error.localizedDescription)
-                logger.error("Whisper model download failed: \(error.localizedDescription)")
+                logger.error("Whisper model download failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -282,4 +287,34 @@ final class WhisperModelManager {
         }
         return total
     }
+}
+
+// MARK: - YapServerSettings
+
+/// Persists connection settings for the local yap transcription server.
+@MainActor
+@Observable
+final class YapServerSettings {
+    static let shared = YapServerSettings()
+
+    var serverURL: String = "http://127.0.0.1:8080"
+    var apiKey: String = ""
+
+    private enum Keys {
+        static let serverURL = "yap_server_url"
+        static let apiKey = "yap_server_api_key"
+    }
+
+    private init() {
+        if let saved = UserDefaults.standard.string(forKey: Keys.serverURL), !saved.isEmpty {
+            serverURL = saved
+        }
+        apiKey = UserDefaults.standard.string(forKey: Keys.apiKey) ?? ""
+    }
+
+    func save() {
+        UserDefaults.standard.set(serverURL, forKey: Keys.serverURL)
+        UserDefaults.standard.set(apiKey, forKey: Keys.apiKey)
+    }
+
 }

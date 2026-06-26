@@ -53,10 +53,10 @@ struct ListeningHistorySummary {
 /// Used by Apple Foundation Models - fits within 4096 token limit
 @Generable
 struct EpisodeRecommendations {
-    @Guide(description: "List of 3-5 recommended episode titles from the available episodes, ordered by relevance")
-    var recommendedTitles: [String]
+    @Guide(description: "The numbers (from the numbered Available episodes list) of the 3-5 best episodes, ordered by relevance")
+    var recommendedNumbers: [Int]
 
-    @Guide(description: "Brief reason for each recommendation")
+    @Guide(description: "Brief reason for each recommended number, in the same order")
     var reasons: [String]
 }
 

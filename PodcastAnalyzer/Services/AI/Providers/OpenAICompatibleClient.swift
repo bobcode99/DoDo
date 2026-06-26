@@ -19,6 +19,10 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
     let modelFilter: (@Sendable (String) -> Bool)?
     /// Custom model sorter for fetchAvailableModels
     let modelSorter: (@Sendable (String, String) -> Bool)?
+    /// Max fetched models to surface (nil = no limit). Cloud providers cap at 10
+    /// so their large catalogs stay manageable; local servers default to nil so
+    /// the user actually sees every model they have available.
+    let modelLimit: Int?
 
     // MARK: - Fetch Models
 
@@ -51,12 +55,22 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
             modelIds.sort(by: sorter)
         }
 
-        return modelIds.isEmpty ? fallbackModels : Array(modelIds.prefix(10))
+        if modelIds.isEmpty { return fallbackModels }
+        if let limit = modelLimit { return Array(modelIds.prefix(limit)) }
+        return modelIds
     }
 
     // MARK: - Ping
 
     func ping(apiKey: String) async throws {
+        // Local servers without a default pingModel (e.g. LM Studio) verify
+        // reachability via /v1/models instead — sending a chat request with
+        // an empty model name fails before we ever reach the server.
+        if pingModel.isEmpty {
+            try await pingViaModelsList(apiKey: apiKey)
+            return
+        }
+
         let chatURL = baseURL
         var request = URLRequest(url: chatURL)
         request.httpMethod = "POST"
@@ -87,6 +101,25 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard json?["choices"] != nil else {
             throw CloudAIError.invalidResponse
+        }
+    }
+
+    private func pingViaModelsList(apiKey: String) async throws {
+        let modelsURL = baseURL.deletingLastPathComponent().appendingPathComponent("models")
+        var request = URLRequest(url: modelsURL)
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CloudAIError.invalidResponse
+        }
+
+        if httpResponse.statusCode != 200 {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw CloudAIError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
         }
     }
 
@@ -146,10 +179,17 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        // Some local servers (notably LM Studio) report failures with HTTP 200 +
+        // an `error` field instead of a 4xx — surface that to the user rather
+        // than masquerading as `invalidResponse`.
+        if let json, let message = AIProviderHelpers.extractStreamError(from: json) {
+            throw CloudAIError.apiError(statusCode: 200, message: message)
+        }
         guard let choices = json?["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
               let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let content = message["content"] as? String,
+              !content.isEmpty else {
             throw CloudAIError.invalidResponse
         }
 
@@ -224,8 +264,21 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
 
             let jsonString = String(line.dropFirst(6))
             guard let data = jsonString.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let choices = json["choices"] as? [[String: Any]],
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                continue
+            }
+
+            // LM Studio surfaces context-length and load-time failures as a 200
+            // response that emits a single `data: {"error": "..."}` SSE event
+            // and closes the stream. Without this check the loop just falls
+            // through and we return an empty `fullContent`, which the caller
+            // happily reports as ".completed". Surface it as an apiError so
+            // the UI shows the actual reason.
+            if let message = AIProviderHelpers.extractStreamError(from: json) {
+                throw CloudAIError.apiError(statusCode: 200, message: message)
+            }
+
+            guard let choices = json["choices"] as? [[String: Any]],
                   let delta = choices.first?["delta"] as? [String: Any],
                   let content = delta["content"] as? String else {
                 continue
@@ -233,6 +286,13 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
 
             fullContent += content
             await MainActor.run { onChunk(fullContent) }
+        }
+
+        if fullContent.isEmpty {
+            throw CloudAIError.apiError(
+                statusCode: 200,
+                message: "\(provider.displayName) returned an empty response. The prompt may exceed the model's context window — try a shorter episode or a model with a larger context."
+            )
         }
 
         return fullContent
@@ -260,7 +320,8 @@ extension OpenAICompatibleClient {
                 if a.contains("4o") && !b.contains("4o") { return true }
                 if !a.contains("4o") && b.contains("4o") { return false }
                 return a < b
-            }
+            },
+            modelLimit: 10
         )
     }
 
@@ -282,7 +343,8 @@ extension OpenAICompatibleClient {
                 if a.contains("90b") && !b.contains("90b") { return true }
                 if !a.contains("90b") && b.contains("90b") { return false }
                 return a > b
-            }
+            },
+            modelLimit: 10
         )
     }
 
@@ -303,10 +365,16 @@ extension OpenAICompatibleClient {
                 if a.contains("3") && !b.contains("3") { return true }
                 if !a.contains("3") && b.contains("3") { return false }
                 return a > b
-            }
+            },
+            modelLimit: 10
         )
     }
 
+    /// LM Studio's OpenAI-compatible endpoint. Auth is optional: when the user
+    /// has not enabled "Manage Tokens" in LM Studio, pass an empty apiKey and
+    /// the client skips the Authorization header. modelLimit is nil so users
+    /// see every model installed locally (cloud providers cap at 10 to hide
+    /// large catalogs, but LM Studio users explicitly chose what to install).
     static func lmStudio(baseURL: URL) -> OpenAICompatibleClient {
         OpenAICompatibleClient(
             provider: .lmstudio,
@@ -316,7 +384,8 @@ extension OpenAICompatibleClient {
             requiresAPIKey: false,
             pingModel: "",
             modelFilter: nil,
-            modelSorter: nil
+            modelSorter: nil,
+            modelLimit: nil
         )
     }
 }

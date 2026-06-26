@@ -8,7 +8,7 @@
 import Foundation
 import Speech
 
-@available(iOS 17.0, *)
+@available(iOS 26.0, *)
 nonisolated enum SRTFormatter {
 
   /// Formats a TimeInterval into SRT time format (HH:MM:SS,mmm)
@@ -28,6 +28,8 @@ nonisolated enum SRTFormatter {
   }
 
   /// Converts transcript segments (with audioTimeRange attributes) into SRT format.
+  /// Uses `formatTimeSafe` because Apple Speech can hand back NaN audio time
+  /// ranges and `Int(.nan)` traps.
   static func format(segments: [AttributedString]) -> String {
     let srtEntries = segments.enumerated().compactMap { index, segment -> String? in
       guard let timeRange = segment.audioTimeRange else { return nil }
@@ -36,8 +38,8 @@ nonisolated enum SRTFormatter {
       guard !text.isEmpty else { return nil }
 
       let entryNumber = index + 1
-      let startTime = formatTime(timeRange.start.seconds)
-      let endTime = formatTime(timeRange.end.seconds)
+      let startTime = formatTimeSafe(timeRange.start.seconds)
+      let endTime = formatTimeSafe(timeRange.end.seconds)
 
       return "\(entryNumber)\n\(startTime) --> \(endTime)\n\(text)"
     }

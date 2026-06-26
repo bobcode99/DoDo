@@ -6,9 +6,9 @@
 //  Users can create Shortcuts that use Apple Intelligence to analyze transcripts
 //
 
+import SwiftData
 import AppIntents
 import Foundation
-import SwiftData
 
 // MARK: - Import Podcasts Intent
 
@@ -294,27 +294,23 @@ struct SaveAnalysisResultIntent: AppIntent {
     @Parameter(title: "Analysis Result", description: "The AI-generated analysis text")
     var analysisResult: String
 
-    @Parameter(title: "Episode Audio URL", description: "The episode identifier (audio URL)")
-    var episodeAudioURL: String
-
     @Parameter(title: "Analysis Type", description: "Type of analysis performed")
     var analysisType: AnalysisTypeEntity
 
     func perform() async throws -> some IntentResult {
         // Save the result to the shared cache or notify the app
-        await saveAnalysisResult(analysisResult, for: episodeAudioURL, type: analysisType.type)
+        await saveAnalysisResult(analysisResult, type: analysisType.type)
         return .result()
     }
 
     @MainActor
-    private func saveAnalysisResult(_ result: String, for episodeURL: String, type: ShortcutAnalysisType) {
+    private func saveAnalysisResult(_ result: String, type: ShortcutAnalysisType) {
         // Post notification with the result
         NotificationCenter.default.post(
             name: .shortcutsAnalysisCompleted,
             object: nil,
             userInfo: [
                 "result": result,
-                "episodeURL": episodeURL,
                 "analysisType": type.rawValue
             ]
         )
@@ -372,33 +368,24 @@ struct AnalysisTypeQuery: EntityQuery {
 
 /// Intent to play the last episode or resume playback
 @available(iOS 16.0, macOS 13.0, *)
-struct PlayLastEpisodeIntent: AppIntent {
+struct PlayLastEpisodeIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Play My Podcast"
     static let description = IntentDescription(
         "Resume playback of the last podcast episode or start a new one"
     )
 
-    static let openAppWhenRun: Bool = true
+    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        let audioManager = EnhancedAudioManager.shared
-
-        // If nothing is loaded, try to restore the last episode
-        if audioManager.currentEpisode == nil {
-            audioManager.restoreLastEpisode()
-        }
-
-        // Resume playback
-        audioManager.resume()
-
+        SiriPlaybackController.play()
         return .result()
     }
 }
 
 /// Intent to play or pause the current episode
 @available(iOS 16.0, macOS 13.0, *)
-struct PlayPauseIntent: AppIntent {
+struct PlayPauseIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Play/Pause Podcast"
     static let description = IntentDescription(
         "Toggle playback of the current podcast episode"
@@ -408,25 +395,14 @@ struct PlayPauseIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        let audioManager = EnhancedAudioManager.shared
-
-        if audioManager.isPlaying {
-            audioManager.pause()
-        } else {
-            // If nothing is loaded, try to restore the last episode first
-            if audioManager.currentEpisode == nil {
-                audioManager.restoreLastEpisode()
-            }
-            audioManager.resume()
-        }
-
+        SiriPlaybackController.togglePlayPause()
         return .result()
     }
 }
 
 /// Intent to pause playback
 @available(iOS 16.0, macOS 13.0, *)
-struct PausePodcastIntent: AppIntent {
+struct PausePodcastIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Pause Podcast"
     static let description = IntentDescription(
         "Pause the currently playing podcast episode"
@@ -436,14 +412,14 @@ struct PausePodcastIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        EnhancedAudioManager.shared.pause()
+        SiriPlaybackController.pause()
         return .result()
     }
 }
 
 /// Intent to skip forward in the current episode
 @available(iOS 16.0, macOS 13.0, *)
-struct SkipForwardIntent: AppIntent {
+struct SkipForwardIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Skip Forward"
     static let description = IntentDescription(
         "Skip forward 15 seconds in the current episode"
@@ -453,14 +429,14 @@ struct SkipForwardIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        EnhancedAudioManager.shared.skipForward()
+        SiriPlaybackController.skipForward()
         return .result()
     }
 }
 
 /// Intent to skip backward in the current episode
 @available(iOS 16.0, macOS 13.0, *)
-struct SkipBackwardIntent: AppIntent {
+struct SkipBackwardIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Skip Backward"
     static let description = IntentDescription(
         "Skip backward 15 seconds in the current episode"
@@ -470,8 +446,199 @@ struct SkipBackwardIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        EnhancedAudioManager.shared.skipBackward()
+        SiriPlaybackController.skipBackward()
         return .result()
+    }
+}
+
+// MARK: - Podcast App Entity (Siri: "Play <Podcast Name> in DoDo")
+
+/// Lightweight Sendable snapshot of a subscribed podcast, suitable for
+/// passing across the AppIntents boundary. The id is the RSS URL — stable
+/// across renames and matches `PodcastInfo.id`.
+@available(iOS 16.0, macOS 13.0, *)
+struct PodcastAppEntity: AppEntity, Sendable {
+    var id: String
+    var title: String
+    var imageURL: String
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation {
+        TypeDisplayRepresentation(name: "Podcast")
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)")
+    }
+
+    static var defaultQuery: PodcastEntityQuery { PodcastEntityQuery() }
+}
+
+@available(iOS 16.0, macOS 13.0, *)
+struct PodcastEntityQuery: EntityQuery, EntityStringQuery {
+    @MainActor
+    func entities(for identifiers: [String]) async throws -> [PodcastAppEntity] {
+        let needles = Set(identifiers)
+        return try AppIntentsModelStore.fetchSubscribed { models in
+            models
+                .filter { needles.contains($0.rssUrl) }
+                .map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
+        }
+    }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [PodcastAppEntity] {
+        let needle = string.lowercased()
+        return try AppIntentsModelStore.fetchSubscribed { models in
+            models
+                .filter { $0.title.lowercased().contains(needle) }
+                .map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
+        }
+    }
+
+    @MainActor
+    func suggestedEntities() async throws -> [PodcastAppEntity] {
+        try AppIntentsModelStore.fetchSubscribed { models in
+            models.map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
+        }
+    }
+}
+
+/// Intent: play the latest episode of a specific subscribed podcast by name.
+/// Resumes from the last saved playback position if any; otherwise starts fresh.
+@available(iOS 16.0, macOS 13.0, *)
+struct PlayPodcastByNameIntent: AudioPlaybackIntent {
+    static let title: LocalizedStringResource = "Play Podcast"
+    static let description = IntentDescription(
+        "Play the latest episode of a specific subscribed podcast"
+    )
+
+    static let openAppWhenRun: Bool = false
+
+    @Parameter(title: "Podcast")
+    var podcast: PodcastAppEntity
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Play \(\.$podcast)")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        guard let container = AppIntentsModelStore.container else { return .result() }
+        let context = container.mainContext
+
+        let rssUrl = podcast.id
+        let podcastDescriptor = FetchDescriptor<PodcastInfoModel>(
+            predicate: #Predicate<PodcastInfoModel> { $0.rssUrl == rssUrl }
+        )
+        guard let model = try? context.fetch(podcastDescriptor).first else { return .result() }
+
+        let sortedEpisodes = model.podcastInfo.episodes.sorted {
+            ($0.pubDate ?? .distantPast) > ($1.pubDate ?? .distantPast)
+        }
+        guard let latest = sortedEpisodes.first(where: { ($0.audioURL ?? "").isEmpty == false }),
+              let audioURL = latest.audioURL else { return .result() }
+
+        // Resume from saved position if any.
+        let podcastTitle = model.title
+        let episodeTitle = latest.title
+        let episodeKey = "\(podcastTitle)\u{1F}\(episodeTitle)"
+        var startTime: TimeInterval = 0
+        let downloadDescriptor = FetchDescriptor<EpisodeDownloadModel>(
+            predicate: #Predicate<EpisodeDownloadModel> { $0.id == episodeKey }
+        )
+        if let saved = try? context.fetch(downloadDescriptor).first, !saved.isCompleted {
+            startTime = saved.lastPlaybackPosition
+        }
+
+        let playbackEpisode = PlaybackEpisode(
+            id: latest.id,
+            title: latest.title,
+            podcastTitle: podcastTitle,
+            audioURL: audioURL,
+            imageURL: latest.imageURL ?? model.podcastInfo.imageURL,
+            episodeDescription: latest.podcastEpisodeDescription,
+            pubDate: latest.pubDate,
+            duration: latest.duration,
+            guid: latest.guid
+        )
+
+        EnhancedAudioManager.shared.play(
+            episode: playbackEpisode,
+            audioURL: audioURL,
+            startTime: startTime,
+            imageURL: playbackEpisode.imageURL,
+            useDefaultSpeed: startTime == 0
+        )
+
+        return .result()
+    }
+}
+
+/// Lazy, process-wide ModelContainer for AppIntents that need to read podcasts
+/// outside the App's `.modelContainer` injection. The on-disk store is shared
+/// with the main app — this just gives intents a way to fetch without
+/// reaching into PodcastAnalyzerApp.
+@MainActor
+private enum AppIntentsModelStore {
+    static let container: ModelContainer? = {
+        let schema = Schema([
+            PodcastInfoModel.self,
+            EpisodeDownloadModel.self,
+            EpisodeAIAnalysis.self,
+            EpisodeQuickTagsModel.self,
+            QueueItemModel.self,
+        ])
+        let config = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .none
+        )
+        return try? ModelContainer(for: schema, configurations: [config])
+    }()
+
+    static func fetchSubscribed<T: Sendable>(
+        _ transform: ([PodcastInfoModel]) -> T
+    ) throws -> T {
+        guard let container else { return transform([]) }
+        let context = container.mainContext
+        let descriptor = FetchDescriptor<PodcastInfoModel>(
+            predicate: #Predicate<PodcastInfoModel> { $0.isSubscribed },
+            sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
+        )
+        let models = (try? context.fetch(descriptor)) ?? []
+        return transform(models)
+    }
+}
+
+@MainActor
+private enum SiriPlaybackController {
+    static func play() {
+        let audioManager = EnhancedAudioManager.shared
+        if audioManager.currentEpisode == nil {
+            audioManager.restoreLastEpisode()
+        }
+        audioManager.resume()
+    }
+
+    static func togglePlayPause() {
+        let audioManager = EnhancedAudioManager.shared
+        if audioManager.isPlaying {
+            audioManager.pause()
+        } else {
+            play()
+        }
+    }
+
+    static func pause() {
+        EnhancedAudioManager.shared.pause()
+    }
+
+    static func skipForward() {
+        EnhancedAudioManager.shared.skipForward()
+    }
+
+    static func skipBackward() {
+        EnhancedAudioManager.shared.skipBackward()
     }
 }
 
@@ -486,17 +653,40 @@ struct PodcastAnalyzerShortcuts: AppShortcutsProvider {
                 "Play my podcast with \(.applicationName)",
                 "Resume podcast in \(.applicationName)",
                 "Play podcast using \(.applicationName)",
-                "Continue listening with \(.applicationName)"
+                "Continue listening with \(.applicationName)",
+                "Resume playback with \(.applicationName)",
+                "Play the current podcast in \(.applicationName)"
             ],
             shortTitle: "Play Podcast",
             systemImageName: "play.fill"
         )
 
         AppShortcut(
+            intent: PlayPodcastByNameIntent(),
+            phrases: [
+                // Reserved verb pattern: ALL "Play <X>" utterances must route to the
+                // literal PlayLastEpisodeIntent ("Play podcast using DoDo" → resume).
+                // Any "Play \(\.$podcast)" template here causes Siri's NL matcher to
+                // fuzzy-extract the literal word "podcast" as a parameter value and
+                // prompt "Which one?". Use "Listen to" / "Open" verbs instead — they
+                // are exclusive to the parameterized intent and never collide.
+                "Listen to \(\.$podcast) in \(.applicationName)",
+                "Listen to \(\.$podcast) on \(.applicationName)",
+                "Listen to \(\.$podcast) using \(.applicationName)",
+                "Open \(\.$podcast) in \(.applicationName)",
+                "Open \(\.$podcast) on \(.applicationName)"
+            ],
+            shortTitle: "Listen to Podcast",
+            systemImageName: "play.circle.fill"
+        )
+
+        AppShortcut(
             intent: PlayPauseIntent(),
             phrases: [
                 "Play pause \(.applicationName)",
-                "Toggle playback in \(.applicationName)"
+                "Toggle playback in \(.applicationName)",
+                "Play or pause \(.applicationName)",
+                "Control podcast playback in \(.applicationName)"
             ],
             shortTitle: "Play/Pause",
             systemImageName: "playpause.fill"
@@ -506,10 +696,34 @@ struct PodcastAnalyzerShortcuts: AppShortcutsProvider {
             intent: PausePodcastIntent(),
             phrases: [
                 "Pause \(.applicationName)",
-                "Stop podcast in \(.applicationName)"
+                "Pause podcast in \(.applicationName)",
+                "Stop podcast in \(.applicationName)",
+                "Pause playback in \(.applicationName)"
             ],
             shortTitle: "Pause",
             systemImageName: "pause.fill"
+        )
+
+        AppShortcut(
+            intent: SkipForwardIntent(),
+            phrases: [
+                "Skip forward in \(.applicationName)",
+                "Skip ahead in \(.applicationName)",
+                "Fast forward podcast in \(.applicationName)"
+            ],
+            shortTitle: "Skip Forward",
+            systemImageName: "goforward.15"
+        )
+
+        AppShortcut(
+            intent: SkipBackwardIntent(),
+            phrases: [
+                "Skip backward in \(.applicationName)",
+                "Go back in \(.applicationName)",
+                "Rewind podcast in \(.applicationName)"
+            ],
+            shortTitle: "Skip Backward",
+            systemImageName: "gobackward.15"
         )
 
         AppShortcut(

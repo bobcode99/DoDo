@@ -16,6 +16,18 @@ struct SettingsView: View {
   @State private var showOPMLImporter = false
   @State private var opmlImportMessage: String?
 
+  @AppStorage("allowCellularAutoDownload") private var allowCellularAutoDownload = false
+  @AppStorage("allowAutoDownloadOnBattery") private var allowAutoDownloadOnBattery = false
+  @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
+
+  private let cacheLimitOptions: [(label: String, value: Int)] = [
+    ("Unlimited", 0),
+    ("5 episodes", 5),
+    ("10 episodes", 10),
+    ("25 episodes", 25),
+    ("50 episodes", 50)
+  ]
+
   private let playbackSpeeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
   private let skipIntervalOptions: [Int] = [5, 10, 15, 20, 30, 45, 60]
 
@@ -103,6 +115,68 @@ struct SettingsView: View {
           } else {
             Text("Automatically check for new episodes every 4 hours")
           }
+        }
+
+        // MARK: - Auto-Transcribe
+        Section {
+          NavigationLink(destination: AutoTranscribeManagementView()) {
+            HStack {
+              Image(systemName: "waveform.badge.plus")
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+              Text("Auto-transcribe Podcasts")
+            }
+          }
+        } footer: {
+          Text("Manage which podcasts auto-transcribe new episodes. Engine is resolved at run time: YAP server when configured, otherwise local (gated by charging).")
+        }
+
+        // MARK: - Auto-Download Section
+        Section {
+          Toggle(isOn: $allowCellularAutoDownload) {
+            HStack {
+              Image(systemName: "antenna.radiowaves.left.and.right")
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Download on Cellular")
+                Text("Allow auto-downloads when not on Wi-Fi")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+
+          Toggle(isOn: $allowAutoDownloadOnBattery) {
+            HStack {
+              Image(systemName: "battery.50")
+                .foregroundStyle(.green)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Download on Battery")
+                Text("Allow auto-downloads when not charging")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+
+          Picker(selection: $episodeCacheLimit) {
+            ForEach(cacheLimitOptions, id: \.value) { option in
+              Text(option.label).tag(option.value)
+            }
+          } label: {
+            HStack {
+              Image(systemName: "archivebox")
+                .foregroundStyle(.orange)
+                .frame(width: 24)
+              Text("Episode Cache Limit")
+            }
+          }
+        } header: {
+          Text("Auto-Download")
+        } footer: {
+          Text("Per-podcast settings (Always / Never / Use Global) are in each podcast's context menu. Cache limit caps total auto-downloaded episodes; 0 = unlimited.")
         }
 
         // MARK: - Appearance Section
@@ -363,7 +437,7 @@ struct SettingsView: View {
 
           // Language picker (applies to both engines)
           Picker(selection: $viewModel.selectedTranscriptLocale) {
-            ForEach(SettingsViewModel.availableTranscriptLocales) { locale in
+            ForEach(SettingsViewModel.locales(for: viewModel.selectedTranscriptEngine)) { locale in
               Text(locale.name).tag(locale.id)
             }
           } label: {
@@ -376,6 +450,24 @@ struct SettingsView: View {
           }
           .onChange(of: viewModel.selectedTranscriptLocale) { _, newValue in
             viewModel.setSelectedTranscriptLocale(newValue)
+          }
+
+          // Per-podcast "Show Format" / context terms — bias recognition toward
+          // each show's names + jargon, and feed the same value to AI analysis.
+          NavigationLink {
+            TranscriptContextManagementView()
+          } label: {
+            HStack {
+              Image(systemName: "character.book.closed")
+                .foregroundStyle(.teal)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Transcription Context")
+                Text("Per-podcast names & jargon to improve accuracy")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
           }
 
           // Apple Speech model status (only shown when engine = appleSpeech)
@@ -409,18 +501,84 @@ struct SettingsView: View {
               }
             }
           }
+
+          Toggle(isOn: Binding(
+            get: { SubtitleSettingsManager.shared.enableMusicDetection },
+            set: { SubtitleSettingsManager.shared.enableMusicDetection = $0 }
+          )) {
+            HStack {
+              Image(systemName: "music.note")
+                .foregroundStyle(.pink)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Detect Music")
+                Text("Mark music ranges as [♪ Music] instead of transcribing them")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+
+          if SubtitleSettingsManager.shared.enableMusicDetection {
+            Picker(selection: Binding(
+              get: { SubtitleSettingsManager.shared.musicDetectionSensitivity },
+              set: { SubtitleSettingsManager.shared.musicDetectionSensitivity = $0 }
+            )) {
+              ForEach(MusicDetectionSensitivity.allCases, id: \.self) { level in
+                Text(level.displayName).tag(level)
+              }
+            } label: {
+              HStack {
+                Image(systemName: "dial.medium")
+                  .foregroundStyle(.pink)
+                  .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                  Text("Music Sensitivity")
+                  Text("Higher = stricter; lower catches faint music")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+              }
+            }
+          }
+
+          Toggle(isOn: Binding(
+            get: { SubtitleSettingsManager.shared.splitLongAudio },
+            set: { SubtitleSettingsManager.shared.splitLongAudio = $0 }
+          )) {
+            HStack {
+              Image(systemName: "square.split.2x1")
+                .foregroundStyle(.pink)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Split Long Audio")
+                Text("Transcribe in parallel parts (faster); off = one single-pass run")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
         } header: {
           Text("Transcript")
         } footer: {
-          Text(viewModel.selectedTranscriptEngine == .whisper
-            ? "Whisper models are downloaded once and stored on device. Larger models produce more accurate transcripts."
-            : "Download the Apple Speech model for your preferred language. Each podcast uses its own language from the RSS feed."
-          )
+          switch viewModel.selectedTranscriptEngine {
+          case .whisper:
+            Text("Whisper models are downloaded once and stored on device. Larger models produce more accurate transcripts.")
+          case .yapServer:
+            Text("Yap Server uses a local HTTP service wrapping Apple Speech. No model download required.")
+          case .appleSpeech:
+            Text("Download the Apple Speech model for your preferred language. Each podcast uses its own language from the RSS feed.")
+          }
         }
 
         // MARK: - Whisper Models Section (only shown when Whisper engine selected)
         if viewModel.selectedTranscriptEngine == .whisper {
           WhisperModelsSection()
+        }
+
+        // MARK: - Yap Server Section (only shown when Yap Server engine selected)
+        if viewModel.selectedTranscriptEngine == .yapServer {
+          YapServerSection()
         }
 
         // MARK: - AI Settings Section
@@ -501,6 +659,26 @@ struct SettingsView: View {
         } header: {
           Text("About")
         }
+
+        #if DEBUG
+        // MARK: - Debug Section
+        Section {
+          NavigationLink {
+            ShortcutsDebugView()
+          } label: {
+            HStack {
+              Image(systemName: "ladybug.fill")
+                .foregroundStyle(.red)
+                .frame(width: 24)
+              Text("Shortcuts Debug")
+            }
+          }
+        } header: {
+          Text("Debug")
+        } footer: {
+          Text("Validate the SaveAnalysisResultIntent App Intent and observe the notification flow.")
+        }
+        #endif
 
         // MARK: - Language Section
         Section {

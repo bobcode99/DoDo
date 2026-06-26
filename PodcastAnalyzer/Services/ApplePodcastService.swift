@@ -77,7 +77,7 @@ struct AppleRSSFeed: Decodable {
     let results: [AppleRSSPodcast]
 }
 
-struct AppleRSSPodcast: Decodable, Identifiable, Hashable {
+struct AppleRSSPodcast: Codable, Identifiable, Hashable {
     static func == (lhs: AppleRSSPodcast, rhs: AppleRSSPodcast) -> Bool {
         lhs.id == rhs.id
     }
@@ -101,7 +101,7 @@ struct AppleRSSPodcast: Decodable, Identifiable, Hashable {
     }
 }
 
-struct AppleRSSGenre: Decodable {
+struct AppleRSSGenre: Codable {
     let genreId: String
     let name: String
     let url: String
@@ -174,7 +174,7 @@ class ApplePodcastService: Sendable {
             } catch {
                 // Log and skip malformed items instead of failing completely
                 let name = item["name"] as? String ?? "unknown"
-                logger.warning("Skipping malformed podcast at index \(index) (\(name)): \(error.localizedDescription)")
+                logger.warning("Skipping malformed podcast at index \(index) (\(name)): \(error.localizedDescription, privacy: .public)")
             }
         }
 

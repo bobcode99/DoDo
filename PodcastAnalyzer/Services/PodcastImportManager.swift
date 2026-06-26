@@ -80,7 +80,7 @@ class PodcastImportManager {
                 case .skipped: skipped += 1
                 }
             } catch {
-                logger.error("Failed to import \(rssURL): \(error.localizedDescription)")
+                logger.error("Failed to import \(rssURL): \(error.localizedDescription, privacy: .public)")
                 failed += 1
                 failedPodcasts.append(rssURL)
             }

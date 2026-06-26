@@ -11,6 +11,7 @@ import SwiftUI
 enum TabIdentifier: Int {
   case home
   case library
+  case analysis
   case settings
   case search
 }
@@ -19,6 +20,7 @@ enum TabIdentifier: Int {
 final class TabNavigationCoordinator {
   var homeRouter = TabRouter()
   var libraryRouter = TabRouter()
+  var analysisRouter = TabRouter()
   var settingsRouter = TabRouter()
   var searchRouter = TabRouter()
 
@@ -36,6 +38,7 @@ final class TabNavigationCoordinator {
     switch tab {
     case .home: homeRouter
     case .library: libraryRouter
+    case .analysis: analysisRouter
     case .settings: settingsRouter
     case .search: searchRouter
     }

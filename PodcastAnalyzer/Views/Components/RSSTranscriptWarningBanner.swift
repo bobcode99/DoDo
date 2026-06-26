@@ -2,41 +2,41 @@
 //  RSSTranscriptWarningBanner.swift
 //  PodcastAnalyzer
 //
-//  Warning banner for RSS-sourced transcripts that may have DAI timestamp drift.
-//  Shows an optional regenerate button when local audio is available.
+//  Slim notice for RSS-sourced transcripts where Dynamic Ad Insertion may
+//  cause timestamps to drift from playback. Inline Regenerate link when
+//  local audio is available.
 //
 
 import SwiftUI
 
-/// Displays a warning banner for RSS-sourced transcripts where Dynamic Ad Insertion
-/// may cause transcript timestamps to drift from actual audio playback position.
 struct RSSTranscriptWarningBanner: View {
     @Binding var showRegenerateConfirmation: Bool
     var hasLocalAudio: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.caption)
-                Text("Timestamps may not match if episode includes ads")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if hasLocalAudio {
-                    Button("Regenerate", systemImage: "waveform.badge.mic") {
-                        showRegenerateConfirmation = true
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.blue)
-                    .labelStyle(.titleAndIcon)
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+            Text("Timestamps may drift if the episode includes ads")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            if hasLocalAudio {
+                Button {
+                    showRegenerateConfirmation = true
+                } label: {
+                    Text("Regenerate")
+                        .font(.caption.weight(.semibold))
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+                .accessibilityLabel("Regenerate transcript from local audio")
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial)
-            Divider()
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.1))
     }
 }

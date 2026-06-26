@@ -5,13 +5,16 @@
 //  Created by Bob on 2025/11/12.
 //
 
+import AppIntents
+import OSLog
+import Speech
 import SwiftData
 import SwiftUI
-import OSLog
 import WidgetKit
-import Speech
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 private let logger = Logger(subsystem: "com.podcast.analyzer", category: "App")
@@ -20,6 +23,18 @@ private let logger = Logger(subsystem: "com.podcast.analyzer", category: "App")
 struct PodcastAnalyzerApp: App {
   @Environment(\.scenePhase) private var scenePhase
   @State private var languageManager = LanguageManager.shared
+
+  /// Whether to auto-present the expanded player when the user brings the app
+  /// to the foreground while it is still playing. This is how Apple Podcasts
+  /// makes tapping the Dynamic Island / Now Playing controls land on the
+  /// player: iOS gives no "opened from Now Playing" signal, so we approximate
+  /// it by opening the player whenever a playing app is foregrounded.
+  @AppStorage("openPlayerOnReturnToPlayback") private var openPlayerOnReturnToPlayback = true
+
+  /// Captured at backgrounding so we only auto-open the player when the app
+  /// was *actively playing* as it left (and still is on return) — not on cold
+  /// launches or returns from a paused state.
+  @State private var wasPlayingOnBackground = false
 
   let sharedModelContainer: ModelContainer = {
     let schema = Schema([
@@ -38,8 +53,23 @@ struct PodcastAnalyzerApp: App {
     do {
       return try ModelContainer(for: schema, configurations: [modelConfiguration])
     } catch {
-      logger.error("ModelContainer init failed: \(error.localizedDescription)")
-      fatalError("Could not create ModelContainer: \(error)")
+      // The project intentionally ships no schema migrations — a schema change
+      // is allowed to reset the local store (see CLAUDE.md). Rather than brick
+      // the app on a migration failure, delete the incompatible store (and its
+      // -wal/-shm sidecars) and rebuild it from scratch. This is what makes
+      // future schema changes (indexes, #Unique, new properties) safe to ship.
+      logger.error("ModelContainer init failed, rebuilding store: \(error.localizedDescription, privacy: .public)")
+      let storeURL = modelConfiguration.url
+      let fm = FileManager.default
+      try? fm.removeItem(at: storeURL)
+      try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-wal"))
+      try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-shm"))
+      do {
+        return try ModelContainer(for: schema, configurations: [modelConfiguration])
+      } catch {
+        logger.error("ModelContainer rebuild failed: \(error.localizedDescription, privacy: .public)")
+        fatalError("Could not create ModelContainer even after store reset: \(error)")
+      }
     }
   }()
 
@@ -50,8 +80,11 @@ struct PodcastAnalyzerApp: App {
     // Register background task for episode sync
     BackgroundSyncManager.registerBackgroundTask()
 
-    // Export previous session's os.log entries to Documents/Logs
-    PersistentLogService.shared.exportLogsInBackground()
+    // Eagerly start NWPathMonitor at launch. NetworkMonitor.shared is lazy
+    // (singleton), and its `isConnected` defaults to false until the first
+    // path update fires — touching it here kicks off monitoring during init
+    // so playback gating later sees an accurate value.
+    _ = NetworkMonitor.shared
   }
 
   var body: some Scene {
@@ -76,14 +109,31 @@ struct PodcastAnalyzerApp: App {
           // Deferred: non-critical managers initialized after first frame
           PodcastImportManager.shared.setModelContainer(sharedModelContainer)
           NotificationNavigationManager.shared.setModelContainer(sharedModelContainer)
+          DownloadManager.shared.setModelContainer(sharedModelContainer)
+          TranscriptManager.shared.setModelContainer(sharedModelContainer)
 
           // Migrate flat caption files to podcast subfolders (one-time, safe to re-run)
           Task.detached(priority: .utility) {
             await FileStorageManager.shared.migrateFlatCaptionFilesToSubfolders()
           }
 
+          // macOS: embed the MCP HTTP server and set up the menubar controller.
+          // Both honor the user's Preferences toggles; neither runs unless asked.
+          #if os(macOS)
+          MCPServerManager.shared.bootstrap(modelContainer: sharedModelContainer)
+          MCPMenubarController.shared.bootstrap()
+          if UserDefaults.standard.bool(forKey: MCPMenubarController.keyHeadless) {
+            NSApp.setActivationPolicy(.accessory)
+          }
+          #endif
+
           // Handle any pending widget toggle (pause) flag from cold launch.
           EnhancedAudioManager.shared.handleWidgetToggleOnActive()
+
+          // Force Siri to re-read AppShortcut phrases + suggested entities so
+          // phrase mappings stay current after a fresh install or app update.
+          // Cheap to call; no-op on Siri's side if nothing changed.
+          PodcastAnalyzerShortcuts.updateAppShortcutParameters()
 
           // Request critical permissions early so they don't interrupt mid-session
           #if os(iOS)
@@ -109,7 +159,7 @@ struct PodcastAnalyzerApp: App {
             queue: .main
           ) { _ in
             Task { @MainActor in
-              ImageCacheUtility.clearMemoryCache()
+              ImageCacheUtility.clearAllCache()
               await RSSCacheService.shared.clearAllCache()
               logger.warning("Low memory warning: cleared image and RSS caches")
             }
@@ -133,12 +183,39 @@ struct PodcastAnalyzerApp: App {
         if BackgroundSyncManager.shared.isBackgroundSyncEnabled {
           BackgroundSyncManager.shared.startForegroundSync()
         }
+        #if os(iOS)
+        // Returned to a still-playing app (e.g. tapped the Dynamic Island /
+        // Now Playing controls) → surface the expanded player, Apple Podcasts
+        // style. handleWidgetToggleOnActive() above already applied any pending
+        // pause, so isPlaying here reflects the real post-activation state.
+        if openPlayerOnReturnToPlayback,
+           wasPlayingOnBackground,
+           EnhancedAudioManager.shared.isPlaying,
+           EnhancedAudioManager.shared.currentEpisode != nil {
+          Task { @MainActor in
+            // Let the foreground transition settle before presenting the sheet.
+            try? await Task.sleep(for: .milliseconds(350))
+            NotificationNavigationManager.shared.requestExpandPlayer()
+          }
+        }
+        wasPlayingOnBackground = false
+        #endif
       case .background:
         // App going to background - stop foreground timer, schedule background task
         BackgroundSyncManager.shared.stopForegroundSync()
         if BackgroundSyncManager.shared.isBackgroundSyncEnabled {
           BackgroundSyncManager.shared.scheduleBackgroundRefresh()
         }
+        // Export this session's os.log entries to Documents/Logs now, while the
+        // process is still alive. OSLogStore(.currentProcessIdentifier) can only
+        // see the current process, so this must run at the end of a session — not
+        // at launch, when nothing has been logged yet.
+        PersistentLogService.shared.exportLogsInBackground()
+        #if os(iOS)
+        // Remember whether we left mid-playback so .active can decide whether
+        // to auto-open the player on return.
+        wasPlayingOnBackground = EnhancedAudioManager.shared.isPlaying
+        #endif
       case .inactive:
         break
       @unknown default:

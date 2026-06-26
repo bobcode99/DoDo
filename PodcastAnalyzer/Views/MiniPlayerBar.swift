@@ -11,14 +11,14 @@ import SwiftUI
 /// Navigation state for expanded player -> main nav transitions
 enum ExpandedPlayerNavigation: Equatable {
   case none
-  case episodeDetail(PodcastEpisodeInfo, podcastTitle: String, imageURL: String?)
+  case episodeDetail(PodcastEpisodeInfo, podcastTitle: String, imageURL: String?, language: String?)
   case podcastEpisodeList(PodcastInfoModel)
 
   static func == (lhs: ExpandedPlayerNavigation, rhs: ExpandedPlayerNavigation) -> Bool {
     switch (lhs, rhs) {
     case (.none, .none):
       return true
-    case let (.episodeDetail(e1, t1, i1), .episodeDetail(e2, t2, i2)):
+    case let (.episodeDetail(e1, t1, i1, _), .episodeDetail(e2, t2, i2, _)):
       return e1.title == e2.title && t1 == t2 && i1 == i2
     case let (.podcastEpisodeList(p1), .podcastEpisodeList(p2)):
       return p1.id == p2.id
@@ -37,28 +37,25 @@ struct MiniPlayerBar: View {
   @State private var showExpandedPlayer = false
   @State private var deferredNavigation: ExpandedPlayerNavigation = .none
 
-  private var progress: Double {
-    guard audioManager.duration > 0 else { return 0 }
-    return min(max(audioManager.currentTime / audioManager.duration, 0), 1)
-  }
-
   var body: some View {
     VStack(spacing: 0) {
-      // Progress bar (hidden or 0 if not playing)
-      ProgressView(value: progress)
-        .progressViewStyle(.linear)
-        .tint(.blue)
-        .frame(height: 3)
-        .opacity(audioManager.currentEpisode == nil ? 0 : 1)
+      // Progress bar (hidden or 0 if not playing). Isolated into its own view
+      // so the high-frequency currentTime ticks (~4×/sec during playback)
+      // invalidate only the 3pt bar — not the whole accessory (artwork,
+      // marquee, glass), which is drawn over every tab and otherwise
+      // re-rendered on every tick, competing with navigation animations.
+      MiniPlayerProgressBar()
 
       // Main content
-      HStack(spacing: 12) {
-        // Tappable area: artwork + episode info opens expanded player
-        Button {
-          if audioManager.currentEpisode != nil {
-            showExpandedPlayer = true
-          }
-        } label: {
+      ZStack {
+        Button(action: openExpandedPlayer) {
+          Color.clear
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open expanded player")
+
+        HStack(spacing: 12) {
           HStack(spacing: 12) {
             // Artwork or Placeholder
             Group {
@@ -80,10 +77,11 @@ struct MiniPlayerBar: View {
 
             // Episode info
             VStack(alignment: .leading, spacing: 2) {
-              Text(audioManager.currentEpisode?.title ?? "Not Playing")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .lineLimit(1)
+              MarqueeText(
+                text: audioManager.currentEpisode?.title ?? "Not Playing",
+                font: .subheadline,
+                fontWeight: .medium
+              )
 
               Text(audioManager.currentEpisode?.podcastTitle ?? "Select an episode to play")
                 .font(.caption)
@@ -91,22 +89,21 @@ struct MiniPlayerBar: View {
                 .lineLimit(1)
             }
           }
+          .allowsHitTesting(false)
+
+          Spacer()
+
+          // Play/Pause button
+          Button(action: {
+            handlePlayPauseAction()
+          }) {
+            Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+              .font(.title2)
+              .frame(width: 32)
+              .foregroundStyle(.primary)
+          }
+          .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
         }
-        .buttonStyle(.plain)
-
-        Spacer()
-
-        // Play/Pause button
-        Button(action: {
-          handlePlayPauseAction()
-        }) {
-          Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-            .font(.title2)
-            .frame(width: 32)
-            .foregroundStyle(.primary)
-        }
-        .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
-
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 10)
@@ -114,8 +111,8 @@ struct MiniPlayerBar: View {
     }
     .sheet(isPresented: $showExpandedPlayer, onDismiss: handleExpandedPlayerDismissed) {
       ExpandedPlayerView(
-        onNavigateToEpisodeDetail: { episode, podcastTitle, imageURL in
-          deferredNavigation = .episodeDetail(episode, podcastTitle: podcastTitle, imageURL: imageURL)
+        onNavigateToEpisodeDetail: { episode, podcastTitle, imageURL, language in
+          deferredNavigation = .episodeDetail(episode, podcastTitle: podcastTitle, imageURL: imageURL, language: language)
         },
         onNavigateToPodcast: { podcast in
           deferredNavigation = .podcastEpisodeList(podcast)
@@ -133,6 +130,11 @@ struct MiniPlayerBar: View {
   }
 
   // MARK: - Play/Pause Action
+
+  private func openExpandedPlayer() {
+    guard audioManager.currentEpisode != nil else { return }
+    showExpandedPlayer = true
+  }
 
   private func handlePlayPauseAction() {
     // Case 1: Currently playing - just pause
@@ -180,13 +182,13 @@ struct MiniPlayerBar: View {
     switch navigation {
     case .none:
       break
-    case let .episodeDetail(episode, podcastTitle, imageURL):
+    case let .episodeDetail(episode, podcastTitle, imageURL, language):
       coordinator?.activeRouter.push(
         EpisodeDetailRoute(
           episode: episode,
           podcastTitle: podcastTitle,
           fallbackImageURL: imageURL,
-          podcastLanguage: nil
+          podcastLanguage: language
         )
       )
     case let .podcastEpisodeList(podcastModel):
@@ -255,6 +257,29 @@ struct MiniPlayerBar: View {
     )
   }
 }
+
+// MARK: - Isolated progress bar
+
+/// Reads `currentTime`/`duration` only inside this 3pt bar, so the periodic
+/// time-observer ticks (~4×/sec during playback) re-render just this view
+/// instead of the whole MiniPlayerBar accessory.
+private struct MiniPlayerProgressBar: View {
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  private var progress: Double {
+    guard audioManager.duration > 0 else { return 0 }
+    return min(max(audioManager.currentTime / audioManager.duration, 0), 1)
+  }
+
+  var body: some View {
+    ProgressView(value: progress)
+      .progressViewStyle(.linear)
+      .tint(.blue)
+      .frame(height: 3)
+      .opacity(audioManager.currentEpisode == nil ? 0 : 1)
+  }
+}
+
 // MARK: - Preview
 
 #Preview {

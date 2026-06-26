@@ -5,9 +5,9 @@
 //  ViewModel for Library tab - manages subscribed podcasts, saved, downloaded, and latest episodes
 //
 
+import SwiftUI
 import Foundation
 import SwiftData
-import SwiftUI
 import OSLog
 
 #if DEBUG
@@ -66,6 +66,19 @@ struct DownloadingEpisode: Identifiable {
   let imageURL: String?
   let progress: Double
   let state: DownloadState
+}
+
+// MARK: - Downloaded Podcast Group Model
+
+struct DownloadedPodcastGroup: Identifiable {
+  let title: String
+  let imageURL: String?
+  let podcast: PodcastInfoModel?
+  let downloadCount: Int
+
+  var id: String {
+    podcast?.id.uuidString ?? title
+  }
 }
 
 // MARK: - Library ViewModel
@@ -166,21 +179,30 @@ final class LibraryViewModel {
   }
 
   /// Podcasts that have downloaded episodes, with download counts
-  var podcastsWithDownloads: [(podcast: PodcastInfoModel, downloadCount: Int)] {
+  var podcastsWithDownloads: [DownloadedPodcastGroup] {
     var countByTitle: [String: Int] = [:]
+    var imageByTitle: [String: String] = [:]
     for episode in downloadedEpisodes {
       countByTitle[episode.podcastTitle, default: 0] += 1
+      if imageByTitle[episode.podcastTitle] == nil, let imageURL = episode.imageURL {
+        imageByTitle[episode.podcastTitle] = imageURL
+      }
     }
 
-    return countByTitle.compactMap { (title, count) in
-      guard let podcast = podcastTitleMap[title] else { return nil }
-      return (podcast: podcast, downloadCount: count)
+    return countByTitle.map { (title, count) in
+      let podcast = podcastTitleMap[title]
+      return DownloadedPodcastGroup(
+        title: title,
+        imageURL: podcast?.podcastInfo.imageURL ?? imageByTitle[title],
+        podcast: podcast,
+        downloadCount: count
+      )
     }
     .sorted {
       if $0.downloadCount != $1.downloadCount {
         return $0.downloadCount > $1.downloadCount
       }
-      return $0.podcast.podcastInfo.title.localizedCaseInsensitiveCompare($1.podcast.podcastInfo.title) == .orderedAscending
+      return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
     }
   }
 
@@ -225,11 +247,25 @@ final class LibraryViewModel {
   // Cache for O(1) lookups
   private var podcastTitleMap: [String: PodcastInfoModel] = [:]
 
+  /// Decoded `PodcastInfo` snapshots keyed by title, rebuilt together with
+  /// `podcastTitleMap`. The saved/downloaded loaders previously re-decoded
+  /// every podcast's episode blob (`mapValues { $0.podcastInfo }`) on each
+  /// refresh — i.e. on every Library appearance — which is main-thread work
+  /// proportional to total episode count across the whole library.
+  private var podcastInfoByTitle: [String: PodcastInfo] = [:]
+
+  /// (id → lastUpdated) signature of the last `loadAllPodcasts` fetch.
+  /// Repeat calls with an unchanged store skip the map rebuilds entirely.
+  private var allPodcastsStamp: [UUID: Date] = [:]
+
   @ObservationIgnored private var initTask: Task<Void, Never>?
   /// Tracks the latest unstructured refresh task so it can be cancelled in cleanup().
   @ObservationIgnored private var refreshTask: Task<Void, Never>?
   /// Observes episodeDownloadCompleted notifications for optimistic UI updates.
   @ObservationIgnored private var downloadCompletionTask: Task<Void, Never>?
+  /// Observes playbackPositionDidUpdate so list rows reflect current "X left"
+  /// without waiting for the user to back out and re-enter the tab.
+  @ObservationIgnored private var playbackPositionTask: Task<Void, Never>?
   /// Polls inFlightProgress at 500ms intervals while downloads are active.
   @ObservationIgnored private var progressTimer: Timer?
 
@@ -243,6 +279,7 @@ final class LibraryViewModel {
     observeDownloadingEpisodes()
     manageProgressTimer()
     observeDownloadCompletions()
+    observePlaybackPositionUpdates()
   }
 
   /// Clean up resources. Call this from onDisappear.
@@ -253,8 +290,74 @@ final class LibraryViewModel {
     refreshTask = nil
     downloadCompletionTask?.cancel()
     downloadCompletionTask = nil
+    playbackPositionTask?.cancel()
+    playbackPositionTask = nil
     progressTimer?.invalidate()
     progressTimer = nil
+  }
+
+  /// Listen for playback position updates posted by `EnhancedAudioManager`
+  /// (every 5s during playback, on pause/seek, and at end-of-episode) and
+  /// update the matching `LibraryEpisode` in each visible array. The structs
+  /// are immutable snapshots, so we rebuild them in place with the fresh
+  /// playback fields — the @Observable array reassignment triggers a row
+  /// re-render in any list currently on screen.
+  private func observePlaybackPositionUpdates() {
+    playbackPositionTask?.cancel()
+    playbackPositionTask = Task { [weak self] in
+      for await notification in NotificationCenter.default.notifications(named: .playbackPositionDidUpdate) {
+        guard let self else { return }
+        guard let update = notification.userInfo?["update"] as? PlaybackPositionUpdate else {
+          continue
+        }
+        self.applyPlaybackUpdate(update)
+      }
+    }
+  }
+
+  private func applyPlaybackUpdate(_ update: PlaybackPositionUpdate) {
+    let id = "\(update.podcastTitle)\(Self.episodeKeyDelimiter)\(update.episodeTitle)"
+    // Mirror PlaybackStateCoordinator's completion threshold so the row's
+    // replay icon appears as soon as SwiftData would flip it.
+    let isCompleted = update.duration > 0 && (update.duration - update.position) < 30
+
+    savedEpisodes = Self.replacingPlayback(in: savedEpisodes, id: id, position: update.position, duration: update.duration, isCompleted: isCompleted)
+    downloadedEpisodes = Self.replacingPlayback(in: downloadedEpisodes, id: id, position: update.position, duration: update.duration, isCompleted: isCompleted)
+    latestEpisodes = Self.replacingPlayback(in: latestEpisodes, id: id, position: update.position, duration: update.duration, isCompleted: isCompleted)
+  }
+
+  /// Returns `episodes` with the matching id replaced by a fresh `LibraryEpisode`
+  /// carrying the new playback fields. Returns the input unchanged when no match
+  /// is found, so `@Observable` re-renders only fire when something actually changed.
+  private static func replacingPlayback(
+    in episodes: [LibraryEpisode],
+    id: String,
+    position: TimeInterval,
+    duration: TimeInterval,
+    isCompleted: Bool
+  ) -> [LibraryEpisode] {
+    guard let index = episodes.firstIndex(where: { $0.id == id }) else { return episodes }
+    let existing = episodes[index]
+    // Skip if nothing material changed — avoids a needless array write.
+    if existing.lastPlaybackPosition == position,
+       existing.savedDuration == duration,
+       existing.isCompleted == isCompleted {
+      return episodes
+    }
+    var copy = episodes
+    copy[index] = LibraryEpisode(
+      id: existing.id,
+      podcastTitle: existing.podcastTitle,
+      imageURL: existing.imageURL,
+      language: existing.language,
+      episodeInfo: existing.episodeInfo,
+      isStarred: existing.isStarred,
+      isDownloaded: existing.isDownloaded,
+      isCompleted: isCompleted,
+      lastPlaybackPosition: position,
+      savedDuration: duration
+    )
+    return copy
   }
 
   private func observeDownloadCompletions() {
@@ -343,7 +446,6 @@ final class LibraryViewModel {
 
   /// Poll inFlightProgress and update downloadingEpisodes with latest values.
   private func updateDownloadingProgress() {
-    var changed = false
     for i in downloadingEpisodes.indices {
       let ep = downloadingEpisodes[i]
       if let newProgress = downloadManager.inFlightProgress[ep.id],
@@ -356,7 +458,6 @@ final class LibraryViewModel {
           progress: newProgress,
           state: .downloading(progress: newProgress)
         )
-        changed = true
       }
     }
     // Stop timer if no more active downloads
@@ -364,7 +465,6 @@ final class LibraryViewModel {
       progressTimer?.invalidate()
       progressTimer = nil
     }
-    _ = changed // suppress unused warning
   }
 
   /// Parse episode key for downloading episodes
@@ -445,7 +545,7 @@ final class LibraryViewModel {
       refreshTask?.cancel()
       refreshTask = Task { await loadDownloadedEpisodesQuick() }
     } catch {
-      logger.error("Failed to update download model: \(error.localizedDescription)")
+      logger.error("Failed to update download model: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -489,6 +589,13 @@ final class LibraryViewModel {
 
   /// Receive updated podcast list from View's @Query.
   func setPodcasts(_ podcasts: [PodcastInfoModel]) {
+    // Skip the reload if the id-set is unchanged. Prevents cancellation +
+    // restart of the latest-episodes refresh task on every Library appearance
+    // (the @Query emits a new array on every SwiftData write).
+    if podcasts.map(\.id) == podcastInfoModelList.map(\.id) {
+      self.podcastInfoModelList = podcasts  // refresh references but no reload
+      return
+    }
     self.podcastInfoModelList = podcasts
     // Cancel previous refresh; latest episodes depend on the updated podcast list.
     refreshTask?.cancel()
@@ -556,12 +663,14 @@ final class LibraryViewModel {
     guard !hasSyncedDownloads else { return }
     hasSyncedDownloads = true
 
-    // Then sync with disk in background (slow, but doesn't block UI)
-    Task.detached(priority: .background) { [weak self] in
-      guard let self else { return }
-      await self.syncDownloadedFilesWithSwiftData()
+    // Sync with disk in the background. Both methods are @MainActor but each
+    // performs its own off-main disk I/O via inner Task.detached blocks, so
+    // a plain Task here is correct — Task.detached would have only renamed
+    // the priority hint without moving any of the heavy work off MainActor.
+    Task { [weak self] in
+      await self?.syncDownloadedFilesWithSwiftData()
       // Reload to pick up any newly synced episodes
-      await self.loadDownloadedEpisodesQuick()
+      await self?.loadDownloadedEpisodesQuick()
     }
   }
 
@@ -605,11 +714,10 @@ final class LibraryViewModel {
   }
 
   func refreshDownloadedEpisodes() async {
-    // Ensure the podcast title map is populated so that podcastsWithDownloads
-    // can look up PodcastInfoModel by title. This is a no-op if already loaded.
-    if podcastTitleMap.isEmpty {
-      await loadAllPodcasts()
-    }
+    // Downloaded podcasts can include browsed/unsubscribed shows. LibraryView's
+    // @Query only tracks subscribed podcasts, so refresh the full lookup here
+    // instead of relying on the subscribed snapshot to invalidate this map.
+    await loadAllPodcasts()
 
     // Only run the expensive disk scan once per session.  The scan is already triggered
     // by loadDownloadedSection() during initial load; calling it again on every
@@ -637,18 +745,46 @@ final class LibraryViewModel {
 
     do {
       let podcasts = try context.fetch(descriptor)
+
+      // Skip the (blob-decoding) map rebuilds when no podcast was added,
+      // removed, or refreshed since the last build.
+      let stamp = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0.lastUpdated) })
+      if stamp == allPodcastsStamp, !podcastTitleMap.isEmpty {
+        self.allPodcasts = podcasts
+        return
+      }
+      allPodcastsStamp = stamp
+
       // Since we're @MainActor, update directly
       self.allPodcasts = podcasts
-      
-      // Update lookup map (keep latest on duplicate titles)
-      self.podcastTitleMap = Dictionary(
-        podcasts.map { ($0.podcastInfo.title, $0) },
-        uniquingKeysWith: { _, latest in latest }
-      )
-      
+
+      // Decode each podcast's episode blob exactly once, building both lookup
+      // maps in a single pass and backfilling the denormalized grid mirrors for
+      // any legacy row persisted before those columns existed. (Previously this
+      // decoded every blob twice — once for the title map, once for mapValues.)
+      var titleMap: [String: PodcastInfoModel] = [:]
+      var infoByTitle: [String: PodcastInfo] = [:]
+      titleMap.reserveCapacity(podcasts.count)
+      infoByTitle.reserveCapacity(podcasts.count)
+      var didBackfill = false
+      for model in podcasts {
+        let info = model.podcastInfo
+        titleMap[info.title] = model           // later row wins on duplicate titles
+        infoByTitle[info.title] = info
+        if model.episodeCount == 0 && !info.episodes.isEmpty {
+          model.imageURL = info.imageURL
+          model.episodeCount = info.episodes.count
+          model.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
+          didBackfill = true
+        }
+      }
+      self.podcastTitleMap = titleMap
+      self.podcastInfoByTitle = infoByTitle
+      if didBackfill { try? context.save() }
+
       logger.info("Loaded \(self.allPodcasts.count) total podcasts for episode lookups")
     } catch {
-      logger.error("Failed to load all podcasts: \(error.localizedDescription)")
+      logger.error("Failed to load all podcasts: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -671,8 +807,8 @@ final class LibraryViewModel {
       let models = try context.fetch(descriptor)
       // Extract Sendable snapshots on MainActor (ModelContext boundary)
       let snapshots = models.map { FullEpisodeSnapshot(from: $0) }
-      // Capture Sendable lookup map
-      let infoMap = self.podcastTitleMap.mapValues { $0.podcastInfo }
+      // Capture cached Sendable lookup map (built in loadAllPodcasts)
+      let infoMap = self.podcastInfoByTitle
       let delimiter = Self.episodeKeyDelimiter
 
       // Dedup + map off the MainActor
@@ -684,10 +820,14 @@ final class LibraryViewModel {
         }
       }.value
 
-      self.savedEpisodes = results
+      // Assign only on real change — an unconditional write invalidates every
+      // observer (Library body, QuickAccess counts) even when nothing moved.
+      if results != self.savedEpisodes {
+        self.savedEpisodes = results
+      }
       logger.info("Loaded \(self.savedEpisodes.count) saved episodes")
     } catch {
-      logger.error("Failed to load saved episodes: \(error.localizedDescription)")
+      logger.error("Failed to load saved episodes: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -707,8 +847,8 @@ final class LibraryViewModel {
       let models = try context.fetch(descriptor)
       // Extract Sendable snapshots on MainActor (ModelContext boundary)
       let snapshots = models.map { FullEpisodeSnapshot(from: $0) }
-      // Capture Sendable lookup map
-      let infoMap = self.podcastTitleMap.mapValues { $0.podcastInfo }
+      // Capture cached Sendable lookup map (built in loadAllPodcasts)
+      let infoMap = self.podcastInfoByTitle
       let delimiter = Self.episodeKeyDelimiter
 
       // Dedup + map off the MainActor
@@ -721,10 +861,14 @@ final class LibraryViewModel {
         }
       }.value
 
-      self.downloadedEpisodes = results
+      // Assign only on real change — an unconditional write invalidates every
+      // observer (Library body, QuickAccess counts) even when nothing moved.
+      if results != self.downloadedEpisodes {
+        self.downloadedEpisodes = results
+      }
       logger.info("Quick loaded \(self.downloadedEpisodes.count) downloaded episodes")
     } catch {
-      logger.error("Download fetch failed: \(error)")
+      logger.error("Download fetch failed: \(error, privacy: .public)")
     }
   }
 
@@ -759,13 +903,30 @@ final class LibraryViewModel {
       self.downloadedEpisodes = results
       logger.info("Loaded \(self.downloadedEpisodes.count) downloaded episodes")
     } catch {
-      logger.error("Download fetch failed: \(error)")
+      logger.error("Download fetch failed: \(error, privacy: .public)")
     }
   }
 
-  /// Syncs SwiftData with actual downloaded files on disk
-  /// 1. Verifies existing downloads still exist
-  /// 2. Discovers downloaded files that exist but aren't tracked in SwiftData
+  /// Reconciles `EpisodeDownloadModel.localAudioPath` against the audio
+  /// directory on disk. `EpisodeDownloadModel` is the single source of truth
+  /// for download state — this routine only ensures every row's `localAudioPath`
+  /// reflects reality.
+  ///
+  /// Three passes, all driven by the model (not by `PodcastInfoModel`), so
+  /// downloads belonging to unsubscribed or removed podcasts are reconciled
+  /// the same as subscribed ones — fixes the bug where files survived a
+  /// sandbox-container rotation but never reappeared in the Downloaded tab
+  /// because discovery only iterated subscribed podcasts.
+  ///
+  /// 1. De-dup `EpisodeDownloadModel` rows that share an id.
+  /// 2. For every row, align `localAudioPath` with what's on disk:
+  ///    - If the stored path still resolves: keep it.
+  ///    - Else look up by expected `sanitize("{podcastTitle}_{episodeTitle}")`.
+  ///    - Else clear (file truly gone).
+  /// 3. Discover audio files no row claims, match them back to a
+  ///    `PodcastInfoModel` episode, and create a new row. Files with no
+  ///    matching episode anywhere are left alone (can't be unambiguously
+  ///    reversed from their sanitized filename).
   private func syncDownloadedFilesWithSwiftData() async {
     #if DEBUG
     let signpostID = OSSignpostID(log: signpostLog)
@@ -775,20 +936,18 @@ final class LibraryViewModel {
 
     guard let context = modelContext else { return }
 
-    // 1. Get all EpisodeDownloadModel entries
+    // 1. Fetch every download row.
     let descriptor = FetchDescriptor<EpisodeDownloadModel>()
     let allModels: [EpisodeDownloadModel]
     do {
       allModels = try context.fetch(descriptor)
     } catch {
-      logger.error("Failed to fetch models for sync: \(error)")
+      logger.error("Failed to fetch models for sync: \(error, privacy: .public)")
       return
     }
 
-    // Create lookup for existing models by ID (keep last occurrence on duplicates)
+    // 1b. De-duplicate rows that share an id.
     let modelsById = Dictionary(allModels.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
-
-    // 1b. Remove duplicate entries (keep the one in modelsById, delete others)
     if modelsById.count < allModels.count {
       let duplicateCount = allModels.count - modelsById.count
       let keptIds = Set(modelsById.values.map { ObjectIdentifier($0) })
@@ -799,41 +958,7 @@ final class LibraryViewModel {
       logger.warning("Removed \(duplicateCount) duplicate EpisodeDownloadModel entries")
     }
 
-    // 2. Verify existing downloads still exist
-    let modelsWithPaths = allModels.compactMap { model -> (String, String, EpisodeDownloadModel)? in
-      guard let path = model.localAudioPath, !path.isEmpty else { return nil }
-      return (model.id, path, model)
-    }
-
-    if !modelsWithPaths.isEmpty {
-      let pathsToCheck = modelsWithPaths.map { ($0.0, $0.1) }
-      // Detached to avoid blocking @MainActor with synchronous FileManager I/O
-      let missingFiles = await Task.detached(priority: .background) { () -> Set<String> in
-        let fm = FileManager.default
-        var missing = Set<String>()
-        for (id, path) in pathsToCheck {
-          if !fm.fileExists(atPath: path) {
-            missing.insert(id)
-          }
-        }
-        return missing
-      }.value
-
-      var clearedCount = 0
-      for (id, _, model) in modelsWithPaths {
-        if missingFiles.contains(id) {
-          model.localAudioPath = nil
-          clearedCount += 1
-        }
-      }
-
-      if clearedCount > 0 {
-        logger.info("Cleared \(clearedCount) stale download paths")
-      }
-    }
-
-    // 3. Discover downloaded files that aren't tracked
-    // Single directory scan — replaces N×7 per-episode file checks
+    // 2. Single off-MainActor scan of the audio directory.
     let audioFileIndex = await Task.detached(priority: .background) { () -> [String: String] in
       let fm = FileManager.default
 
@@ -845,11 +970,10 @@ final class LibraryViewModel {
       let audioDir = libraryDir.appendingPathComponent("Audio", isDirectory: true)
       #endif
 
-      var index: [String: String] = [:]  // lowercased base filename -> full path
+      var index: [String: String] = [:]  // lowercased basename → full path
       guard let contents = try? fm.contentsOfDirectory(
         at: audioDir, includingPropertiesForKeys: nil
       ) else { return index }
-
       for url in contents {
         let name = url.deletingPathExtension().lastPathComponent.lowercased()
         index[name] = url.path
@@ -857,52 +981,72 @@ final class LibraryViewModel {
       return index
     }.value
 
+    let pathsOnDisk = Set(audioFileIndex.values)
+
+    // 3. Reconcile every row's localAudioPath against disk reality.
+    //    Uses the row's own podcastTitle/episodeTitle, so podcasts whose
+    //    PodcastInfoModel was deleted are reconciled the same as subscribed.
+    var pathChanges = 0
+    var claimedBasenames = Set<String>()
+    for model in modelsById.values {
+      // Happy path: stored path still resolves.
+      if let existing = model.localAudioPath, pathsOnDisk.contains(existing) {
+        let basename = URL(fileURLWithPath: existing)
+          .deletingPathExtension().lastPathComponent.lowercased()
+        claimedBasenames.insert(basename)
+        continue
+      }
+
+      // Repair (sandbox rotation, manual relocation, etc.) via expected basename.
+      let expected = Self.sanitizeFileName("\(model.podcastTitle)_\(model.episodeTitle)").lowercased()
+      let repaired = audioFileIndex[expected]
+
+      if model.localAudioPath != repaired {
+        model.localAudioPath = repaired
+        if repaired != nil, model.downloadedDate == nil {
+          model.downloadedDate = Date()
+        }
+        pathChanges += 1
+      }
+      if repaired != nil { claimedBasenames.insert(expected) }
+    }
+
+    // 4. Discover audio files no row claims. Match each against an episode
+    //    in any podcast we know about, and create a row for it.
     let delimiter = Self.episodeKeyDelimiter
     var discoveredCount = 0
-
-    for podcast in allPodcasts {
-      let podcastTitle = podcast.podcastInfo.title
-      let podcastImageURL = podcast.podcastInfo.imageURL
-
-      for episode in podcast.podcastInfo.episodes {
-        let episodeKey = "\(podcastTitle)\(delimiter)\(episode.title)"
-
-        // Skip if already has localAudioPath
-        if let model = modelsById[episodeKey], model.hasLocalAudioFile {
-          continue
+    let orphans = audioFileIndex.filter { !claimedBasenames.contains($0.key) }
+    if !orphans.isEmpty {
+      var episodesByBasename: [String: (PodcastInfo, PodcastEpisodeInfo)] = [:]
+      for podcast in allPodcasts {
+        let info = podcast.podcastInfo
+        for episode in info.episodes {
+          let key = Self.sanitizeFileName("\(info.title)_\(episode.title)").lowercased()
+          episodesByBasename[key] = (info, episode)
         }
+      }
 
-        // O(1) dictionary lookup instead of 7× fileExists calls
-        let baseFileName = Self.sanitizeFileName("\(podcastTitle)_\(episode.title)").lowercased()
-        if let localPath = audioFileIndex[baseFileName] {
-          if let existingModel = modelsById[episodeKey] {
-            // Update existing model
-            existingModel.localAudioPath = localPath
-            existingModel.downloadedDate = Date()
-          } else {
-            // Create new model
-            guard let audioURL = episode.audioURL else { continue }
-            let newModel = EpisodeDownloadModel(
-              episodeTitle: episode.title,
-              podcastTitle: podcastTitle,
-              audioURL: audioURL,
-              localAudioPath: localPath,
-              downloadedDate: Date(),
-              imageURL: episode.imageURL ?? podcastImageURL,
-              pubDate: episode.pubDate
-            )
-            context.insert(newModel)
-          }
-          discoveredCount += 1
-        }
+      for (basename, fullPath) in orphans {
+        guard let (info, episode) = episodesByBasename[basename] else { continue }
+        let modelKey = "\(info.title)\(delimiter)\(episode.title)"
+        guard modelsById[modelKey] == nil, let audioURL = episode.audioURL else { continue }
+        let newModel = EpisodeDownloadModel(
+          episodeTitle: episode.title,
+          podcastTitle: info.title,
+          audioURL: audioURL,
+          localAudioPath: fullPath,
+          downloadedDate: Date(),
+          imageURL: episode.imageURL ?? info.imageURL,
+          pubDate: episode.pubDate
+        )
+        context.insert(newModel)
+        discoveredCount += 1
       }
     }
 
-    if discoveredCount > 0 {
+    if pathChanges > 0 || discoveredCount > 0 {
       try? context.save()
-      logger.info("Discovered \(discoveredCount) untracked downloads on disk")
-    } else {
-      logger.info("No untracked downloads found")
+      logger.info("Sync: updated \(pathChanges) paths, discovered \(discoveredCount) new models")
     }
   }
 
@@ -959,7 +1103,7 @@ final class LibraryViewModel {
       id: snap.id,
       podcastTitle: snap.podcastTitle,
       imageURL: snap.imageURL,
-      language: "en",
+      language: "",
       episodeInfo: episodeInfo,
       isStarred: snap.isStarred,
       isDownloaded: Self.hasLocalAudioFile(snap.localAudioPath),
@@ -992,12 +1136,18 @@ final class LibraryViewModel {
       }
       episodeDataDict = Dictionary(keyValues, uniquingKeysWith: { _, latest in latest })
     } catch {
-      logger.error("Failed to fetch episode models: \(error)")
+      logger.error("Failed to fetch episode models: \(error, privacy: .public)")
       return
     }
 
-    // Capture the podcast info structs (already Sendable)
-    let podcasts = self.podcastInfoModelList.map { $0.podcastInfo }
+    // Reuse the episode blobs already decoded by loadAllPodcasts (keyed by the
+    // reliable title mirror) so we don't re-decode every subscribed podcast on
+    // the main actor here. Falls back to a direct decode only when the cache
+    // isn't warm yet (e.g. setPodcasts → loadLatestSection raced ahead of it).
+    let infoByTitle = self.podcastInfoByTitle
+    let podcasts: [PodcastInfo] = self.podcastInfoModelList.map { model in
+      infoByTitle[model.title] ?? model.podcastInfo
+    }
 
     // 2. Perform heavy processing in background
     let delimiter = Self.episodeKeyDelimiter
@@ -1119,7 +1269,7 @@ final class LibraryViewModel {
       id: model.id,
       podcastTitle: model.podcastTitle,
       imageURL: model.imageURL,
-      language: "en",
+      language: "",
       episodeInfo: episodeInfo,
       isStarred: model.isStarred,
       isDownloaded: Self.hasLocalAudioFile(model.localAudioPath),
@@ -1260,7 +1410,7 @@ final class LibraryViewModel {
     for (id, updatedPodcast) in results {
       if let podcast = updatedPodcast,
          let model = self.podcastInfoModelList.first(where: { $0.id == id }) {
-        model.podcastInfo = podcast
+        model.applyPodcastInfo(podcast)
         model.lastUpdated = now  // Update timestamp for proper sorting
         successCount += 1
         logger.info("Updated \(podcast.title) with \(podcast.episodes.count) episodes")
@@ -1273,7 +1423,7 @@ final class LibraryViewModel {
       try context.save()
       logger.info("Saved all podcast updates")
     } catch {
-      logger.error("Failed to save updates: \(error.localizedDescription)")
+      logger.error("Failed to save updates: \(error.localizedDescription, privacy: .public)")
     }
 
     // Reload all data

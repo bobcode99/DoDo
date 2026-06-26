@@ -1,18 +1,27 @@
-## PodcastAnalyzer
+## DoDo
 
-PodcastAnalyzer is an iOS app for organizing, analyzing, and listening to podcast episodes. It focuses on smarter episode discovery, AI‑assisted insights, and a polished SwiftUI listening experience.
+DoDo is an iOS and macOS podcast player for organizing, transcribing, and listening to episodes. It focuses on smarter discovery, on-device transcription, AI-assisted insights, and a polished SwiftUI experience.
+
+> The Xcode project and repository are named `PodcastAnalyzer`; the app ships to the App Store as **DoDo**.
 
 ### Features
 
-- **Episode library**: Browse and manage your saved podcast episodes.
-- **Search**: Quickly find episodes by title or metadata.
-- **AI analysis**: View AI‑generated insights and transcript‑driven features for each episode.
-- **SwiftUI UI**: Modern, responsive interface built with SwiftUI and Combine.
+- **Library**: Subscribe to shows via RSS, browse and manage saved episodes.
+- **Player**: Background audio, lock-screen controls, SRT captions synced to playback.
+- **Downloads**: Background episode downloads for offline listening.
+- **On-device transcription**: Generate transcripts with Apple SpeechAnalyzer or WhisperKit — runs locally, with optional long-audio splitting and per-podcast context bias.
+- **AI analysis**: Per-episode insights and transcript-driven features.
+- **Search**: Find shows and episodes by title or metadata.
+- **SwiftUI + SwiftData**: Modern, responsive interface across iOS and macOS.
+
+### Architecture
+
+`View → ViewModel → Service → SwiftData Model` (MVVM). Built with SwiftUI and SwiftData, Swift 6 concurrency. See `CLAUDE.md` for service responsibilities and conventions.
 
 ### Requirements
 
-- **Xcode**: 15 or later (project currently runs on newer Xcode 26.x CI images).
-- **iOS**: Target iOS version is configured in the Xcode project (open the project to see the exact minimum).
+- **Xcode**: 26 or later.
+- **Platforms**: iOS 26+ and macOS 26+.
 
 ### Getting started
 
@@ -29,41 +38,43 @@ cd PodcastAnalyzer/PodcastAnalyzer
 open PodcastAnalyzer.xcodeproj
 ```
 
-3. Select the `PodcastAnalyzer` scheme and choose an iOS Simulator (or device).
+3. Select the `PodcastAnalyzer` scheme and an iOS Simulator (or device).
 
-4. Build and run the app from Xcode (`⌘R`).
+4. Build and run (`⌘R`).
+
+### Building from the command line
+
+```bash
+# iOS Simulator
+xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
+
+# macOS
+xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer \
+  -destination 'platform=macOS' build
+```
 
 ### Running tests
 
-- **From Xcode**:  
-  - Select the `PodcastAnalyzer` scheme.  
-  - Press `⌘U` to run the unit tests.
-
-- **From the command line** (unit tests only, matching CI):
-
 ```bash
-xcodebuild \
-  test \
+xcodebuild test \
   -scheme PodcastAnalyzer \
   -project PodcastAnalyzer.xcodeproj \
-  -destination "platform=iOS Simulator,name=iPhone 16" \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   -only-testing:PodcastAnalyzerTests
 ```
 
-GitHub Actions is configured to run only the `PodcastAnalyzerTests` unit tests by default.
+GitHub Actions runs the `PodcastAnalyzerTests` unit tests by default.
 
-### Folder structure (high level)
+### Packages
 
-- `PodcastAnalyzer/PodcastAnalyzer/Views` – SwiftUI views for core screens (episode list, search, AI analysis, data management, etc.).
-- `PodcastAnalyzer/PodcastAnalyzer/Utilities` – Shared utility types and helpers (formatters, episode actions, etc.).
-- `PodcastAnalyzer/PodcastAnalyzerTests` – Unit tests for parsing, formatting, state, and other core logic.
+- **FeedKit** — RSS/Atom parsing
+- **WhisperKit** — on-device speech-to-text
+- **Nuke** — image loading and caching
+- **ZMarkupParser** — HTML description rendering
 
 ### Contributing
 
-Improvements and bug fixes are welcome. Feel free to open an issue or pull request with a clear description and, if possible, tests that cover your changes.
+Improvements and bug fixes welcome. Open an issue or pull request with a clear description and, where possible, tests covering your changes.
 
-# Podcast analyzer
-
-
-Useful links:
-https://castos.com/tools/find-podcast-rss-feed/
+Useful link: https://castos.com/tools/find-podcast-rss-feed/

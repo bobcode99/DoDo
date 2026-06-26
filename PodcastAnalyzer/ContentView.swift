@@ -31,6 +31,7 @@ struct iOSContentView: View {
   @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
   @State private var coordinator = TabNavigationCoordinator()
+  @State private var playbackAlertMessage: String?
 
   var body: some View {
     TabView {
@@ -47,6 +48,14 @@ struct iOSContentView: View {
           LibraryView()
             .navigationDestinations()
             .onAppear { coordinator.visibleTab = .library }
+        }
+      }
+
+      Tab(Constants.analysisString, systemImage: Constants.analysisIconName) {
+        NavigationStack(path: $coordinator.analysisRouter.path) {
+          AnalysisView()
+            .navigationDestinations()
+            .onAppear { coordinator.visibleTab = .analysis }
         }
       }
 
@@ -96,6 +105,29 @@ struct iOSContentView: View {
       if newCount < oldCount {
         coordinator.lastDeepLinkedEpisodeRouteID = nil
       }
+    }
+    .task {
+      // Surface "no network + no local copy" refusals from EnhancedAudioManager
+      // as an in-app alert so users don't see the system "Cellular Data Is
+      // Turned Off" prompt that AVPlayer would otherwise trigger.
+      for await notification in NotificationCenter.default.notifications(
+        named: .audioPlaybackUnavailable)
+      {
+        if let message = notification.userInfo?["message"] as? String {
+          playbackAlertMessage = message
+        }
+      }
+    }
+    .alert(
+      "Can't Play Offline",
+      isPresented: Binding(
+        get: { playbackAlertMessage != nil },
+        set: { if !$0 { playbackAlertMessage = nil } }
+      )
+    ) {
+      Button("OK", role: .cancel) { playbackAlertMessage = nil }
+    } message: {
+      Text(playbackAlertMessage ?? "")
     }
   }
 
@@ -299,6 +331,24 @@ extension View {
           podcastLanguage: route.podcastLanguage ?? "en"
         )
       }
+      #if os(iOS)
+      .navigationDestination(for: EpisodeTranscriptRoute.self) { route in
+        EpisodeTranscriptPage(
+          episode: route.episode,
+          podcastTitle: route.podcastTitle,
+          fallbackImageURL: route.fallbackImageURL,
+          podcastLanguage: route.podcastLanguage ?? "en"
+        )
+      }
+      .navigationDestination(for: EpisodeAIAnalysisRoute.self) { route in
+        EpisodeAIAnalysisPage(
+          episode: route.episode,
+          podcastTitle: route.podcastTitle,
+          fallbackImageURL: route.fallbackImageURL,
+          podcastLanguage: route.podcastLanguage ?? "en"
+        )
+      }
+      #endif
       .navigationDestination(for: PodcastBrowseRoute.self) { route in
         if let model = route.podcastModel {
           EpisodeListView(podcastModel: model, initialFilter: route.initialFilter)

@@ -16,6 +16,9 @@
 		15AEEAE12F26464200D90D05 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 15AEEA172F2642D900D90D05 /* SwiftUI.framework */; };
 		15AEEAEE2F26464500D90D05 /* PodcastAnalyzerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000022ED303EC000ABAA0 /* WhisperKit */; };
+		AABB0003000000000000AABB /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002000000000000AABB /* MCP */; };
+		ACDDA2642FD871880075A140 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
+		CCDD0003000000000000CCDD /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = CCDD0002000000000000CCDD /* Hummingbird */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,10 +63,11 @@
 		15AEEA152F2642D900D90D05 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		15AEEA172F2642D900D90D05 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PodcastAnalyzerWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		15ED5EED2EC44BC6001B6CD7 /* PodcastAnalyzer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PodcastAnalyzer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		15ED5EED2EC44BC6001B6CD7 /* DoDo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoDo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5EFC2EC44BC9001B6CD7 /* PodcastAnalyzerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5F062EC44BC9001B6CD7 /* PodcastAnalyzerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AC576B882F776FE9007B884A /* PodcastAnalyzer.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = PodcastAnalyzer.xctestplan; sourceTree = "<group>"; };
+		ACDDA2632FD871880075A140 /* dodo.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = dodo.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -127,6 +131,8 @@
 				158240912ED303EC000ABA90 /* FeedKit in Frameworks */,
 				158240932ED303EC000ABA90 /* XMLKit in Frameworks */,
 				AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */,
+				AABB0003000000000000AABB /* MCP in Frameworks */,
+				CCDD0003000000000000CCDD /* Hummingbird in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,13 +171,14 @@
 				15AEEAE22F26464200D90D05 /* PodcastAnalyzerWidget */,
 				155164742ED374440015567A /* Frameworks */,
 				15ED5EEE2EC44BC6001B6CD7 /* Products */,
+				ACDDA2632FD871880075A140 /* dodo.icon */,
 			);
 			sourceTree = "<group>";
 		};
 		15ED5EEE2EC44BC6001B6CD7 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				15ED5EED2EC44BC6001B6CD7 /* PodcastAnalyzer.app */,
+				15ED5EED2EC44BC6001B6CD7 /* DoDo.app */,
 				15ED5EFC2EC44BC9001B6CD7 /* PodcastAnalyzerTests.xctest */,
 				15ED5F062EC44BC9001B6CD7 /* PodcastAnalyzerUITests.xctest */,
 				15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */,
@@ -229,9 +236,11 @@
 				AA0000022ED303EC000ABAA0 /* WhisperKit */,
 				BB0000022F4F0001000NUKE0 /* Nuke */,
 				BB0000032F4F0001000NUKE0 /* NukeUI */,
+				AABB0002000000000000AABB /* MCP */,
+				CCDD0002000000000000CCDD /* Hummingbird */,
 			);
 			productName = PodcastAnalyzer;
-			productReference = 15ED5EED2EC44BC6001B6CD7 /* PodcastAnalyzer.app */;
+			productReference = 15ED5EED2EC44BC6001B6CD7 /* DoDo.app */;
 			productType = "com.apple.product-type.application";
 		};
 		15ED5EFB2EC44BC9001B6CD7 /* PodcastAnalyzerTests */ = {
@@ -317,6 +326,8 @@
 				155164712ED371680015567A /* XCRemoteSwiftPackageReference "ZMarkupParser" */,
 				AA0000012ED303EC000ABAA0 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */,
+				AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */,
+				CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 15ED5EEE2EC44BC6001B6CD7 /* Products */;
@@ -343,6 +354,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ACDDA2642FD871880075A140 /* dodo.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -424,7 +436,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzerWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PodcastAnalyzerWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = "DoDo Widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -467,7 +479,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzerWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PodcastAnalyzerWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = "DoDo Widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -621,7 +633,7 @@
 		15ED5F112EC44BC9001B6CD7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = dodo;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PodcastAnalyzer/PodcastAnalyzer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -642,6 +654,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe podcast episodes locally on your device.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -651,15 +665,15 @@
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jn.PodcastAnalyzer;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = DoDo;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -678,7 +692,7 @@
 		15ED5F122EC44BC9001B6CD7 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = dodo;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PodcastAnalyzer/PodcastAnalyzer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -699,6 +713,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe podcast episodes locally on your device.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -708,15 +724,15 @@
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jn.PodcastAnalyzer;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = DoDo;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -913,12 +929,28 @@
 				minimumVersion = 0.9.0;
 			};
 		};
+		AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/modelcontextprotocol/swift-sdk.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.12.1;
+			};
+		};
 		BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kean/Nuke.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 12.0.0;
+			};
+		};
+		CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hummingbird-project/hummingbird.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -944,6 +976,11 @@
 			package = AA0000012ED303EC000ABAA0 /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
 		};
+		AABB0002000000000000AABB /* MCP */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */;
+			productName = MCP;
+		};
 		BB0000022F4F0001000NUKE0 /* Nuke */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */;
@@ -953,6 +990,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */;
 			productName = NukeUI;
+		};
+		CCDD0002000000000000CCDD /* Hummingbird */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */;
+			productName = Hummingbird;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

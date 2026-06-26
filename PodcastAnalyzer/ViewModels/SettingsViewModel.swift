@@ -1,6 +1,6 @@
+import SwiftUI
 import Foundation
 import SwiftData
-import SwiftUI
 import OSLog
 
 // MARK: - Transcript Model Status
@@ -96,10 +96,13 @@ final class SettingsViewModel {
     UserDefaults.standard.set(engine.rawValue, forKey: Keys.transcriptEngine)
     logger.info("Transcript engine set to \(engine.rawValue)")
     // Refresh Apple Speech model status whenever switching back
-    if engine == .appleSpeech {
+    switch engine {
+    case .appleSpeech:
       checkTranscriptModelStatus()
-    } else {
+    case .whisper:
       WhisperModelManager.shared.checkAllModelStatuses()
+    case .yapServer:
+      logger.info("Yap Server engine selected — no model download required")
     }
   }
 
@@ -254,6 +257,7 @@ final class SettingsViewModel {
     switch engine {
     case .appleSpeech: return appleSpeechLocales
     case .whisper: return availableTranscriptLocales
+    case .yapServer: return appleSpeechLocales
     }
   }
 
@@ -401,12 +405,12 @@ final class SettingsViewModel {
           }
         }
       } catch let error as PodcastServiceError {
-        logger.error("RSS validation failed: \(error.localizedDescription)")
+        logger.error("RSS validation failed: \(error.localizedDescription, privacy: .public)")
         errorMessage = "Invalid RSS feed: \(error.localizedDescription)"
         successMessage = ""
         isValidating = false
       } catch {
-        logger.error("Unexpected error: \(error.localizedDescription)")
+        logger.error("Unexpected error: \(error.localizedDescription, privacy: .public)")
         errorMessage = "Error: \(error.localizedDescription)"
         successMessage = ""
         isValidating = false
@@ -423,7 +427,7 @@ final class SettingsViewModel {
       self.logger.info("Feed deleted: \(podcastInfoModel.podcastInfo.title)")
     } catch {
       errorMessage = "Failed to delete feed: \(error.localizedDescription)"
-      self.logger.error("Failed to delete feed: \(error.localizedDescription)")
+      self.logger.error("Failed to delete feed: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -438,7 +442,7 @@ final class SettingsViewModel {
       self.logger.info("Loaded \(self.podcastInfoModelList.count) feeds")
     } catch {
       errorMessage = "Failed to load feeds: \(error.localizedDescription)"
-      self.logger.error("Failed to load feeds: \(error.localizedDescription)")
+      self.logger.error("Failed to load feeds: \(error.localizedDescription, privacy: .public)")
     }
   }
 

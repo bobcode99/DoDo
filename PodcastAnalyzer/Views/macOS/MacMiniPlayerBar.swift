@@ -11,25 +11,28 @@ import SwiftUI
 struct MacMiniPlayerBar: View {
   @Binding var showExpandedPlayer: Bool
   private var audioManager: EnhancedAudioManager { .shared }
+  // Lightweight view model shared with PlayerControlsView for transport state.
+  // Wraps EnhancedAudioManager.shared, so a second instance here doesn't
+  // create a competing source of truth.
+  @State private var playerViewModel = ExpandedPlayerViewModel()
   @State private var isHoveringProgress = false
   @State private var isDraggingProgress = false
-  @AppStorage("skipForwardInterval") private var skipForwardInterval: Int = 30
-  @AppStorage("skipBackwardInterval") private var skipBackwardInterval: Int = 15
-
-  private var progressPercentage: Double {
-    guard audioManager.duration > 0 else { return 0 }
-    return audioManager.currentTime / audioManager.duration
-  }
 
   var body: some View {
     let content = VStack(spacing: 0) {
-      // Interactive progress bar
-      progressBar
-        .frame(height: isHoveringProgress || isDraggingProgress ? 6 : 3)
-        .animation(.easeInOut(duration: 0.15), value: isHoveringProgress)
-        .onHover { hovering in
-          isHoveringProgress = hovering
-        }
+      // Interactive progress bar. The currentTime read lives inside this child
+      // view, so periodic time-observer ticks (~4×/sec during playback)
+      // re-render only the bar instead of the whole player (artwork, controls,
+      // speed menu, glass background).
+      MacMiniPlayerProgressBar(
+        isHoveringProgress: $isHoveringProgress,
+        isDraggingProgress: $isDraggingProgress
+      )
+      .frame(height: isHoveringProgress || isDraggingProgress ? 6 : 3)
+      .animation(.easeInOut(duration: 0.15), value: isHoveringProgress)
+      .onHover { hovering in
+        isHoveringProgress = hovering
+      }
 
       // Player controls
       HStack(spacing: 16) {
@@ -60,18 +63,14 @@ struct MacMiniPlayerBar: View {
 
         Spacer()
 
-        // Center: Playback controls
-        centerControls
+        // Center: Playback controls — shared with iOS/Mac expanded player
+        PlayerControlsView(viewModel: playerViewModel, style: .compact)
 
         Spacer()
 
         // Right: Time, speed, and expand
         HStack(spacing: 12) {
-          Text("\(Formatters.formatPlaybackTime(audioManager.currentTime)) / \(Formatters.formatPlaybackTime(audioManager.duration))")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-            .frame(width: 90, alignment: .trailing)
+          MacMiniPlayerTimeLabel()
 
           // Playback speed button
           Menu {
@@ -120,73 +119,23 @@ struct MacMiniPlayerBar: View {
     }
   }
 
-  // MARK: - Center Controls
+}
 
-  @ViewBuilder
-  private var centerControls: some View {
-    if #available(macOS 26, *) {
-      GlassEffectContainer(spacing: 24) {
-        HStack(spacing: 24) {
-          Button("Skip back \(skipBackwardInterval) seconds", systemImage: "gobackward.\(skipBackwardInterval)", action: { audioManager.skipBackward() })
-            .buttonStyle(.glass)
-            .help("Skip back \(skipBackwardInterval) seconds")
+// MARK: - Isolated progress bar
 
-          Button(audioManager.isPlaying ? "Pause" : "Play", systemImage: audioManager.isPlaying ? "pause.fill" : "play.fill", action: togglePlayback)
-            .buttonStyle(.glassProminent)
-            .help(audioManager.isPlaying ? "Pause" : "Play")
-            .keyboardShortcut(.space, modifiers: [])
+/// Reads `currentTime`/`duration` only inside this view so the high-frequency
+/// time-observer ticks re-render just the bar, not the whole MacMiniPlayerBar.
+private struct MacMiniPlayerProgressBar: View {
+  @Binding var isHoveringProgress: Bool
+  @Binding var isDraggingProgress: Bool
+  private var audioManager: EnhancedAudioManager { .shared }
 
-          Button("Skip forward \(skipForwardInterval) seconds", systemImage: "goforward.\(skipForwardInterval)", action: { audioManager.skipForward() })
-            .buttonStyle(.glass)
-            .help("Skip forward \(skipForwardInterval) seconds")
-        }
-      }
-    } else {
-      HStack(spacing: 24) {
-        Button(action: { audioManager.skipBackward() }) {
-          Image(systemName: "gobackward.\(skipBackwardInterval)")
-            .font(.system(size: 18))
-            .foregroundStyle(.primary)
-        }
-        .buttonStyle(.plain)
-        .help("Skip back \(skipBackwardInterval) seconds")
-
-        Button(action: togglePlayback) {
-          Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-            .font(.system(size: 24))
-            .foregroundStyle(.primary)
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(audioManager.isPlaying ? "Pause" : "Play")
-        .keyboardShortcut(.space, modifiers: [])
-
-        Button(action: { audioManager.skipForward() }) {
-          Image(systemName: "goforward.\(skipForwardInterval)")
-            .font(.system(size: 18))
-            .foregroundStyle(.primary)
-        }
-        .buttonStyle(.plain)
-        .help("Skip forward \(skipForwardInterval) seconds")
-      }
-    }
+  private var progressPercentage: Double {
+    guard audioManager.duration > 0 else { return 0 }
+    return audioManager.currentTime / audioManager.duration
   }
 
-  // MARK: - Actions
-
-  private func togglePlayback() {
-    if audioManager.isPlaying {
-      audioManager.pause()
-    } else {
-      audioManager.resume()
-    }
-  }
-
-  // MARK: - Progress Bar
-
-  @ViewBuilder
-  private var progressBar: some View {
+  var body: some View {
     GeometryReader { geometry in
       ZStack(alignment: .leading) {
         Rectangle()
@@ -210,6 +159,22 @@ struct MacMiniPlayerBar: View {
           }
       )
     }
+  }
+}
+
+// MARK: - Isolated time label
+
+/// Isolates the per-tick "elapsed / total" text so it doesn't invalidate the
+/// surrounding controls on every time-observer update.
+private struct MacMiniPlayerTimeLabel: View {
+  private var audioManager: EnhancedAudioManager { .shared }
+
+  var body: some View {
+    Text("\(Formatters.formatPlaybackTime(audioManager.currentTime)) / \(Formatters.formatPlaybackTime(audioManager.duration))")
+      .font(.system(size: 11))
+      .foregroundStyle(.secondary)
+      .monospacedDigit()
+      .frame(width: 90, alignment: .trailing)
   }
 }
 

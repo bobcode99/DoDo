@@ -211,21 +211,30 @@ struct LivePlaybackButton: View {
   }
   
   // MARK: - Icon Only Style (capsule with icon, progress bar, and duration)
-  
+  //
+  // Tap responsiveness: every time `audioManager.currentTime` ticks, this
+  // body re-evaluates, the progress bar's width and the duration text both
+  // change, and any animation inherited from a parent (sheet transitions,
+  // navigation, list reorder) snaps the tween onto those layout changes —
+  // making the button feel laggy right after the tap. `.transaction` strips
+  // the inherited animation locally so the icon flip + progress update land
+  // on the next frame instead of crossfading.
   private var iconOnlyButton: some View {
     Button(action: onPlay) {
       HStack(spacing: 6) {
         playIcon(size: 14)
-        
+          .contentTransition(.identity)
+
         // Progress bar (only show when partially played)
         if showsPlaybackProgress {
           progressBar(width: 32, height: 3)
         }
-        
+
         if let duration = durationText {
           Text(duration)
             .font(.caption)
             .fontWeight(.medium)
+            .contentTransition(.identity)
         }
       }
       .foregroundStyle(.white)
@@ -236,6 +245,7 @@ struct LivePlaybackButton: View {
     }
     .buttonStyle(.plain)
     .disabled(isDisabled)
+    .transaction { $0.animation = nil }
   }
   
   // MARK: - Helpers

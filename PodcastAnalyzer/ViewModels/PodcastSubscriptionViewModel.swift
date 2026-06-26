@@ -56,9 +56,7 @@ final class PodcastSubscriptionViewModel {
           predicate: #Predicate { $0.rssUrl == feedUrl }
         )).first {
           existingByRSS.isSubscribed = true
-          existingByRSS.podcastInfo = podcastInfo
-          existingByRSS.title = podcastInfo.title
-          existingByRSS.rssUrl = podcastInfo.rssUrl
+          existingByRSS.applyPodcastInfo(podcastInfo)
           existingByRSS.lastUpdated = Date()
           try context.save()
           subscriptionSuccess = true
@@ -73,9 +71,7 @@ final class PodcastSubscriptionViewModel {
 
         if let existingByTitle = try? context.fetch(existingDescriptor).first {
           existingByTitle.isSubscribed = true
-          existingByTitle.podcastInfo = podcastInfo
-          existingByTitle.title = podcastInfo.title
-          existingByTitle.rssUrl = podcastInfo.rssUrl
+          existingByTitle.applyPodcastInfo(podcastInfo)
           existingByTitle.lastUpdated = Date()
           try context.save()
           subscriptionSuccess = true

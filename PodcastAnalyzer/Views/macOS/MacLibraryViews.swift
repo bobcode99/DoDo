@@ -75,6 +75,17 @@ struct MacLibraryPodcastsView: View {
 struct MacPodcastGridCell: View {
   let podcast: PodcastInfoModel
 
+  /// Most recent episode pubDate, formatted as "2 days ago" etc.
+  /// Mirrors the iOS PodcastGridCell so Mac users see the same
+  /// "freshness" cue as on iPhone.
+  private var latestEpisodeDateString: String? {
+    guard let date = podcast.podcastInfo.episodes
+      .lazy
+      .compactMap(\.pubDate)
+      .max() else { return nil }
+    return Formatters.formatRelativeDate(date)
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       CachedArtworkImage(urlString: podcast.podcastInfo.imageURL, size: 150, cornerRadius: 10)
@@ -83,6 +94,12 @@ struct MacPodcastGridCell: View {
         .font(.caption)
         .fontWeight(.medium)
         .lineLimit(2)
+
+      if let dateStr = latestEpisodeDateString {
+        Text(dateStr)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
     }
     .frame(width: 150)
   }
@@ -143,6 +160,11 @@ struct MacLibrarySavedView: View {
     .onAppear {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
+      // `setModelContext` no-ops on subsequent visits (`isAlreadyLoaded` short
+      // circuits it). Without an explicit refresh here, a star toggled in
+      // EpisodeDetailView — including on episodes from unsubscribed podcasts —
+      // wouldn't show up until the next app launch.
+      Task { await viewModel.refreshSavedEpisodes() }
     }
     .onDisappear {
       viewModel.cleanup()
@@ -204,6 +226,9 @@ struct MacLibraryDownloadedView: View {
     .onAppear {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
+      // Same staleness fix as Saved — pick up newly-completed downloads
+      // triggered from EpisodeDetailView / DownloadManager elsewhere.
+      Task { await viewModel.refreshDownloadedEpisodes() }
     }
     .onDisappear {
       viewModel.cleanup()
@@ -217,6 +242,15 @@ struct MacLibraryLatestView: View {
   @State private var viewModel = LibraryViewModel(modelContext: nil)
   @Environment(\.modelContext) private var modelContext
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
+
+  // Latest Episodes derives its rows from the subscribed podcasts' episode
+  // arrays. Without injecting them via @Query → setPodcasts, the view model's
+  // podcastInfoModelList stays empty and the list renders the empty state.
+  @Query(
+    filter: #Predicate<PodcastInfoModel> { $0.isSubscribed },
+    sort: \.lastUpdated,
+    order: .reverse
+  ) private var subscribedPodcasts: [PodcastInfoModel]
 
   private var audioManager: EnhancedAudioManager { .shared }
 
@@ -269,10 +303,14 @@ struct MacLibraryLatestView: View {
     .navigationTitle("Latest Episodes")
     .onAppear {
       viewModel.setModelContext(modelContext)
+      viewModel.setPodcasts(subscribedPodcasts)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
     }
     .onDisappear {
       viewModel.cleanup()
+    }
+    .onChange(of: subscribedPodcasts) { _, newPodcasts in
+      viewModel.setPodcasts(newPodcasts)
     }
   }
 }

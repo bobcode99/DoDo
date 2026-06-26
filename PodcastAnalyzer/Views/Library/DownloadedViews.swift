@@ -52,21 +52,24 @@ struct DownloadedPodcastsGridView: View {
                   .padding(.horizontal)
 
                 LazyVGrid(columns: columns, spacing: 16) {
-                  ForEach(viewModel.podcastsWithDownloads, id: \.podcast.id) { item in
-                    NavigationLink(value: PodcastBrowseRoute(podcastModel: item.podcast, initialFilter: .downloaded)) {
+                  ForEach(viewModel.podcastsWithDownloads) { item in
+                    NavigationLink(value: navigationRoute(for: item)) {
                       DownloadedPodcastCell(
-                        podcast: item.podcast,
+                        title: item.title,
+                        imageURL: item.imageURL,
                         downloadCount: item.downloadCount
                       )
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
-                    .podcastContextMenu(
-                      podcast: item.podcast,
-                      modelContext: modelContext,
-                      onUnsubscribed: {
-                        Task { await viewModel.refreshDownloadedEpisodes() }
-                      }
+                    .modifier(
+                      DownloadedPodcastContextMenuModifier(
+                        podcast: item.podcast,
+                        modelContext: modelContext,
+                        onUnsubscribed: {
+                          Task { await viewModel.refreshDownloadedEpisodes() }
+                        }
+                      )
                     )
                   }
                 }
@@ -96,6 +99,29 @@ struct DownloadedPodcastsGridView: View {
       for await _ in NotificationCenter.default.notifications(named: .episodeDownloadCompleted) {
         await viewModel.refreshDownloadedEpisodes()
       }
+    }
+  }
+
+  private func navigationRoute(for item: DownloadedPodcastGroup) -> LibrarySubpageRoute {
+    .downloadedPodcast(item.title)
+  }
+}
+
+private struct DownloadedPodcastContextMenuModifier: ViewModifier {
+  let podcast: PodcastInfoModel?
+  let modelContext: ModelContext
+  let onUnsubscribed: () -> Void
+
+  func body(content: Content) -> some View {
+    if let podcast {
+      content
+        .podcastContextMenu(
+          podcast: podcast,
+          modelContext: modelContext,
+          onUnsubscribed: onUnsubscribed
+        )
+    } else {
+      content
     }
   }
 }
@@ -264,12 +290,13 @@ struct ActiveDownloadRow: View {
 // MARK: - Downloaded Podcast Cell
 
 struct DownloadedPodcastCell: View {
-  let podcast: PodcastInfoModel
+  let title: String
+  let imageURL: String?
   let downloadCount: Int
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      CachedAsyncImage(url: URL(string: podcast.podcastInfo.imageURL)) { image in
+      CachedAsyncImage(url: URL(string: imageURL ?? "")) { image in
         image.resizable().aspectRatio(contentMode: .fill)
       } placeholder: {
         Color.gray.opacity(0.2)
@@ -279,7 +306,7 @@ struct DownloadedPodcastCell: View {
       .clipShape(.rect(cornerRadius: 10))
       .clipped()
 
-      Text(podcast.podcastInfo.title)
+      Text(title)
         .font(.caption)
         .fontWeight(.medium)
         .lineLimit(2)
@@ -297,6 +324,7 @@ struct DownloadedPodcastCell: View {
 struct DownloadedEpisodesView: View {
   @Bindable var viewModel: LibraryViewModel
   let showEpisodeArtwork: Bool
+  var podcastTitleFilter: String? = nil
   @Environment(\.modelContext) private var modelContext
   @State private var episodeToDelete: LibraryEpisode?
   @State private var showDeleteConfirmation = false
@@ -305,14 +333,14 @@ struct DownloadedEpisodesView: View {
 
   var body: some View {
     Group {
-      if viewModel.downloadedEpisodes.isEmpty && viewModel.downloadingEpisodes.isEmpty {
+      if displayedDownloadedEpisodes.isEmpty && displayedDownloadingEpisodes.isEmpty {
         emptyStateView
       } else {
         List {
           // Downloading Section
-          if !viewModel.downloadingEpisodes.isEmpty {
+          if !displayedDownloadingEpisodes.isEmpty {
             Section {
-              ForEach(viewModel.downloadingEpisodes) { downloading in
+              ForEach(displayedDownloadingEpisodes) { downloading in
                 DownloadingEpisodeRow(episode: downloading)
                   .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
               }
@@ -326,9 +354,9 @@ struct DownloadedEpisodesView: View {
           }
 
           // Downloaded Section
-          if !viewModel.filteredDownloadedEpisodes.isEmpty {
+          if !displayedDownloadedEpisodes.isEmpty {
             Section {
-              ForEach(viewModel.filteredDownloadedEpisodes) { episode in
+              ForEach(displayedDownloadedEpisodes) { episode in
                 EpisodeRowView(
                   libraryEpisode: episode,
                   episodeModel: episodeModels[episode.id],
@@ -352,7 +380,7 @@ struct DownloadedEpisodesView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
               }
             } header: {
-              if !viewModel.downloadingEpisodes.isEmpty {
+              if !displayedDownloadingEpisodes.isEmpty {
                 Text("Downloaded")
                   .font(.subheadline)
                   .fontWeight(.semibold)
@@ -368,7 +396,7 @@ struct DownloadedEpisodesView: View {
         }
       }
     }
-    .navigationTitle("Downloaded")
+    .navigationTitle(podcastTitleFilter ?? "Downloaded")
     .searchable(text: $viewModel.downloadedSearchText, prompt: "Search downloaded episodes")
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
@@ -408,6 +436,16 @@ struct DownloadedEpisodesView: View {
     } message: {
       Text("Are you sure you want to delete this downloaded episode?")
     }
+  }
+
+  private var displayedDownloadedEpisodes: [LibraryEpisode] {
+    guard let podcastTitleFilter else { return viewModel.filteredDownloadedEpisodes }
+    return viewModel.filteredDownloadedEpisodes.filter { $0.podcastTitle == podcastTitleFilter }
+  }
+
+  private var displayedDownloadingEpisodes: [DownloadingEpisode] {
+    guard let podcastTitleFilter else { return viewModel.downloadingEpisodes }
+    return viewModel.downloadingEpisodes.filter { $0.podcastTitle == podcastTitleFilter }
   }
 
   private var emptyStateView: some View {

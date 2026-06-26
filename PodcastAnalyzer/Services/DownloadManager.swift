@@ -14,6 +14,7 @@
 
 import Foundation
 import Observation
+import SwiftData
 import OSLog
 
 #if DEBUG
@@ -122,28 +123,12 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
     }
   }
 
-  // Use Unit Separator (U+001F) as delimiter
-  private static let episodeKeyDelimiter = "\u{1F}"
-
   func makeKey(episode: String, podcast: String) -> String {
-    "\(podcast)\(Self.episodeKeyDelimiter)\(episode)"
+    EpisodeKeyUtils.makeKey(podcastTitle: podcast, episodeTitle: episode)
   }
 
   private func parseEpisodeKey(_ episodeKey: String) -> (podcastTitle: String, episodeTitle: String)? {
-    if let delimiterIndex = episodeKey.range(of: Self.episodeKeyDelimiter) {
-      let podcastTitle = String(episodeKey[..<delimiterIndex.lowerBound])
-      let episodeTitle = String(episodeKey[delimiterIndex.upperBound...])
-      return (podcastTitle, episodeTitle)
-    }
-
-    // Fall back to old format (|) for backward compatibility
-    if let lastPipeIndex = episodeKey.lastIndex(of: "|") {
-      let podcastTitle = String(episodeKey[..<lastPipeIndex])
-      let episodeTitle = String(episodeKey[episodeKey.index(after: lastPipeIndex)...])
-      return (podcastTitle, episodeTitle)
-    }
-
-    return nil
+    EpisodeKeyUtils.parseKey(episodeKey)
   }
 
   // MARK: - Public Methods (called from DownloadManager)
@@ -208,7 +193,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
       try FileManager.default.copyItem(at: location, to: ourTempFile)
       logger.info("Copied download to temp location: \(ourTempFile.lastPathComponent)")
     } catch {
-      logger.error("Failed to copy temp file: \(error.localizedDescription)")
+      logger.error("Failed to copy temp file: \(error.localizedDescription, privacy: .public)")
       // Update state asynchronously
       Task {
         if let episodeKey = await downloadTracker.getDownloadKey(for: downloadTask) {
@@ -272,6 +257,27 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
           let manager = DownloadManager.shared
           manager.inFlightProgress.removeValue(forKey: episodeKey)
           manager.downloadStates[episodeKey] = .downloaded(localPath: destinationURL.path)
+          manager.persistCompletedDownload(
+            episodeTitle: episodeTitle,
+            podcastTitle: podcastTitle,
+            localPath: destinationURL.path,
+            audioURL: originalURL?.absoluteString
+          )
+
+          // AntennaPod pattern: disable per-episode auto-download after successful download
+          // so the coordinator never re-downloads the same episode automatically.
+          if let container = DownloadManager.shared.modelContainer {
+            let ctx = ModelContext(container)
+            let descriptor = FetchDescriptor<EpisodeDownloadModel>(
+              predicate: #Predicate { $0.id == episodeKey }
+            )
+            if let epModel = try? ctx.fetch(descriptor).first {
+              epModel.autoDownloadEnabled = false
+              try? ctx.save()
+            }
+            // Remove from coordinator's pending list.
+            Task { await AutoDownloadCoordinator.shared.removePending(podcastTitle: podcastTitle, episodeTitle: episodeTitle) }
+          }
 
           // Post notification
           NotificationCenter.default.post(
@@ -284,14 +290,38 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
             ]
           )
 
-          // Trigger auto-transcript if enabled
+          // Trigger auto-transcript if enabled (global engine).
+          // queueAutoTranscript skips silently when the episode already has a caption file.
           if SubtitleSettingsManager.shared.autoGenerateTranscripts {
-            TranscriptManager.shared.queueTranscript(
+            TranscriptManager.shared.queueAutoTranscript(
               episodeTitle: episodeTitle,
               podcastTitle: podcastTitle,
               audioPath: destinationURL.path,
               language: language
             )
+          }
+
+          // Per-podcast auto-transcribe: resolve engine at run time (YAP / local / skip).
+          let container = DownloadManager.shared.modelContainer
+          if let container {
+            let ctx = ModelContext(container)
+            let title = podcastTitle
+            let descriptor = FetchDescriptor<PodcastInfoModel>(
+              predicate: #Predicate { $0.title == title && $0.isSubscribed == true }
+            )
+            if let podcast = try? ctx.fetch(descriptor).first,
+               podcast.autoTranscribeNewEpisodes,
+               !TranscriptManager.shared.isGenerating(episodeTitle: episodeTitle, podcastTitle: podcastTitle),
+               let engine = TranscriptManager.shared.engineForAutoEnqueue(podcastTitle: podcastTitle) {
+              TranscriptManager.shared.queueAutoTranscript(
+                episodeTitle: episodeTitle,
+                podcastTitle: podcastTitle,
+                audioPath: destinationURL.path,
+                audioRemoteURL: nil,
+                language: language,
+                engine: engine
+              )
+            }
           }
         }
 
@@ -309,7 +339,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
               )
               logger.info("Auto-downloaded RSS transcript for: \(episodeTitle)")
             } catch {
-              logger.warning("Auto-download RSS transcript failed: \(error.localizedDescription)")
+              logger.warning("Auto-download RSS transcript failed: \(error.localizedDescription, privacy: .public)")
             }
           }
         }
@@ -324,7 +354,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
           DownloadManager.shared.inFlightProgress.removeValue(forKey: episodeKey)
           DownloadManager.shared.downloadStates[episodeKey] = .failed(error: error.localizedDescription)
         }
-        logger.error("Download save failed: \(error.localizedDescription)")
+        logger.error("Download save failed: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -376,7 +406,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
         DownloadManager.shared.inFlightProgress.removeValue(forKey: episodeKey)
         DownloadManager.shared.downloadStates[episodeKey] = .failed(error: error.localizedDescription)
       }
-      logger.error("Download failed: \(error.localizedDescription)")
+      logger.error("Download failed: \(error.localizedDescription, privacy: .public)")
     }
   }
 }
@@ -408,6 +438,13 @@ final class DownloadManager {
   @ObservationIgnored
   private let fileStorage = FileStorageManager.shared
 
+  @ObservationIgnored
+  var modelContainer: ModelContainer?
+
+  func setModelContainer(_ container: ModelContainer) {
+    self.modelContainer = container
+  }
+
   /// Episode keys whose on-disk presence has already been checked.
   /// Prevents `getDownloadState` from repeating 7-extension disk scans on every call.
   @ObservationIgnored
@@ -424,6 +461,55 @@ final class DownloadManager {
   var hasActiveDownloads: Bool { !inFlightProgress.isEmpty }
 
   private init() {}
+
+  func persistCompletedDownload(
+    episodeTitle: String,
+    podcastTitle: String,
+    localPath: String,
+    audioURL: String?
+  ) {
+    guard let container = modelContainer else { return }
+
+    let context = ModelContext(container)
+    let episodeKey = sessionDelegate.makeKey(episode: episodeTitle, podcast: podcastTitle)
+    let descriptor = FetchDescriptor<EpisodeDownloadModel>(
+      predicate: #Predicate { $0.id == episodeKey }
+    )
+
+    let model: EpisodeDownloadModel
+    if let existingModel = try? context.fetch(descriptor).first {
+      model = existingModel
+    } else {
+      let podcastDescriptor = FetchDescriptor<PodcastInfoModel>(
+        predicate: #Predicate { $0.title == podcastTitle }
+      )
+      let podcast = try? context.fetch(podcastDescriptor).first
+      let episode = podcast?.podcastInfo.episodes.first { $0.title == episodeTitle }
+      model = EpisodeDownloadModel(
+        episodeTitle: episodeTitle,
+        podcastTitle: podcastTitle,
+        audioURL: episode?.audioURL ?? audioURL ?? "",
+        localAudioPath: localPath,
+        downloadedDate: Date(),
+        imageURL: episode?.imageURL ?? podcast?.podcastInfo.imageURL,
+        pubDate: episode?.pubDate
+      )
+      context.insert(model)
+    }
+
+    model.localAudioPath = localPath
+    model.downloadedDate = Date()
+    model.autoDownloadEnabled = false
+    if model.audioURL.isEmpty, let audioURL {
+      model.audioURL = audioURL
+    }
+    if let attrs = try? FileManager.default.attributesOfItem(atPath: localPath),
+       let size = attrs[.size] as? Int64 {
+      model.fileSize = size
+    }
+
+    try? context.save()
+  }
 
   // MARK: - State Restoration
 
@@ -502,7 +588,7 @@ final class DownloadManager {
           return
         }
       } catch {
-        logger.warning("Could not check disk space: \(error.localizedDescription)")
+        logger.warning("Could not check disk space: \(error.localizedDescription, privacy: .public)")
         // Proceed anyway — disk space check is best-effort
       }
 
@@ -555,7 +641,7 @@ final class DownloadManager {
         diskCheckedKeys.remove(episodeKey)
         logger.info("Deleted download: \(episodeTitle)")
       } catch {
-        logger.error("Failed to delete download: \(error.localizedDescription)")
+        logger.error("Failed to delete download: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -576,16 +662,18 @@ final class DownloadManager {
       }
     }
 
-    // Check non-observable in-flight progress first (avoids @Observable subscription
-    // for the common hot path of active downloads updating progress).
+    // Always read downloadStates first to establish the @Observable subscription.
+    // This ensures any view calling this method re-renders on state transitions
+    // (start / finish / fail) even when inFlightProgress is non-nil.
+    let persistedState = downloadStates[episodeKey]
+
+    // Return in-flight progress from the non-observable store so progress ticks
+    // don't trigger cascading view re-renders (see inFlightProgress comments above).
     if let progress = inFlightProgress[episodeKey] {
       return .downloading(progress: progress)
     }
 
-    // Fall through to @Observable dictionary for state transitions.
-    // This creates an observation dependency, but only fires on actual
-    // state transitions (start/finish/fail), not on every progress tick.
-    guard let state = downloadStates[episodeKey] else {
+    guard let state = persistedState else {
       return .notDownloaded
     }
 

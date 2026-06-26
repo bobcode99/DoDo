@@ -142,7 +142,7 @@ class BackgroundSyncManager {
       try BGTaskScheduler.shared.submit(request)
       logger.info("Background refresh scheduled for 4 hours from now")
     } catch {
-      logger.error("Failed to schedule background refresh: \(error.localizedDescription)")
+      logger.error("Failed to schedule background refresh: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -224,6 +224,16 @@ class BackgroundSyncManager {
 
       syncProgressTotal = podcasts.count
 
+      // Pre-fetch episode keys that have user data so we can preserve orphaned episodes
+      // (episodes that aged off the RSS feed but were downloaded / starred / played).
+      let allEpisodeModels = (try? context.fetch(FetchDescriptor<EpisodeDownloadModel>())) ?? []
+      let episodesWithUserData: Set<String> = Set(
+        allEpisodeModels
+          .filter { $0.localAudioPath != nil || $0.isStarred || $0.isCompleted
+                    || $0.lastPlaybackPosition > 0 || $0.playCount > 0 }
+          .map { $0.id }
+      )
+
       var totalNewEpisodes = 0
       var newEpisodeDetails: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)] = []
 
@@ -242,6 +252,7 @@ class BackgroundSyncManager {
             if let result = await group.next() {
               processSyncResult(
                 result, podcasts: podcasts,
+                episodesWithUserData: episodesWithUserData,
                 totalNewEpisodes: &totalNewEpisodes,
                 newEpisodeDetails: &newEpisodeDetails
               )
@@ -280,6 +291,7 @@ class BackgroundSyncManager {
         for await result in group {
           processSyncResult(
             result, podcasts: podcasts,
+            episodesWithUserData: episodesWithUserData,
             totalNewEpisodes: &totalNewEpisodes,
             newEpisodeDetails: &newEpisodeDetails
           )
@@ -300,25 +312,16 @@ class BackgroundSyncManager {
       lastSyncDate = Date()
       UserDefaults.standard.set(lastSyncDate, forKey: Keys.lastSyncDate)
 
-      // Auto-download new episodes if enabled (cap at 5 per sync)
-      if totalNewEpisodes > 0 && UserDefaults.standard.bool(forKey: "autoDownloadNewEpisodes") {
-        let maxAutoDownload = 5
-        var downloadCount = 0
-        for detail in newEpisodeDetails.prefix(maxAutoDownload) {
-          // Find the episode in the updated podcast data
-          if let podcast = podcasts.first(where: { $0.podcastInfo.title == detail.podcastTitle }),
-             let episode = podcast.podcastInfo.episodes.first(where: { $0.title == detail.episodeTitle }),
-             let audioURL = episode.audioURL, !audioURL.isEmpty {
-            DownloadManager.shared.downloadEpisode(
-              episode: episode,
-              podcastTitle: detail.podcastTitle,
-              language: detail.language
-            )
-            downloadCount += 1
-            logger.info("Auto-downloading: \(episode.title)")
-          }
+      // Delegate auto-download decisions to the serialized coordinator.
+      if totalNewEpisodes > 0 {
+        let autoDownloadCandidates = newEpisodeDetails.map { detail in
+          (podcastTitle: detail.podcastTitle,
+           episodeTitle: detail.episodeTitle,
+           audioURL: detail.audioURL ?? "",
+           language: detail.language)
         }
-        logger.info("Auto-downloaded \(downloadCount) episodes")
+        await AutoDownloadCoordinator.shared.updatePendingEpisodes(autoDownloadCandidates)
+        await AutoDownloadCoordinator.shared.run(reason: .feedRefresh)
       }
 
       // Send push notification if there are new episodes and enabled
@@ -345,7 +348,7 @@ class BackgroundSyncManager {
 
     } catch {
       lastSyncError = error.localizedDescription
-      logger.error("Sync failed: \(error.localizedDescription)")
+      logger.error("Sync failed: \(error.localizedDescription, privacy: .public)")
       return false
     }
   }
@@ -354,13 +357,14 @@ class BackgroundSyncManager {
   private func processSyncResult(
     _ result: (index: Int, podcast: PodcastInfo?, cacheHeader: String?, error: Error?),
     podcasts: [PodcastInfoModel],
+    episodesWithUserData: Set<String>,
     totalNewEpisodes: inout Int,
     newEpisodeDetails: inout [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)]
   ) {
     let podcast = podcasts[result.index]
 
     if let error = result.error {
-      logger.error("Failed to sync \(podcast.podcastInfo.title): \(error.localizedDescription)")
+      logger.error("Failed to sync \(podcast.podcastInfo.title): \(error.localizedDescription, privacy: .public)")
       return
     }
 
@@ -394,8 +398,10 @@ class BackgroundSyncManager {
         ))
       }
 
-      // Update the podcast with new episodes
-      podcast.podcastInfo = updatedPodcast
+      // Merge: RSS episodes + orphaned episodes the user has touched (downloaded/starred/played)
+      // so they don't vanish when a feed trims its backlog.
+      let merged = podcast.podcastInfo.merging(updatedFrom: updatedPodcast, preservedKeys: episodesWithUserData)
+      podcast.applyPodcastInfo(merged)
       podcast.lastUpdated = Date()
 
       // Update release schedule prediction from the latest episode pub dates
@@ -405,6 +411,30 @@ class BackgroundSyncManager {
       podcast.predictedNextReleaseDate = nextDate
 
       logger.info("Found \(newEpisodes.count) new episodes for \(updatedPodcast.title)")
+
+      // Auto-enqueue transcription for shows the user opted into.
+      // We only fire here when the engine is YAP, since YAP can transcribe
+      // from a remote URL — no local audio file is needed. Local engines
+      // (Whisper / AppleSpeech) require the downloaded file, so they are
+      // handled by DownloadManager once the audio lands on disk.
+      if podcast.autoTranscribeNewEpisodes,
+         let engine = TranscriptManager.shared.engineForAutoEnqueue(podcastTitle: updatedPodcast.title),
+         engine == .yapServer {
+        for episode in newEpisodes {
+          guard !TranscriptManager.shared.isGenerating(
+            episodeTitle: episode.title, podcastTitle: updatedPodcast.title
+          ) else { continue }
+          TranscriptManager.shared.queueAutoTranscript(
+            episodeTitle: episode.title,
+            podcastTitle: updatedPodcast.title,
+            audioPath: "",
+            audioRemoteURL: episode.audioURL,
+            language: updatedPodcast.language,
+            engine: .yapServer
+          )
+        }
+        logger.info("Auto-enqueued \(newEpisodes.count) YAP transcript jobs for \(updatedPodcast.title)")
+      }
     }
   }
 
@@ -425,7 +455,7 @@ class BackgroundSyncManager {
           logger.info("Notification permission denied")
         }
       } catch {
-        logger.error("Failed to request notification permission: \(error.localizedDescription)")
+        logger.error("Failed to request notification permission: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
@@ -477,7 +507,7 @@ class BackgroundSyncManager {
       try await UNUserNotificationCenter.current().add(request)
       logger.info("Notification sent for \(totalCount) new episodes")
     } catch {
-      logger.error("Failed to send notification: \(error.localizedDescription)")
+      logger.error("Failed to send notification: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -494,13 +524,16 @@ class BackgroundSyncManager {
       guard let self else { return }
 
       // Only sync immediately if data is stale (avoids redundant fetch every app-foreground)
-      let isStale: Bool
       if let last = lastSyncDate {
-        isStale = Date().timeIntervalSince(last) >= minimumSyncInterval
+        let age = Date().timeIntervalSince(last)
+        if age >= minimumSyncInterval {
+          logger.info("Foreground sync: lastSync \(Int(age))s ago (>= \(Int(self.minimumSyncInterval))s threshold) — syncing now")
+          await self.syncNow()
+        } else {
+          logger.info("Foreground sync: lastSync \(Int(age))s ago — fresh, skipping immediate sync")
+        }
       } else {
-        isStale = true
-      }
-      if isStale {
+        logger.info("Foreground sync: no prior sync recorded — syncing now")
         await self.syncNow()
       }
 

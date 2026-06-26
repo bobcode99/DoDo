@@ -139,6 +139,35 @@ enum TranslationTargetLanguage: String, CaseIterable, Codable, Sendable {
   }
 }
 
+// MARK: - Music Detection Sensitivity
+
+/// Confidence threshold preset for the SoundAnalysis music classifier.
+/// Lower thresholds catch more music (including faint background beds) but
+/// risk flagging speech-with-music as music; higher thresholds only mark
+/// clearly musical passages.
+enum MusicDetectionSensitivity: String, CaseIterable, Codable, Sendable {
+  case low
+  case medium
+  case high
+
+  /// The confidence cutoff passed to `MusicDetectionService.detectMusicRanges`.
+  var minimumConfidence: Double {
+    switch self {
+    case .low: return 0.4
+    case .medium: return 0.6
+    case .high: return 0.8
+    }
+  }
+
+  var displayName: String {
+    switch self {
+    case .low: return "Low"
+    case .medium: return "Medium"
+    case .high: return "High"
+    }
+  }
+}
+
 // MARK: - Settings Manager
 
 /// Manages subtitle display and translation preferences
@@ -167,18 +196,30 @@ final class SubtitleSettingsManager {
     didSet { saveSettings() }
   }
 
-  /// Group transcript segments into complete sentences (merge segments that don't end with sentence-ending punctuation)
-  var groupSegmentsIntoSentences: Bool = true {
-    didSet { saveSettings() }
-  }
-
   /// Automatically generate transcripts for downloaded episodes
   var autoGenerateTranscripts: Bool = false {
     didSet { saveSettings() }
   }
 
-  /// Per-segment playback highlighting (works with all display modes)
-  var sentenceHighlightEnabled: Bool = true {
+  /// Run the SoundAnalysis music classifier during chunked Apple Speech
+  /// transcription and inject `[♪ Music]` markers in place of music ranges.
+  /// Default on; users with voice-over-heavy content can disable when the
+  /// classifier mis-flags speech as music.
+  var enableMusicDetection: Bool = true {
+    didSet { saveSettings() }
+  }
+
+  /// Confidence threshold preset for the music classifier. Higher = stricter
+  /// (fewer false positives on speech-with-music); lower = more aggressive
+  /// (catches faint intro/outro music).
+  var musicDetectionSensitivity: MusicDetectionSensitivity = .medium {
+    didSet { saveSettings() }
+  }
+
+  /// Split long audio into parallel parts for Apple Speech transcription.
+  /// On (default): faster on multi-core, but the audio is processed in chunks.
+  /// Off: one single-pass transcription end-to-end — slower, no chunk seams.
+  var splitLongAudio: Bool = true {
     didSet { saveSettings() }
   }
 
@@ -189,9 +230,10 @@ final class SubtitleSettingsManager {
     static let targetLanguage = "subtitle_target_language"
     static let autoTranslate = "subtitle_auto_translate"
     static let autoDownloadTranscripts = "subtitle_auto_download_transcripts"
-    static let groupSegmentsIntoSentences = "subtitle_group_segments_into_sentences"
     static let autoGenerateTranscripts = "subtitle_auto_generate_transcripts"
-    static let sentenceHighlightEnabled = "subtitle_sentence_highlight_enabled"
+    static let enableMusicDetection = "subtitle_enable_music_detection"
+    static let musicDetectionSensitivity = "subtitle_music_detection_sensitivity"
+    static let splitLongAudio = "subtitle_split_long_audio"
   }
 
   // MARK: - Initialization
@@ -224,22 +266,23 @@ final class SubtitleSettingsManager {
       autoDownloadTranscripts = defaults.bool(forKey: Keys.autoDownloadTranscripts)
     }
 
-    // Default to true for sentence grouping if not set
-    if defaults.object(forKey: Keys.groupSegmentsIntoSentences) == nil {
-      groupSegmentsIntoSentences = true
-    } else {
-      groupSegmentsIntoSentences = defaults.bool(forKey: Keys.groupSegmentsIntoSentences)
-    }
-
     if defaults.object(forKey: Keys.autoGenerateTranscripts) != nil {
       autoGenerateTranscripts = defaults.bool(forKey: Keys.autoGenerateTranscripts)
     }
 
-    // Default to true for sentence highlight if not set
-    if defaults.object(forKey: Keys.sentenceHighlightEnabled) == nil {
-      sentenceHighlightEnabled = true
-    } else {
-      sentenceHighlightEnabled = defaults.bool(forKey: Keys.sentenceHighlightEnabled)
+    // Default to true if not previously set.
+    if defaults.object(forKey: Keys.enableMusicDetection) != nil {
+      enableMusicDetection = defaults.bool(forKey: Keys.enableMusicDetection)
+    }
+
+    if let raw = defaults.string(forKey: Keys.musicDetectionSensitivity),
+       let value = MusicDetectionSensitivity(rawValue: raw) {
+      musicDetectionSensitivity = value
+    }
+
+    // Default to true if not previously set.
+    if defaults.object(forKey: Keys.splitLongAudio) != nil {
+      splitLongAudio = defaults.bool(forKey: Keys.splitLongAudio)
     }
   }
 
@@ -249,9 +292,10 @@ final class SubtitleSettingsManager {
     defaults.set(targetLanguage.rawValue, forKey: Keys.targetLanguage)
     defaults.set(autoTranslateOnLoad, forKey: Keys.autoTranslate)
     defaults.set(autoDownloadTranscripts, forKey: Keys.autoDownloadTranscripts)
-    defaults.set(groupSegmentsIntoSentences, forKey: Keys.groupSegmentsIntoSentences)
     defaults.set(autoGenerateTranscripts, forKey: Keys.autoGenerateTranscripts)
-    defaults.set(sentenceHighlightEnabled, forKey: Keys.sentenceHighlightEnabled)
+    defaults.set(enableMusicDetection, forKey: Keys.enableMusicDetection)
+    defaults.set(musicDetectionSensitivity.rawValue, forKey: Keys.musicDetectionSensitivity)
+    defaults.set(splitLongAudio, forKey: Keys.splitLongAudio)
   }
 
   // MARK: - Translation Availability

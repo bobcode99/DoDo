@@ -20,6 +20,11 @@ enum EpisodeFilter: String, CaseIterable {
   case played = "Played"
   case starred = "Starred"
   case downloaded = "Downloaded"
+  case transcript = "Transcript"
+  /// User-defined per-podcast filter (include/exclude terms + min-duration)
+  /// configured via `PodcastEpisodeFilterView`. Falls back to "show
+  /// everything" semantics when no filter fields are set.
+  case custom = "Custom"
 
   var icon: String {
     switch self {
@@ -28,6 +33,8 @@ enum EpisodeFilter: String, CaseIterable {
     case .played: return "checkmark.circle"
     case .starred: return "star.fill"
     case .downloaded: return "arrow.down.circle.fill"
+    case .transcript: return "text.bubble"
+    case .custom: return "line.3.horizontal.decrease.circle"
     }
   }
 }
@@ -61,6 +68,8 @@ struct EpisodeListView: View {
   @State private var isLoadingRSS = false
   @State private var loadError: String?
   @State private var podcastModel: PodcastInfoModel?
+  @State private var showEpisodeFilterSheet = false
+  @State private var showTranscribeBackfillSheet = false
 
   private let applePodcastService = ApplePodcastService()
 
@@ -148,7 +157,7 @@ struct EpisodeListView: View {
       if let vm = viewModel {
         episodeListContent(viewModel: vm)
       } else {
-        ProgressView("Loading...")
+        episodeLoadingView
       }
     }
     .task {
@@ -201,6 +210,20 @@ struct EpisodeListView: View {
       }
 
       ProgressView("Loading episodes...")
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  /// Centered, full-frame loading placeholder shown while the view model is
+  /// still being built — avoids the abrupt top-left spinner so navigating in
+  /// reads as a smooth transition.
+  private var episodeLoadingView: some View {
+    VStack(spacing: 16) {
+      ProgressView()
+        .scaleEffect(1.2)
+      Text("Loading episodes\u{2026}")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -347,19 +370,16 @@ struct EpisodeListView: View {
 
       // MARK: - Episodes List
       Section {
-        ForEach(viewModel.filteredEpisodes) { episode in
+        ForEach(viewModel.displayedEpisodes) { episode in
+          let key = viewModel.makeEpisodeKey(episode)
           EpisodeRowView(
             episode: episode,
             podcastTitle: viewModel.podcastInfo.title,
             fallbackImageURL: viewModel.podcastInfo.imageURL,
             podcastLanguage: viewModel.podcastInfo.language,
             downloadManager: downloadManager,
-            episodeModel: viewModel.episodeModels[
-              viewModel.makeEpisodeKey(episode)
-            ],
-            precomputedDownloadState: viewModel.downloadStatesSnapshot[
-              viewModel.makeEpisodeKey(episode)
-            ],
+            episodeModel: viewModel.episodeModels[key],
+            precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
             showArtwork: showEpisodeArtwork,
             onToggleStar: {
               viewModel.toggleStar(for: episode)
@@ -375,8 +395,16 @@ struct EpisodeListView: View {
           )
           .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         }
+
+        // "Show All (N)" footer — only the latest `initialEpisodeDisplayCount`
+        // episodes render until the user opts into the full backlog.
+        if viewModel.hasMoreEpisodesToShow {
+          showAllButton(viewModel: viewModel)
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
+        }
       } header: {
-        Text("Episodes (\(viewModel.filteredEpisodeCount))")
+        Text("Episodes (\(viewModel.filteredEpisodes.count))")
           .font(.subheadline)
           .fontWeight(.semibold)
           .foregroundStyle(.secondary)
@@ -415,6 +443,49 @@ struct EpisodeListView: View {
               "Refresh Episodes",
               systemImage: "arrow.clockwise"
             )
+          }
+
+          if podcastModel != nil && isSubscribed {
+            Divider()
+
+            Menu {
+              ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
+                Button {
+                  podcastModel?.autoDownloadSetting = setting.rawValue
+                  try? modelContext.save()
+                } label: {
+                  if podcastModel?.autoDownloadSetting == setting.rawValue {
+                    Label(setting.displayName, systemImage: "checkmark")
+                  } else {
+                    Text(setting.displayName)
+                  }
+                }
+              }
+            } label: {
+              let current = AutoDownloadSetting(rawValue: podcastModel?.autoDownloadSetting ?? "") ?? .inheritGlobal
+              Label("Auto Download: \(current.displayName)", systemImage: "arrow.down.circle")
+            }
+
+            Button {
+              let wasOff = podcastModel?.autoTranscribeNewEpisodes != true
+              podcastModel?.autoTranscribeNewEpisodes.toggle()
+              try? modelContext.save()
+              if wasOff && podcastModel?.autoTranscribeNewEpisodes == true {
+                showTranscribeBackfillSheet = true
+              }
+            } label: {
+              if podcastModel?.autoTranscribeNewEpisodes == true {
+                Label("Auto-transcribe: On", systemImage: "waveform.badge.plus")
+              } else {
+                Label("Auto-transcribe: Off", systemImage: "waveform")
+              }
+            }
+
+            Button {
+              showEpisodeFilterSheet = true
+            } label: {
+              Label("Episode Filter\u{2026}", systemImage: "line.3.horizontal.decrease.circle")
+            }
           }
         } label: {
           Image(systemName: "ellipsis.circle")
@@ -464,6 +535,54 @@ struct EpisodeListView: View {
         "Are you sure you want to unsubscribe from this podcast? Downloaded episodes will remain available."
       )
     }
+    .sheet(isPresented: $showEpisodeFilterSheet) {
+      if let model = podcastModel {
+        PodcastEpisodeFilterView(podcast: model, modelContext: modelContext) {
+          // Promote the user's freshly-saved filter into a visible result —
+          // switch the chip row to .custom so the list updates immediately.
+          // Always assigning (even when already .custom) is intentional:
+          // didSet fires unconditionally, so the filter re-evaluates against
+          // the new include/exclude/min-duration values.
+          withAnimation(.easeInOut(duration: 0.2)) {
+            viewModel.selectedFilter = .custom
+          }
+        }
+      }
+    }
+    .sheet(isPresented: $showTranscribeBackfillSheet) {
+      if let model = podcastModel {
+        TranscribeBackfillSheet(
+          podcastTitle: model.podcastInfo.title,
+          podcastLanguage: model.podcastInfo.language,
+          episodes: model.podcastInfo.episodes
+        )
+      }
+    }
+  }
+
+  /// Footer row that reveals the full episode backlog. Tapping flips the view
+  /// model's window flag; the List then materializes the remaining rows.
+  @ViewBuilder
+  private func showAllButton(viewModel: EpisodeListViewModel) -> some View {
+    Button {
+      withAnimation(.easeInOut(duration: 0.25)) {
+        viewModel.isShowingAllEpisodes = true
+      }
+    } label: {
+      HStack(spacing: 6) {
+        Spacer()
+        Text("Show All (\(viewModel.filteredEpisodes.count))")
+          .font(.subheadline)
+          .fontWeight(.semibold)
+        Image(systemName: "chevron.down")
+          .font(.caption)
+        Spacer()
+      }
+      .foregroundStyle(.blue)
+      .padding(.vertical, 10)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 
   // MARK: - Apple Podcast Lookup
@@ -551,22 +670,27 @@ struct EpisodeListView: View {
           .background(Color.gray.opacity(0.15))
           .clipShape(.rect(cornerRadius: 4))
 
-          // Subscribe button
-          Button(action: subscribe) {
+          // Subscribe / Unsubscribe button
+          Button {
+            if isSubscribed {
+              showUnsubscribeConfirmation = true
+            } else {
+              subscribe()
+            }
+          } label: {
             HStack {
               Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
               Text(isSubscribed ? "Subscribed" : "Subscribe")
             }
             .font(.subheadline)
             .fontWeight(.medium)
-            .foregroundStyle(.white)
+            .foregroundStyle(isSubscribed ? Color.primary : Color.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(isSubscribed ? Color.green : Color.blue)
+            .background(isSubscribed ? Color.gray.opacity(0.25) : Color.blue)
             .clipShape(.rect(cornerRadius: 16))
           }
           .buttonStyle(.plain)
-          .disabled(isSubscribed)
           .padding(.top, 4)
 
           if viewModel.podcastInfo.podcastInfoDescription != nil {

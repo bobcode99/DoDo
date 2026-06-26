@@ -77,11 +77,9 @@ struct UpNextSuggestionEngine {
 
     // MARK: Tuning constants
 
-    /// Episodes with progressRatio above this are treated as in-progress.
-    static let inProgressMinRatio: Double = 0.05
-
-    /// Minimum absolute position (seconds) to count as in-progress when duration is unknown.
-    static let inProgressMinSeconds: Double = 60
+    /// Absolute seconds-played gate for in-progress detection.
+    /// Apple-Podcasts-style: any episode listened to past this many seconds sticks to Up Next.
+    static let inProgressMinSeconds: Double = 15
 
     /// Freshness factor decays to 0 at this many days.
     static let freshnessHalfLifeDays: Double = 14
@@ -94,6 +92,35 @@ struct UpNextSuggestionEngine {
 
     /// Episodes older than this with no plays receive a small penalty.
     static let stalePenaltyThresholdDays: Double = 60
+
+    /// Floor multiplier for freshness when podcast engagement is zero.
+    static let freshnessEngagementFloor: Double = 0.3
+
+    /// Bonus for new episodes (within newEpisodeThresholdDays) from an engaged podcast.
+    static let bonusNewEpisodeEngaged: Double = 20
+
+    /// Age threshold (days) for "new episode" engaged-podcast bonus.
+    static let newEpisodeThresholdDays: Double = 3
+
+    /// Plays-on-podcast threshold for the "fresh from engaged" boost.
+    static let engagedThresholdPlays: Int = 5
+
+    /// Big boost for a fresh episode from a most-listened podcast — must exceed
+    /// the in-progress maximum (`bonusInProgressBase` 80 + `bonusInProgressProgress` 20
+    /// + `bonusInProgressRecency` 15 = 115) so it ranks above generic in-progress rows.
+    static let bonusFreshFromEngaged: Double = 130
+
+    /// Smaller bonus for any subscribed (but not heavily-listened) podcast's recent episode.
+    static let bonusFreshSubscribed: Double = 25
+
+    /// Age threshold (days) for the lower-tier "fresh subscribed" bonus.
+    static let freshSubscribedThresholdDays: Double = 5
+
+    /// Bonus for in-progress episodes that were recently played.
+    static let bonusInProgressRecency: Double = 15
+
+    /// Window (days) over which in-progress recency bonus decays to zero.
+    static let inProgressRecencyWindowDays: Double = 7
 
     // MARK: Score weights
 
@@ -143,15 +170,10 @@ struct UpNextSuggestionEngine {
             ? min(position / effectiveDuration, 1.0)
             : 0
 
-        // In-progress detection: ratio threshold OR absolute position when duration unknown
-        let isInProgress: Bool = {
-            if input.episode.isCompleted { return false }
-            if effectiveDuration > 0 {
-                return progressRatio > Self.inProgressMinRatio
-            } else {
-                return position > Self.inProgressMinSeconds
-            }
-        }()
+        // In-progress detection: a single absolute-seconds gate (Apple-Podcasts style).
+        // Anything past `inProgressMinSeconds` of listening sticks, regardless of duration.
+        let isInProgress: Bool = !input.episode.isCompleted
+            && position > Self.inProgressMinSeconds
 
         var s: Double = 0
 
@@ -161,20 +183,49 @@ struct UpNextSuggestionEngine {
             s += progressRatio * Self.bonusInProgressProgress
         }
 
-        // ── Freshness ─────────────────────────────────────────────────────
-        if let pubDate = episodeInfo.pubDate {
-            let ageInDays = now.timeIntervalSince(pubDate) / 86_400
-            let clamped = min(max(ageInDays, 0), 90)
-            let freshness = max(0, 1.0 - clamped / Self.freshnessHalfLifeDays)
-            s += freshness * Self.weightFreshness
+        // ── In-progress recency bonus (recently-played episodes rank higher) ──
+        if isInProgress, let lastPlay = model?.lastPlayedDate {
+            let daysSince = now.timeIntervalSince(lastPlay) / 86_400
+            let recencyFactor = max(0, 1.0 - daysSince / Self.inProgressRecencyWindowDays)
+            s += recencyFactor * Self.bonusInProgressRecency
         }
 
-        // ── Podcast engagement ────────────────────────────────────────────
+        // ── Podcast engagement (compute early — used by freshness below) ──────
         let engagementFactor = min(
             Double(input.podcastTotalPlayCount) / Double(Self.engagementSaturationPlays),
             1.0
         )
         s += engagementFactor * Self.weightEngagement
+
+        // ── Freshness (gated by engagement to reduce noise from cold podcasts) ─
+        if let pubDate = episodeInfo.pubDate {
+            let ageInDays = now.timeIntervalSince(pubDate) / 86_400
+            let clamped = min(max(ageInDays, 0), 90)
+            let rawFreshness = max(0, 1.0 - clamped / Self.freshnessHalfLifeDays)
+            let scaledFreshness = rawFreshness * (Self.freshnessEngagementFloor + (1 - Self.freshnessEngagementFloor) * engagementFactor)
+            s += scaledFreshness * Self.weightFreshness
+        }
+
+        // ── New episode bonus for engaged podcasts ────────────────────────────
+        if let pubDate = episodeInfo.pubDate {
+            let ageInDays = now.timeIntervalSince(pubDate) / 86_400
+            if ageInDays <= Self.newEpisodeThresholdDays {
+                s += engagementFactor * Self.bonusNewEpisodeEngaged
+            }
+        }
+
+        // ── Fresh-from-engaged: outranks generic in-progress so a new episode
+        //    from your most-listened podcast tops the list. Lower-tier subscribed
+        //    bonus catches recent episodes from less-engaged shows.
+        if let pubDate = episodeInfo.pubDate, !isInProgress {
+            let ageInDays = now.timeIntervalSince(pubDate) / 86_400
+            if input.podcastTotalPlayCount >= Self.engagedThresholdPlays
+               && ageInDays <= Self.newEpisodeThresholdDays {
+                s += Self.bonusFreshFromEngaged
+            } else if ageInDays <= Self.freshSubscribedThresholdDays {
+                s += Self.bonusFreshSubscribed
+            }
+        }
 
         // ── Downloaded ───────────────────────────────────────────────────
         if input.episode.isDownloaded {
@@ -235,7 +286,14 @@ struct UpNextSuggestionEngine {
         podcastMostRecentPlayDate: Date?,
         now: Date
     ) -> SuggestionReason {
-        // Priority order: in-progress > starred > downloaded > listenOften > newEpisode > recentPodcast
+        // Priority order: fresh-from-engaged > in-progress > starred > downloaded > listenOften > newEpisode > recentPodcast
+        if let pub = pubDate, !isInProgress {
+            let ageInDays = now.timeIntervalSince(pub) / 86_400
+            if podcastTotalPlayCount >= Self.engagedThresholdPlays
+               && ageInDays <= Self.newEpisodeThresholdDays {
+                return .newEpisode
+            }
+        }
         if isInProgress {
             return .inProgress(percentComplete: Int(progressRatio * 100))
         }

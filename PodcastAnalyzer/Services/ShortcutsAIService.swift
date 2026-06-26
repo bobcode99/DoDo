@@ -15,7 +15,7 @@ import UIKit
 import AppKit
 #endif
 
-private let logger = Logger(subsystem: "com.podcastanalyzer", category: "ShortcutsAIService")
+private let logger = Logger(subsystem: "com.podcast.analyzer", category: "ShortcutsAIService")
 
 // MARK: - Shortcuts AI Service
 
@@ -47,6 +47,11 @@ class ShortcutsAIService {
     // Continuation for async/await support
     private var pendingContinuation: CheckedContinuation<String, Error>?
     private var timeoutTask: Task<Void, Never>?
+
+    // The input we wrote to the clipboard for the in-flight shortcut run.
+    // Used to reject the clipboard fallback when it still contains our own
+    // prompt (shortcut never wrote back). Cleared on every result/error.
+    private var pendingClipboardInput: String?
 
     // Default shortcut name
     static let defaultShortcutName = "PA-WithAIViaGPT" // CHANGE THIS TO THE NAME OF YOUR SHORTCUT
@@ -110,6 +115,7 @@ class ShortcutsAIService {
             guard let self = self,
                   let result = notification.userInfo?["result"] as? String else { return }
             Task { @MainActor [self] in
+                logger.info("App Intent delivered result (\(result.count) chars) via SaveAnalysisResultIntent")
                 self.handleResult(result)
             }
         }
@@ -151,13 +157,30 @@ class ShortcutsAIService {
         // The path indicates success, error, or cancel
         switch url.path {
         case "/success":
-            if let output = components.queryItems?.first(where: { $0.name == "result" || $0.name == "output" })?.value?.removingPercentEncoding {
-                handleResult(output)
-            } else {
-                // Try to get from clipboard as fallback
-                if let clipboardContent = PlatformClipboard.string {
-                    handleResult(clipboardContent)
-                }
+            let queryResult = components.queryItems?
+                .first(where: { $0.name == "result" || $0.name == "output" })?
+                .value?
+                .removingPercentEncoding
+            let trimmedQuery = queryResult?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let value = trimmedQuery, !value.isEmpty {
+                // Shortcuts returned the result inline via x-callback. Use it.
+                logger.info("x-success delivered result via query param (\(value.count) chars)")
+                handleResult(value)
+                return
+            }
+
+            // result=<empty> or missing — Shortcuts likely truncated a large
+            // output. Fall back to the clipboard, but reject the value if it
+            // still matches the input we wrote there (shortcut never copied
+            // its output back, so the clipboard echo would be misleading).
+            logger.warning("x-success had no usable result param — falling back to clipboard")
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Brief delay so the shortcut's final "Copy to Clipboard" has
+                // time to land on the pasteboard before we read it.
+                try? await Task.sleep(for: .milliseconds(200))
+                self.resolveFromClipboardFallback()
             }
         case "/error":
             let errorMsg = components.queryItems?.first(where: { $0.name == "errorMessage" })?.value?.removingPercentEncoding ?? "Shortcut failed"
@@ -165,11 +188,27 @@ class ShortcutsAIService {
         case "/cancel":
             handleError("Shortcut was cancelled")
         default:
-            // Try clipboard fallback
-            if let clipboardContent = PlatformClipboard.string {
-                handleResult(clipboardContent)
-            }
+            resolveFromClipboardFallback()
         }
+    }
+
+    /// Reads the clipboard and resolves the pending continuation with it,
+    /// unless the clipboard still contains the input we wrote there (which
+    /// means the shortcut never copied its output back).
+    private func resolveFromClipboardFallback() {
+        guard let clipboardContent = PlatformClipboard.string,
+              !clipboardContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            handleError("Shortcut returned no output. Add a 'Save Analysis Result' action at the end of your shortcut (recommended), or end with 'Copy to Clipboard'.")
+            return
+        }
+
+        if let input = pendingClipboardInput, clipboardContent == input {
+            handleError("Shortcut didn't write its result back. Add a 'Save Analysis Result' action at the end of your shortcut, or end with 'Copy to Clipboard'.")
+            return
+        }
+
+        handleResult(clipboardContent)
     }
 
     private func handleResult(_ result: String) {
@@ -178,6 +217,7 @@ class ShortcutsAIService {
         lastResult = result
         lastError = nil
         timeoutTask?.cancel()
+        pendingClipboardInput = nil
         pendingContinuation?.resume(returning: result)
         pendingContinuation = nil
 
@@ -199,10 +239,11 @@ class ShortcutsAIService {
     }
 
     private func handleError(_ error: String) {
-        logger.error("Shortcut error: \(error)")
+        logger.error("Shortcut error: \(error, privacy: .public)")
         isProcessing = false
         lastError = error
         timeoutTask?.cancel()
+        pendingClipboardInput = nil
         pendingContinuation?.resume(throwing: ShortcutsError.shortcutFailed(error))
         pendingContinuation = nil
 
@@ -240,7 +281,7 @@ class ShortcutsAIService {
             return try await runShortcutViaCLI(input: input, timeout: timeout)
         } catch {
             // CLI failed - fall back to URL scheme (opens Shortcuts app briefly)
-            logger.warning("CLI method failed: \(error.localizedDescription). Falling back to URL scheme.")
+            logger.warning("CLI method failed: \(error.localizedDescription, privacy: .public). Falling back to URL scheme.")
             return try await runShortcutViaURLScheme(input: input, timeout: timeout)
         }
     }
@@ -359,6 +400,9 @@ class ShortcutsAIService {
 
         if useClipboard {
             PlatformClipboard.string = input
+            pendingClipboardInput = input
+        } else {
+            pendingClipboardInput = nil
         }
 
         // Build URL with x-callback-url
@@ -394,7 +438,7 @@ class ShortcutsAIService {
 
             // Set timeout
             self.timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                try? await Task.sleep(for: .seconds(timeout))
                 if self.pendingContinuation != nil {
                     self.isProcessing = false
                     self.pendingContinuation?.resume(throwing: ShortcutsError.timeout)
@@ -464,7 +508,7 @@ class ShortcutsAIService {
         analysisType: CloudAnalysisType
     ) -> String {
         let settings = AISettingsManager.shared
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction()
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(customLanguageName: settings.customAnalysisLanguageName)
 
         switch analysisType {
         case .analysis:
