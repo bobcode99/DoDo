@@ -92,13 +92,7 @@ struct ExpandedPlayerContent: View {
     }
 
     private var scrubber: some View {
-        SmoothScrubber(
-            currentTime: viewModel.currentTime,
-            duration: viewModel.duration,
-            isDurationLoading: viewModel.isDurationLoading,
-            onSeek: viewModel.seekToProgress
-        )
-        .padding(.horizontal, 32)
+        PlayerScrubberBar(viewModel: viewModel)
     }
 
     private var controls: some View {
@@ -128,5 +122,21 @@ struct ExpandedPlayerContent: View {
             onNavigateToEpisodeDetail: onNavigateToEpisodeDetail,
             onOpenQueue: onOpenQueue
         )
+    }
+}
+
+/// Isolates the per-tick `currentTime` read so playback updates invalidate
+/// only the scrubber, not the whole adaptive player layout.
+private struct PlayerScrubberBar: View {
+    let viewModel: ExpandedPlayerViewModel
+
+    var body: some View {
+        SmoothScrubber(
+            currentTime: viewModel.currentTime,
+            duration: viewModel.duration,
+            isDurationLoading: viewModel.isDurationLoading,
+            onSeek: viewModel.seekToProgress
+        )
+        .padding(.horizontal, 32)
     }
 }

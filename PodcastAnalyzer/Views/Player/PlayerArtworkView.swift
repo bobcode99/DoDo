@@ -31,6 +31,7 @@ struct PlayerArtworkView: View {
             )
             .scaleEffect(isPlaying ? playingScale : 1.0)
             .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: isPlaying)
+            .accessibilityLabel("Episode artwork")
         } else {
             Color.gray.opacity(0.3)
                 .overlay(
@@ -42,6 +43,7 @@ struct PlayerArtworkView: View {
                 .clipShape(.rect(cornerRadius: 16))
                 .scaleEffect(isPlaying ? playingScale : 1.0)
                 .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: isPlaying)
+            .accessibilityLabel("Episode artwork")
         }
     }
 }
