@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// Adaptive body of the expanded player: two columns when the area is wider
-/// than it is tall (iPad/iPhone landscape), a single centered column otherwise.
-/// Every size scales from the container, so it fits any iPhone or iPad size and
-/// follows rotation. Pure layout — navigation and queue presentation stay with
-/// the host `ExpandedPlayerView`.
+/// Body of the expanded player: a single centered column, capped so it stays
+/// readable on wide (iPad) presentations. Split out of ExpandedPlayerView so
+/// the host keeps navigation, queue, and lifecycle.
 struct ExpandedPlayerContent: View {
     let viewModel: ExpandedPlayerViewModel
     let onNavigateToEpisodeDetail: () -> Void
@@ -12,76 +10,35 @@ struct ExpandedPlayerContent: View {
     let onOpenQueue: () -> Void
 
     var body: some View {
-        GeometryReader { geo in
-            ScrollView {
-                layout(for: geo.size)
-                    .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .center)
-            }
-        }
-    }
-
-    // MARK: - Adaptive layout
-
-    @ViewBuilder
-    private func layout(for size: CGSize) -> some View {
-        if size.width > size.height * 1.1 {
-            horizontalPlayer(in: size)
-        } else {
-            verticalPlayer(in: size)
-        }
-    }
-
-    private func verticalPlayer(in size: CGSize) -> some View {
-        let art = min(size.width * 0.74, size.height * 0.42)
-        return VStack(spacing: 0) {
+        ScrollView {
             VStack(spacing: 0) {
-                artwork(side: art)
-                    .padding(.top, 16)
-                episodeInfo
-                    .padding(.top, 24)
-            }
+                VStack(spacing: 0) {
+                    PlayerArtworkView(imageURL: viewModel.imageURL, isPlaying: viewModel.isPlaying)
+                        .padding(.top, 16)
+                    episodeInfo
+                        .padding(.top, 24)
+                }
 
-            Spacer(minLength: 24)
+                Spacer(minLength: 20)
 
-            VStack(spacing: 32) {
-                scrubber
-                controls
-                volumeRow
-            }
+                VStack(spacing: 32) {
+                    scrubber
+                    controls
+                    volumeRow
+                }
 
-            Spacer(minLength: 32)
+                Spacer(minLength: 32)
 
-            bottomActions
-                .padding(.bottom, 40)
-        }
-        .frame(maxWidth: min(size.width * 0.92, 560))
-        .frame(maxWidth: .infinity)
-    }
-
-    private func horizontalPlayer(in size: CGSize) -> some View {
-        let art = min(size.width * 0.42, size.height * 0.82)
-        return HStack(alignment: .center, spacing: size.width * 0.05) {
-            artwork(side: art)
-
-            VStack(spacing: 28) {
-                episodeInfo
-                scrubber
-                controls
-                volumeRow
                 bottomActions
+                    .padding(.bottom, 40)
             }
-            .frame(maxWidth: min(size.width * 0.5, 520))
+            .frame(maxWidth: 440)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .padding(.horizontal, size.width * 0.05)
-        .padding(.vertical, 24)
-        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Shared chrome
-
-    private func artwork(side: CGFloat) -> some View {
-        PlayerArtworkView(imageURL: viewModel.imageURL, isPlaying: viewModel.isPlaying, size: side)
-    }
 
     private var episodeInfo: some View {
         PlayerEpisodeInfoView(
@@ -126,7 +83,7 @@ struct ExpandedPlayerContent: View {
 }
 
 /// Isolates the per-tick `currentTime` read so playback updates invalidate
-/// only the scrubber, not the whole adaptive player layout.
+/// only the scrubber, not the rest of the player.
 private struct PlayerScrubberBar: View {
     let viewModel: ExpandedPlayerViewModel
 

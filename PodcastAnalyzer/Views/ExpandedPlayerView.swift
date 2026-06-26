@@ -16,7 +16,12 @@ struct ExpandedPlayerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                ArtworkBackgroundView(imageURL: viewModel.imageURL)
+                LinearGradient(
+                    colors: [Color.gray.opacity(0.3), Color.platformBackground],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+                .ignoresSafeArea()
 
                 ExpandedPlayerContent(
                     viewModel: viewModel,
@@ -55,10 +60,6 @@ struct ExpandedPlayerView: View {
             .onChange(of: viewModel.currentEpisode?.id) {
                 viewModel.checkEpisodeChange()
             }
-            // Immersive artwork background is always dark, so pin the whole
-            // player to dark: .primary/.secondary and glassEffect resolve to
-            // light, legible content regardless of the system appearance.
-            .environment(\.colorScheme, .dark)
         }
     }
 

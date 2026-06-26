@@ -16,7 +16,6 @@ struct PlayerEpisodeInfoView: View {
                         alignment: .center
                     )
                     .foregroundStyle(.primary)
-                    .frame(maxWidth: 240)
 
                     Button(action: onNavigateToPodcast) {
                         Text(viewModel.podcastTitle)
