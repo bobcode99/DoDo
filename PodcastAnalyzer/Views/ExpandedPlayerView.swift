@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.podcast.analyzer", category: "Expand
 struct ExpandedPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var viewModel = ExpandedPlayerViewModel()
     @State private var showQueue = false
 
@@ -23,12 +24,23 @@ struct ExpandedPlayerView: View {
                 )
                 .ignoresSafeArea()
 
-                ExpandedPlayerContent(
-                    viewModel: viewModel,
-                    onNavigateToEpisodeDetail: navigateToEpisodeDetail,
-                    onNavigateToPodcast: navigateToPodcast,
-                    onOpenQueue: openQueue
-                )
+                Group {
+                    if hSizeClass == .regular {
+                        ExpandedPlayerPadContent(
+                            viewModel: viewModel,
+                            onNavigateToEpisodeDetail: navigateToEpisodeDetail,
+                            onNavigateToPodcast: navigateToPodcast,
+                            onOpenQueue: openQueue
+                        )
+                    } else {
+                        ExpandedPlayerContent(
+                            viewModel: viewModel,
+                            onNavigateToEpisodeDetail: navigateToEpisodeDetail,
+                            onNavigateToPodcast: navigateToPodcast,
+                            onOpenQueue: openQueue
+                        )
+                    }
+                }
                 .blur(radius: showQueue ? 3 : 0)
 
                 if showQueue {
