@@ -159,6 +159,15 @@ struct ExpandedPlayerView: View {
     }
 }
 
+// Presented the same way the app does (sheet + page sizing) so the canvas
+// shows real sizing on iPad/iPhone. Player chrome renders; episode text is
+// empty here because the view model reads the live audio manager singleton.
 #Preview {
-    ExpandedPlayerView()
+    @Previewable @State var show = true
+    Color.platformBackground
+        .ignoresSafeArea()
+        .sheet(isPresented: $show) {
+            ExpandedPlayerView()
+                .presentationSizing(.page)
+        }
 }

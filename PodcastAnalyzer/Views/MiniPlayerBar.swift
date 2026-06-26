@@ -118,6 +118,7 @@ struct MiniPlayerBar: View {
           deferredNavigation = .podcastEpisodeList(podcast)
         }
       )
+      .presentationSizing(.page)
     }
     .onChange(of: NotificationNavigationManager.shared.shouldExpandPlayer) { _, shouldExpand in
       if shouldExpand {
