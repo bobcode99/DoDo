@@ -20,15 +20,11 @@ struct ArtworkBackgroundView: View {
                     Color.clear
                 }
                 .blur(radius: 60)
-                .opacity(0.9)
 
-                // Light Liquid Glass scrim: keeps the cover's color while
-                // adding the frosted sheen and lifting foreground contrast.
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-
+                // Dark scrim: keeps the cover's color vivid while guaranteeing
+                // white controls stay legible even over a light artwork.
                 LinearGradient(
-                    colors: [.black.opacity(0.0), .black.opacity(0.28)],
+                    colors: [.black.opacity(0.25), .black.opacity(0.55)],
                     startPoint: .top,
                     endPoint: .bottom
                 )

@@ -55,6 +55,10 @@ struct ExpandedPlayerView: View {
             .onChange(of: viewModel.currentEpisode?.id) {
                 viewModel.checkEpisodeChange()
             }
+            // Immersive artwork background is always dark, so pin the whole
+            // player to dark: .primary/.secondary and glassEffect resolve to
+            // light, legible content regardless of the system appearance.
+            .environment(\.colorScheme, .dark)
         }
     }
 
