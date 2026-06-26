@@ -23,61 +23,12 @@ struct ExpandedPlayerView: View {
                 )
                 .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: 0) {
-                        VStack(spacing: 0) {
-                            PlayerArtworkView(imageURL: viewModel.imageURL, isPlaying: viewModel.isPlaying)
-                                .padding(.top, 16)
-
-                            PlayerEpisodeInfoView(
-                                viewModel: viewModel,
-                                onNavigateToEpisodeDetail: navigateToEpisodeDetail,
-                                onNavigateToPodcast: navigateToPodcast
-                            )
-                            .padding(.top, 24)
-                        }
-
-                        Spacer(minLength: 20)
-
-                        VStack(spacing: 32) {
-                            SmoothScrubber(
-                                currentTime: viewModel.currentTime,
-                                duration: viewModel.duration,
-                                isDurationLoading: viewModel.isDurationLoading,
-                                onSeek: viewModel.seekToProgress
-                            )
-                            .padding(.horizontal, 32)
-
-                            PlayerControlsView(viewModel: viewModel)
-
-                            #if os(iOS)
-                            HStack(spacing: 12) {
-                                Image(systemName: "speaker.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
-                                SystemVolumeSlider()
-                                    .frame(height: 32)
-                                Image(systemName: "speaker.wave.3.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 32)
-                            #endif
-                        }
-
-                        Spacer(minLength: 32)
-
-                        PlayerBottomActionsView(
-                            queueCount: viewModel.queue.count,
-                            onNavigateToEpisodeDetail: navigateToEpisodeDetail,
-                            onOpenQueue: openQueue
-                        )
-                        .padding(.bottom, 40)
-                    }
-                    .frame(maxWidth: 440)
-                    .frame(maxWidth: .infinity)
-                    .containerRelativeFrame(.vertical, alignment: .center)
-                }
+                ExpandedPlayerContent(
+                    viewModel: viewModel,
+                    onNavigateToEpisodeDetail: navigateToEpisodeDetail,
+                    onNavigateToPodcast: navigateToPodcast,
+                    onOpenQueue: openQueue
+                )
                 .blur(radius: showQueue ? 3 : 0)
 
                 if showQueue {

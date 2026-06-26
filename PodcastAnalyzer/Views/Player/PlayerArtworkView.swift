@@ -4,7 +4,7 @@ struct PlayerArtworkView: View {
     let imageURL: URL?
     let isPlaying: Bool
 
-    private let size: CGFloat = 280
+    var size: CGFloat = 280
     private let playingScale: CGFloat = 1.08
 
     var body: some View {
