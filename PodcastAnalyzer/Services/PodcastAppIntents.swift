@@ -18,7 +18,7 @@ import Foundation
 struct ImportPodcastsIntent: AppIntent {
     static let title: LocalizedStringResource = "Import Podcasts from List"
     static let description = IntentDescription(
-        "Import and subscribe to podcasts from an Apple Podcasts export list. Pass the combined text containing RSS feed URLs."
+        "Import and subscribe to podcasts from an exported podcast list. Pass the combined text containing RSS feed URLs."
     )
 
     @Parameter(title: "Combined Text", description: "The exported podcast list containing RSS feed URLs")
@@ -89,7 +89,7 @@ struct ImportPodcastsIntent: AppIntent {
 struct AnalyzeTranscriptIntent: AppIntent {
     static let title: LocalizedStringResource = "Analyze Podcast Transcript"
     static let description = IntentDescription(
-        "Analyze a podcast transcript using AI. Connect this to an Apple Intelligence action in Shortcuts."
+        "Analyze a podcast transcript using AI. Connect this to an AI action in Shortcuts."
     )
 
     @Parameter(title: "Transcript Text", description: "The transcript text to analyze")
@@ -732,7 +732,7 @@ struct PodcastAnalyzerShortcuts: AppShortcutsProvider {
                 "Import podcasts to \(.applicationName)",
                 "Import podcast list with \(.applicationName)",
                 "Subscribe to podcasts using \(.applicationName)",
-                "Import Apple Podcasts to \(.applicationName)"
+                "Import podcast subscriptions to \(.applicationName)"
             ],
             shortTitle: "Import Podcasts",
             systemImageName: "square.and.arrow.down"
