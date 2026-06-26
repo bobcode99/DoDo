@@ -16,12 +16,7 @@ struct ExpandedPlayerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [Color.gray.opacity(0.3), Color.platformBackground],
-                    startPoint: .top,
-                    endPoint: .center
-                )
-                .ignoresSafeArea()
+                ArtworkBackgroundView(imageURL: viewModel.imageURL)
 
                 ExpandedPlayerContent(
                     viewModel: viewModel,
