@@ -1,6 +1,22 @@
-## DoDo
+<div align="center">
 
-DoDo is an iOS and macOS podcast player for organizing, transcribing, and listening to episodes. It focuses on smarter discovery, on-device transcription, AI-assisted insights, and a polished SwiftUI experience.
+<img src="dodo.icon/Assets/dodogood.png" alt="DoDo" width="160" />
+
+# DoDo
+
+**Podcasts you can read, search, and analyze — on device.**
+
+An iOS &amp; macOS podcast player with on-device transcription and AI-assisted insights, built in SwiftUI.
+
+<p>
+  <img alt="iOS 26+" src="https://img.shields.io/badge/iOS-26%2B-000000?logo=apple&logoColor=white">
+  <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white">
+  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white">
+  <img alt="SwiftUI + SwiftData" src="https://img.shields.io/badge/SwiftUI-SwiftData-0A84FF?logo=swift&logoColor=white">
+  <img alt="On-device AI" src="https://img.shields.io/badge/AI-on--device-34C759">
+</p>
+
+</div>
 
 > The Xcode project and repository are named `PodcastAnalyzer`; the app ships to the App Store as **DoDo**.
 
