@@ -74,6 +74,8 @@ struct ExpandedPlayerView: View {
                         )
                         .padding(.bottom, 40)
                     }
+                    .frame(maxWidth: 440)
+                    .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.vertical, alignment: .center)
                 }
                 .blur(radius: showQueue ? 3 : 0)
