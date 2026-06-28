@@ -55,4 +55,12 @@ struct Constants {
     ("nl", "Netherlands", "🇳🇱"),
     ("se", "Sweden", "🇸🇪")
   ]
+
+  /// Region to use before the user picks one. Derived from the device's
+  /// locale (Settings → General → Language & Region) — no location permission
+  /// needed. Falls back to "us" if the device region isn't a supported store.
+  static var defaultRegion: String {
+    let code = Locale.current.region?.identifier.lowercased() ?? "us"
+    return podcastRegions.contains { $0.code == code } ? code : "us"
+  }
 }

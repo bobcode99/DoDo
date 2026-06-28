@@ -145,7 +145,7 @@ final class SettingsViewModel {
     if let saved = UserDefaults.standard.string(forKey: Keys.selectedPodcastRegion) {
       selectedRegion = saved
     } else {
-      selectedRegion = "us"
+      selectedRegion = Constants.defaultRegion
     }
   }
 

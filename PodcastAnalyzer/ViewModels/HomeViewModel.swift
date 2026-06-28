@@ -184,9 +184,11 @@ final class HomeViewModel {
   }
 
   init() {
-    // Restore saved region preference
+    // Restore saved region preference, else default to the device's locale region
     if let saved = UserDefaults.standard.string(forKey: "selectedPodcastRegion") {
       selectedRegion = saved
+    } else {
+      selectedRegion = Constants.defaultRegion
     }
 
     // Restore from static cache if available for current region
