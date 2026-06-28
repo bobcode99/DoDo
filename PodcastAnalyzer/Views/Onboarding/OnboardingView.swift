@@ -13,30 +13,17 @@ import SwiftUI
 struct OnboardingView: View {
   @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
   @State private var currentPage = 0
-  @Environment(\.openURL) private var openURL
 
   var body: some View {
     TabView(selection: $currentPage) {
       WelcomeOnboardingPage(onNext: { currentPage = 1 })
         .tag(0)
-      ImportOnboardingPage(
-        onImport: triggerImportShortcut,
-        onSkip: { hasCompletedOnboarding = true }
-      )
-      .tag(1)
+      ImportOnboardingPage(onSkip: { hasCompletedOnboarding = true })
+        .tag(1)
     }
     .tabViewStyle(.page)
     .indexViewStyle(.page(backgroundDisplayMode: .always))
     .ignoresSafeArea()
-  }
-
-  /// Completes onboarding and hands off to the "ApplePodcast To PodcastAnalyzer" shortcut.
-  /// The shortcut is expected to call back via podcastanalyzer://import-podcasts?rssURLs=...
-  private func triggerImportShortcut() {
-    hasCompletedOnboarding = true
-    if let url = URL(string: "shortcuts://run-shortcut?name=ApplePodcast%20To%20PodcastAnalyzer") {
-      openURL(url)
-    }
   }
 }
 
@@ -55,7 +42,7 @@ private struct WelcomeOnboardingPage: View {
         Image("DoDoLogo")
           .resizable()
           .scaledToFit()
-          .padding(16)
+          .padding(8)
       }
       .frame(width: 116, height: 116)
       .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
@@ -127,50 +114,40 @@ private struct WelcomeOnboardingPage: View {
 // MARK: - Import Page
 
 private struct ImportOnboardingPage: View {
-  let onImport: () -> Void
   let onSkip: () -> Void
 
   var body: some View {
-    VStack(spacing: 0) {
-      Spacer()
+    ScrollView {
+      VStack(spacing: 0) {
+        Image(systemName: "square.and.arrow.down.fill")
+          .font(.system(size: 64))
+          .foregroundStyle(.blue.gradient)
+          .padding(.top, 72)
+          .padding(.bottom, 18)
 
-      Image(systemName: "square.and.arrow.down.fill")
-        .font(.system(size: 80))
-        .foregroundStyle(.blue.gradient)
-        .padding(.bottom, 24)
+        VStack(spacing: 10) {
+          Text("Bring Your Podcasts")
+            .font(.largeTitle)
+            .fontWeight(.bold)
+            .multilineTextAlignment(.center)
 
-      VStack(spacing: 10) {
-        Text("Bring Your Podcasts")
-          .font(.largeTitle)
-          .fontWeight(.bold)
-          .multilineTextAlignment(.center)
-
-        Text("Already subscribed in Apple Podcasts?\nImport all your shows in seconds.")
-          .font(.body)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
-          .padding(.horizontal, 32)
-      }
-
-      Spacer()
-
-      VStack(spacing: 12) {
-        Button(action: onImport) {
-          Label("Import from Apple Podcasts", systemImage: "square.and.arrow.down")
-            .font(.headline)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(.blue, in: .rect(cornerRadius: 14))
+          Text("Already subscribed in Apple Podcasts?\nInstall the shortcut, then import your shows.")
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
         }
+        .padding(.bottom, 28)
+
+        ImportShortcutInstructionsView()
+          .padding(.horizontal, 28)
 
         Button("Start Fresh", action: onSkip)
           .font(.subheadline)
           .foregroundStyle(.secondary)
-          .padding(.vertical, 8)
+          .padding(.top, 28)
+          .padding(.bottom, 52)
       }
-      .padding(.horizontal, 24)
-      .padding(.bottom, 52)
     }
   }
 }

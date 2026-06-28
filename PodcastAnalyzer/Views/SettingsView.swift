@@ -11,9 +11,9 @@ struct SettingsView: View {
   @State private var viewModel = SettingsViewModel()
   private var syncManager: BackgroundSyncManager { .shared }
   @Environment(\.modelContext) private var modelContext
-  @Environment(\.openURL) private var openURL
   @State private var showAddFeedSheet = false
   @State private var showOPMLImporter = false
+  @State private var showImportInstructions = false
   @State private var opmlImportMessage: String?
 
   @AppStorage("allowCellularAutoDownload") private var allowCellularAutoDownload = false
@@ -247,7 +247,7 @@ struct SettingsView: View {
             }
           }
 
-          Button(action: triggerImportShortcut) {
+          Button(action: { showImportInstructions = true }) {
             HStack {
               Image(systemName: "arrow.down.app.fill")
                 .foregroundStyle(.green)
@@ -718,6 +718,22 @@ struct SettingsView: View {
           showAddFeedSheet = false
         }
       }
+      .sheet(isPresented: $showImportInstructions) {
+        NavigationStack {
+          ScrollView {
+            ImportShortcutInstructionsView()
+              .padding()
+          }
+          .navigationTitle("Import from Apple Podcasts")
+          .platformToolbarTitleDisplayMode()
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+              Button("Done") { showImportInstructions = false }
+            }
+          }
+        }
+        .presentationDetents([.medium, .large])
+      }
       .fileImporter(
         isPresented: $showOPMLImporter,
         allowedContentTypes: [.xml, UTType(filenameExtension: "opml") ?? .xml],
@@ -730,12 +746,6 @@ struct SettingsView: View {
         viewModel.checkTranscriptModelStatus()
         WhisperModelManager.shared.checkAllModelStatuses()
       }
-  }
-
-  private func triggerImportShortcut() {
-    if let url = URL(string: "shortcuts://run-shortcut?name=ApplePodcast%20To%20PodcastAnalyzer") {
-      openURL(url)
-    }
   }
 
   private func handleOPMLImport(_ result: Result<[URL], Error>) {

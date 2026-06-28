@@ -75,8 +75,8 @@ struct GeneralSettingsTab: View {
   @State private var viewModel = SettingsViewModel()
   @State private var showAddFeedSheet = false
   @State private var showListeningStats = false
+  @State private var showImportInstructions = false
   @Environment(\.modelContext) private var modelContext
-  @Environment(\.openURL) private var openURL
 
   var body: some View {
     Form {
@@ -85,9 +85,7 @@ struct GeneralSettingsTab: View {
           showAddFeedSheet = true
         }
         Button("Import Podcasts…") {
-          if let url = URL(string: "shortcuts://run-shortcut?name=ApplePodcast%20To%20PodcastAnalyzer") {
-            openURL(url)
-          }
+          showImportInstructions = true
         }
       } header: {
         Text("Subscriptions")
@@ -161,6 +159,21 @@ struct GeneralSettingsTab: View {
           }
       }
       .frame(minWidth: 500, minHeight: 400)
+    }
+    .sheet(isPresented: $showImportInstructions) {
+      NavigationStack {
+        ScrollView {
+          ImportShortcutInstructionsView()
+            .padding()
+        }
+        .navigationTitle("Import from Apple Podcasts")
+        .toolbar {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { showImportInstructions = false }
+          }
+        }
+      }
+      .frame(minWidth: 440, minHeight: 480)
     }
     .onAppear {
       viewModel.loadFeeds(modelContext: modelContext)
