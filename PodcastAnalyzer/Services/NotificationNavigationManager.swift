@@ -10,6 +10,7 @@ import Foundation
 import Observation
 import SwiftData
 import OSLog
+import UserNotifications
 
 // MARK: - Notification Navigation Target
 
@@ -134,5 +135,41 @@ class NotificationNavigationManager {
             language: "en"
         )
         shouldNavigate = true
+    }
+}
+
+// MARK: - System Notification Delegate
+
+/// Bridges UNUserNotificationCenter callbacks to in-app navigation. Without a
+/// delegate, new-episode banners are suppressed while the app is foreground
+/// (where sync runs most) and taps do nothing — the userInfo payload is dead.
+/// Assigned in the app's init().
+final class NotificationTapDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = NotificationTapDelegate()
+
+    /// Show the banner even when the app is in the foreground.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .badge]
+    }
+
+    /// Route a new-episode tap to its detail screen.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let info = response.notification.request.content.userInfo
+        guard info["type"] as? String == "newEpisode",
+              let podcastTitle = info["podcastTitle"] as? String,
+              let episodeTitle = info["episodeTitle"] as? String else { return }
+        let audioURL = info["audioURL"] as? String ?? ""
+        let imageURL = info["imageURL"] as? String ?? ""
+        await MainActor.run {
+            NotificationNavigationManager.shared.navigateToEpisodeDetail(
+                title: episodeTitle, podcastTitle: podcastTitle,
+                audioURL: audioURL, imageURL: imageURL)
+        }
     }
 }

@@ -144,6 +144,7 @@ class EnhancedAudioManager: NSObject {
   private var playerStalledTask: Task<Void, Never>?
   private var artworkFetchTask: Task<Void, Never>?
   private var captionLoadTask: Task<Void, Never>?
+  private var durationLoadTask: Task<Void, Never>?
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "AudioManager")
 
   // Use Unit Separator (U+001F) as delimiter - same as EpisodeDownloadModel
@@ -483,6 +484,10 @@ private func handleAudioInterruption(_ notification: Notification) {
 
     // Update Now Playing info with cached duration (will be refined when AVPlayer reports actual duration)
     updateNowPlayingInfo(imageURL: imageURL ?? episode.imageURL)
+
+    // Replace the metadata-seeded duration with the real asset length ASAP,
+    // before the first playing tick of the periodic observer lands.
+    loadRealDuration(from: url)
 
     if startTime > 0 {
       player?.seek(
@@ -899,7 +904,51 @@ private func handleAudioInterruption(_ notification: Notification) {
     currentTime = state.time
     duration = state.duration  // Restore saved duration for correct progress display
 
+    // No player yet, so the periodic observer won't correct the duration until
+    // the user presses play. Load the true asset length now so the scrubber and
+    // the transcript length-mismatch banner are honest before playback starts.
+    if let url = resolvePlayableURL(for: state.episode) {
+      loadRealDuration(from: url)
+    }
+
     logger.info("Restored last episode: \(state.episode.title) at \(state.time)s / \(state.duration)s")
+  }
+
+  /// The URL we'd actually play for an episode: the downloaded local file when
+  /// present, otherwise the remote audio URL.
+  private func resolvePlayableURL(for episode: PlaybackEpisode) -> URL? {
+    if case .downloaded(let localPath) = DownloadManager.shared.getDownloadState(
+      episodeTitle: episode.title, podcastTitle: episode.podcastTitle),
+      FileManager.default.fileExists(atPath: localPath)
+    {
+      return URL(fileURLWithPath: localPath)
+    }
+    return URL(string: episode.audioURL)
+  }
+
+  /// Asynchronously loads the real asset duration and overwrites the
+  /// metadata-seeded value. RSS `itunes:duration` is often rounded or wrong,
+  /// and ad-stitched mp3s differ from the original, so the true file length
+  /// keeps the scrubber and the transcript length-mismatch banner accurate.
+  /// No-op when the asset can't report a finite duration (offline remote URL
+  /// or an indefinite live stream).
+  private func loadRealDuration(from url: URL) {
+    durationLoadTask?.cancel()
+    let asset = AVURLAsset(url: url)
+    durationLoadTask = Task { [weak self] in
+      guard let loaded = try? await asset.load(.duration) else { return }
+      let seconds = loaded.seconds
+      guard seconds.isFinite, seconds > 0, !Task.isCancelled else { return }
+      await MainActor.run {
+        guard let self else { return }
+        // Only overwrite when meaningfully different, to avoid scrubber jitter.
+        guard abs(self.duration - seconds) > 1 else { return }
+        self.duration = seconds
+        self.updateNowPlayingDuration()
+        self.savePlaybackState()
+        self.updateWidgetPlaybackData()
+      }
+    }
   }
 
   /// Called after PlaybackStateCoordinator is initialized to restore queue if it was deferred
@@ -1511,6 +1560,8 @@ private func handleAudioInterruption(_ notification: Notification) {
     artworkFetchTask = nil
     captionLoadTask?.cancel()
     captionLoadTask = nil
+    durationLoadTask?.cancel()
+    durationLoadTask = nil
 
     player?.pause()
     player = nil

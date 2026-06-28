@@ -69,6 +69,11 @@ struct TranscriptGenerationProgressOverallView: View {
   @ViewBuilder
   private var listContent: some View {
     List {
+      if !active.isEmpty || !queued.isEmpty {
+        Section("Configuration") {
+          TranscriptConfigBanner()
+        }
+      }
       if !active.isEmpty {
         Section("Active") {
           ForEach(active) { job in
@@ -155,10 +160,19 @@ private struct TranscriptJobRow: View {
         Text(job.episodeTitle)
           .font(.subheadline)
           .lineLimit(1)
-        Text(job.podcastTitle)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
+        HStack(spacing: 6) {
+          Text(job.podcastTitle)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+          if let label = TranscriptConfigFormat.languageLabel(job.language) {
+            Text(label)
+              .font(.caption2.weight(.medium))
+              .padding(.horizontal, 6)
+              .padding(.vertical, 1)
+              .background(.tint.opacity(0.15), in: .capsule)
+          }
+        }
         statusLine(for: job)
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -220,10 +234,88 @@ private struct TranscriptJobRow: View {
     case .completed:
       Text("Done")
     case .failed(let err):
-      Text(err)
-        .foregroundStyle(.red)
-        .lineLimit(2)
+      Label {
+        Text(err)
+          .foregroundStyle(.red)
+          .lineLimit(4)
+          .fixedSize(horizontal: false, vertical: true)
+      } icon: {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(.red)
+      }
     }
+  }
+}
+
+// MARK: - Config Banner
+
+/// Live summary of the settings each running job uses. Reads the global
+/// SubtitleSettingsManager (split / music) and the default engine so the user
+/// can see — while transcription runs — exactly which knobs are in effect.
+/// Split and music chips are Apple-Speech-only; Whisper shows its model.
+private struct TranscriptConfigBanner: View {
+  @State private var settings = SubtitleSettingsManager.shared
+  @State private var whisper = WhisperModelManager.shared
+
+  private var engine: TranscriptEngine {
+    TranscriptEngine(rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? "")
+      ?? .appleSpeech
+  }
+
+  var body: some View {
+    ScrollView(.horizontal) {
+      HStack(spacing: 8) {
+        ConfigChip(icon: engine.systemImage, label: engine.displayName, tint: .blue)
+
+        switch engine {
+        case .appleSpeech, .yapServer:
+          ConfigChip(
+            icon: "rectangle.split.3x1",
+            label: settings.splitLongAudio ? "Split: On" : "Split: Off",
+            tint: settings.splitLongAudio ? .green : .secondary
+          )
+          ConfigChip(
+            icon: "music.note",
+            label: settings.enableMusicDetection
+              ? "Music: \(settings.musicDetectionSensitivity.displayName)"
+              : "Music: Off",
+            tint: settings.enableMusicDetection ? .purple : .secondary
+          )
+        case .whisper:
+          ConfigChip(icon: "cpu", label: whisper.selectedModel.displayName, tint: .indigo)
+        }
+      }
+      .padding(.vertical, 2)
+    }
+    .scrollIndicators(.hidden)
+  }
+}
+
+struct ConfigChip: View {
+  let icon: String
+  let label: String
+  var tint: Color = .blue
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Image(systemName: icon)
+        .font(.caption2)
+      Text(label)
+        .font(.caption.weight(.medium))
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 5)
+    .foregroundStyle(tint)
+    .background(tint.opacity(0.12), in: .capsule)
+  }
+}
+
+enum TranscriptConfigFormat {
+  /// Human-readable language tag for a job's language code ("en" → "English").
+  /// Returns nil for an empty/absent code so the caller can hide the chip.
+  static func languageLabel(_ code: String?) -> String? {
+    guard let code, !code.isEmpty else { return nil }
+    return Locale.current.localizedString(forLanguageCode: code) ?? code.uppercased()
   }
 }
 

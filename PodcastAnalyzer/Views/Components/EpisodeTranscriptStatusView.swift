@@ -342,6 +342,44 @@ struct EpisodeTranscriptStatusView: View {
 
     // MARK: - Progress
 
+    /// Live config summary shown while generating: the engine + language this
+    /// job actually uses, plus the Apple-Speech-only split / music knobs (or the
+    /// Whisper model). Mirrors the global transcription queue's config banner.
+    @ViewBuilder
+    private var generationConfigChips: some View {
+        let settings = SubtitleSettingsManager.shared
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ConfigChip(
+                    icon: effectiveEngine.systemImage,
+                    label: effectiveEngine.displayName,
+                    tint: .blue)
+                ConfigChip(icon: "globe", label: transcriptLanguageName, tint: .teal)
+
+                switch effectiveEngine {
+                case .appleSpeech, .yapServer:
+                    ConfigChip(
+                        icon: "rectangle.split.3x1",
+                        label: settings.splitLongAudio ? "Split: On" : "Split: Off",
+                        tint: settings.splitLongAudio ? .green : .secondary)
+                    ConfigChip(
+                        icon: "music.note",
+                        label: settings.enableMusicDetection
+                            ? "Music: \(settings.musicDetectionSensitivity.displayName)"
+                            : "Music: Off",
+                        tint: settings.enableMusicDetection ? .purple : .secondary)
+                case .whisper:
+                    ConfigChip(
+                        icon: "cpu",
+                        label: WhisperModelManager.shared.selectedModel.displayName,
+                        tint: .indigo)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: 320)
+    }
+
     private func progressView(label: String, progress: Double) -> some View {
         VStack(spacing: 18) {
             Image(systemName: "waveform.badge.mic")
@@ -363,6 +401,8 @@ struct EpisodeTranscriptStatusView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+
+            generationConfigChips
 
             Button("Cancel", role: .cancel) { viewModel.transcript.cancelTranscript() }
                 .buttonStyle(.bordered)

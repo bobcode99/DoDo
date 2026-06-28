@@ -488,6 +488,8 @@ class TranscriptManager {
                 }
               }
             )
+          } catch is CancellationError {
+            throw CancellationError()
           } catch {
             throw NSError(
               domain: "TranscriptManager", code: 4,
@@ -625,12 +627,13 @@ class TranscriptManager {
       activeJobs.removeValue(forKey: job.id)
       logger.info("Transcript cancelled for: \(job.episodeTitle)")
     } catch {
-      activeJobs[job.id]?.status = .failed(error: error.localizedDescription)
-      logger.error("Transcript failed for \(job.episodeTitle): \(error.localizedDescription, privacy: .public)")
       // Track consecutive yap failures to gate auto-queuing.
       let engine = job.engine ?? TranscriptEngine(
         rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
       ) ?? .appleSpeech
+      let message = Self.describeFailure(error, engine: engine)
+      activeJobs[job.id]?.status = .failed(error: message)
+      logger.error("Transcript failed for \(job.episodeTitle) [\(engine.rawValue)]: \(error.localizedDescription, privacy: .public)")
       if engine == .yapServer {
         yapConsecutiveFailures[job.podcastTitle, default: 0] += 1
       }
@@ -642,6 +645,31 @@ class TranscriptManager {
       isProcessing = false
     }
     startProcessingIfNeeded()
+  }
+
+  /// Turns a thrown transcription error into a user-facing message with a
+  /// recovery hint. Network errors are the common opaque case (especially for
+  /// the Yap server path), so they get engine-specific guidance; everything
+  /// else falls back to the error's own LocalizedError description, which our
+  /// thrown NSErrors and YapError already populate with actionable text.
+  static func describeFailure(_ error: Error, engine: TranscriptEngine) -> String {
+    if let urlError = error as? URLError {
+      switch urlError.code {
+      case .notConnectedToInternet, .networkConnectionLost:
+        return "No internet connection. Reconnect and retry."
+      case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+        return engine == .yapServer
+          ? "Can't reach the Yap server. Make sure it's running and the URL is correct in Settings › Transcript › Yap Server."
+          : "Can't reach the server. Check your connection and retry."
+      case .timedOut:
+        return "The request timed out. Retry — the server may be busy or the audio is long."
+      case .cancelled:
+        return "The request was cancelled."
+      default:
+        return "Network error: \(urlError.localizedDescription)"
+      }
+    }
+    return error.localizedDescription
   }
 
   // MARK: - Yap auto-transcript helpers

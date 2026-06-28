@@ -150,10 +150,14 @@ enum TranscriptGrouping {
 
 extension Array where Element == TranscriptSentence {
     /// Id of the last sentence whose `startTime ≤ time`. O(log n) binary search.
-    /// Returns nil when `time` precedes the first sentence's start.
+    /// Returns nil when `time` precedes the first sentence's start, or runs
+    /// `pastEndGrace` seconds beyond the final sentence's `endTime` — past that
+    /// point the audio is untranscribed outro / credits / trailing ads, so the
+    /// highlight should clear instead of pinning the last sentence lit.
     /// This is the single source of truth for "which sentence is playing".
-    func activeID(at time: TimeInterval) -> Int? {
+    func activeID(at time: TimeInterval, pastEndGrace: TimeInterval = 5) -> Int? {
         guard !isEmpty, self[0].startTime <= time else { return nil }
+        if let last, time > last.endTime + pastEndGrace { return nil }
         var lo = 0
         var hi = count - 1
         while lo < hi {

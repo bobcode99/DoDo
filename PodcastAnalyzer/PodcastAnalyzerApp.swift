@@ -10,6 +10,7 @@ import OSLog
 import Speech
 import SwiftData
 import SwiftUI
+import UserNotifications
 import WidgetKit
 #if os(iOS)
 import UIKit
@@ -79,6 +80,9 @@ struct PodcastAnalyzerApp: App {
 
     // Register background task for episode sync
     BackgroundSyncManager.registerBackgroundTask()
+
+    // Show new-episode banners in foreground + route taps to episode detail.
+    UNUserNotificationCenter.current().delegate = NotificationTapDelegate.shared
 
     // Eagerly start NWPathMonitor at launch. NetworkMonitor.shared is lazy
     // (singleton), and its `isConnected` defaults to false until the first
