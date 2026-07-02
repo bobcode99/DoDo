@@ -74,6 +74,10 @@ final class TranscriptCoordinator {
   var selectedTranscriptEngine: TranscriptEngine?
   /// Language detected by Whisper auto-detect during the last generation run.
   var transcriptDetectedLanguage: String?
+  /// Chunk counts for the split Apple Speech path (nil when not chunked).
+  /// Mirrored from the active TranscriptManager job so the generating UI can
+  /// show a real "Part X/Y" instead of guessing.
+  var transcriptPartProgress: TranscriptPartProgress?
 
   // MARK: - Segments & Grouping
 
@@ -222,6 +226,7 @@ final class TranscriptCoordinator {
     if let lang = job.detectedLanguage {
       transcriptDetectedLanguage = lang
     }
+    transcriptPartProgress = job.partProgress
     switch job.status {
     case .queued:
       transcriptState = .transcribing(progress: 0)
@@ -707,5 +712,56 @@ final class TranscriptCoordinator {
     transcriptSegments = []
     groupedSentences = []
     wordTimingsData = nil
+  }
+}
+
+// MARK: - Engine / language config helpers
+//
+// Shared by the transcript config + generating views so the derived engine and
+// language naming lives in one place instead of being duplicated per view.
+extension TranscriptCoordinator {
+  /// Engine in effect: explicit selection, else global default, else Apple Speech.
+  var effectiveEngine: TranscriptEngine {
+    selectedTranscriptEngine ?? TranscriptEngine(
+      rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
+    ) ?? .appleSpeech
+  }
+
+  /// Maps a raw language code onto the closest locale the current engine supports.
+  func resolvedLanguage(_ code: String) -> String {
+    guard !code.isEmpty else { return code }
+    let locales = SettingsViewModel.locales(for: effectiveEngine)
+    let lower = code.lowercased()
+    if locales.contains(where: { $0.id == lower }) { return lower }
+    if let match = locales.first(where: { $0.id.hasPrefix(lower + "-") }) { return match.id }
+    let base = lower.split(separator: "-").first.map(String.init) ?? lower
+    if let match = locales.first(where: { $0.id == base || $0.id.hasPrefix(base + "-") }) { return match.id }
+    return lower
+  }
+
+  /// Languages offered in the picker, injecting the podcast's own language when
+  /// the engine's standard list doesn't already cover it.
+  var pickerLocales: [SettingsViewModel.TranscriptLocaleOption] {
+    let standard = SettingsViewModel.locales(for: effectiveEngine)
+    guard !podcastLanguage.isEmpty else { return standard }
+    let lang = podcastLanguage.lowercased()
+    let resolved = resolvedLanguage(lang)
+    if standard.contains(where: { $0.id == resolved }) { return standard }
+    let displayName = Locale.current.localizedString(forLanguageCode: lang) ?? lang
+    return [SettingsViewModel.TranscriptLocaleOption(id: lang, name: "\(displayName) (podcast)")] + standard
+  }
+
+  /// Human-readable name of the language this job will (or did) transcribe in.
+  var transcriptLanguageName: String {
+    if effectiveEngine == .whisper, selectedTranscriptLanguage == nil {
+      if let detected = transcriptDetectedLanguage {
+        return pickerLocales.first { $0.id == detected }?.name
+          ?? Locale.current.localizedString(forLanguageCode: detected)
+          ?? detected
+      }
+      return "Auto-detect"
+    }
+    let code = selectedTranscriptLanguage ?? podcastLanguage
+    return pickerLocales.first { $0.id == resolvedLanguage(code) }?.name ?? code
   }
 }

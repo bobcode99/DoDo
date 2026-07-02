@@ -24,7 +24,7 @@ struct SmoothScrubber: View {
         VStack(spacing: 8) {
             scrubberSlider
                 .tint(.primary)
-                .scaleEffect(x: isInteracting ? 1.02 : 1.0, y: isInteracting ? 2.5 : 1.0)
+                .scaleEffect(x: isInteracting ? 1.01 : 1.0, y: 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isInteracting)
                 .sensoryFeedback(.impact(weight: .light), trigger: isInteracting)
                 .disabled(isDurationLoading)
@@ -99,8 +99,8 @@ private struct ThumblessSlider: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UISlider {
         let slider = UISlider()
-        slider.setThumbImage(UIImage(), for: .normal)
-        slider.setThumbImage(UIImage(), for: .highlighted)
+        slider.setThumbImage(Self.thumbImage(diameter: 12), for: .normal)
+        slider.setThumbImage(Self.thumbImage(diameter: 16), for: .highlighted)
         slider.minimumTrackTintColor = .label
         slider.maximumTrackTintColor = UIColor.label.withAlphaComponent(0.18)
         slider.addTarget(
@@ -131,6 +131,23 @@ private struct ThumblessSlider: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(value: $value, onEditingChanged: onEditingChanged)
+    }
+
+    /// White circular thumb with a soft drop shadow, matching the design's
+    /// scrubber knob. Padded so the shadow isn't clipped by the thumb bounds.
+    private static func thumbImage(diameter: CGFloat) -> UIImage {
+        let pad: CGFloat = 3
+        let size = CGSize(width: diameter + pad * 2, height: diameter + pad * 2)
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            let c = ctx.cgContext
+            c.setShadow(
+                offset: CGSize(width: 0, height: 1),
+                blur: 3,
+                color: UIColor.black.withAlphaComponent(0.3).cgColor
+            )
+            c.setFillColor(UIColor.white.cgColor)
+            c.fillEllipse(in: CGRect(x: pad, y: pad, width: diameter, height: diameter))
+        }
     }
 
     final class Coordinator: NSObject {

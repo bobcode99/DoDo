@@ -103,68 +103,119 @@ struct EpisodeDetailView: View {
         )
     }
 
-    // MARK: - Action row (Play / Download / Transcript / AI Analysis)
+    // MARK: - Action row (Play / Download + Transcript / AI Analysis rows)
 
     private var actionRow: some View {
-        HStack(spacing: 10) {
-            LivePlaybackButton(
-                episodeTitle: viewModel.title,
-                podcastTitle: viewModel.podcastTitle,
-                duration: viewModel.savedDuration,
-                formattedDuration: viewModel.formattedDuration,
-                lastPlaybackPosition: viewModel.lastPlaybackPosition,
-                playbackProgress: viewModel.playbackProgress,
-                isCompleted: viewModel.isCompleted,
-                onPlay: { viewModel.playAction() },
-                style: .iconOnly,
-                isDisabled: viewModel.isPlayDisabled
-            )
-
-            EpisodeDownloadButton(viewModel: viewModel)
-
-            NavigationLink(
-                value: EpisodeTranscriptRoute(
-                    episode: viewModel.episode,
+        VStack(spacing: 14) {
+            HStack(spacing: 10) {
+                LivePlaybackButton(
+                    episodeTitle: viewModel.title,
                     podcastTitle: viewModel.podcastTitle,
-                    fallbackImageURL: viewModel.imageURLString,
-                    podcastLanguage: viewModel.podcastLanguage
+                    duration: viewModel.savedDuration,
+                    formattedDuration: viewModel.formattedDuration,
+                    lastPlaybackPosition: viewModel.lastPlaybackPosition,
+                    playbackProgress: viewModel.playbackProgress,
+                    isCompleted: viewModel.isCompleted,
+                    onPlay: { viewModel.playAction() },
+                    style: .iconOnly,
+                    isDisabled: viewModel.isPlayDisabled
                 )
-            ) {
-                Image(systemName: "captions.bubble")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.purple)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Transcript")
-            .accessibilityHint("Open the transcript for this episode")
 
-            NavigationLink(
-                value: EpisodeAIAnalysisRoute(
-                    episode: viewModel.episode,
-                    podcastTitle: viewModel.podcastTitle,
-                    fallbackImageURL: viewModel.imageURLString,
-                    podcastLanguage: viewModel.podcastLanguage
-                )
-            ) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.orange)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("AI Analysis")
-            .accessibilityHint("Open the AI analysis for this episode")
+                EpisodeDownloadButton(viewModel: viewModel)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+
+            VStack(spacing: 0) {
+                NavigationLink(
+                    value: EpisodeTranscriptRoute(
+                        episode: viewModel.episode,
+                        podcastTitle: viewModel.podcastTitle,
+                        fallbackImageURL: viewModel.imageURLString,
+                        podcastLanguage: viewModel.podcastLanguage
+                    )
+                ) {
+                    navRowLabel(
+                        icon: "captions.bubble",
+                        tint: .purple,
+                        title: "Transcript",
+                        subtitle: "Synced · tap a line to seek"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Open the transcript for this episode")
+
+                Divider().padding(.leading, 52)
+
+                NavigationLink(
+                    value: EpisodeAIAnalysisRoute(
+                        episode: viewModel.episode,
+                        podcastTitle: viewModel.podcastTitle,
+                        fallbackImageURL: viewModel.imageURLString,
+                        podcastLanguage: viewModel.podcastLanguage
+                    )
+                ) {
+                    navRowLabel(
+                        icon: "sparkles",
+                        tint: .orange,
+                        title: "AI Insights",
+                        subtitle: "Summary, takeaways & quotes"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Open the AI analysis for this episode")
+            }
+            .background(.regularMaterial, in: .rect(cornerRadius: 16))
         }
     }
+
+    private func navRowLabel(
+        icon: String,
+        tint: Color,
+        title: String,
+        subtitle: String
+    ) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.15), in: .rect(cornerRadius: 9))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+    }
+}
+
+#Preview {
+    NavigationStack {
+        EpisodeDetailView(
+            episode: PodcastEpisodeInfo(
+                title: "The On-Device AI Revolution",
+                podcastEpisodeDescription: "Maya sits down with three engineers shipping speech models that run entirely on the phone — why latency, privacy, and battery all point the same direction.",
+                pubDate: .now,
+                audioURL: "https://example.com/ep.mp3",
+                duration: 4320
+            ),
+            podcastTitle: "Signal & Noise",
+            fallbackImageURL: nil,
+            podcastLanguage: "en"
+        )
+    }
+    .modelContainer(for: PodcastInfoModel.self, inMemory: true)
 }
 
 #endif

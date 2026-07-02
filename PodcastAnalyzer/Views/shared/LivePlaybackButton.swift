@@ -197,17 +197,30 @@ struct LivePlaybackButton: View {
   
   private var standardButton: some View {
     Button(action: onPlay) {
-      HStack(spacing: 4) {
+      HStack(spacing: 6) {
         playIcon(size: 12)
         Text(buttonLabel)
           .font(.caption)
           .fontWeight(.medium)
+
+        // Progress bar + remaining/total time so the prominent button still
+        // surfaces "how much is left", like the icon-only style does.
+        if showsPlaybackProgress {
+          progressBar(width: 28, height: 3)
+        }
+        if let duration = durationText {
+          Text(duration)
+            .font(.caption)
+            .fontWeight(.medium)
+            .contentTransition(.identity)
+        }
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 8)
     }
     .buttonStyle(.borderedProminent)
     .disabled(isDisabled)
+    .transaction { $0.animation = nil }
   }
   
   // MARK: - Icon Only Style (capsule with icon, progress bar, and duration)
