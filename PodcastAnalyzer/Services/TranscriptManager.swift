@@ -10,6 +10,20 @@ import Foundation
 import OSLog
 import Speech
 
+extension SFSpeechRecognizer {
+  /// Async wrapper for `requestAuthorization` that is safe under
+  /// MainActor-default isolation. The raw completion handler arrives on a TCC
+  /// background queue; a closure literal formed in a MainActor context gets
+  /// inferred @MainActor and trips dispatch_assert_queue when invoked there.
+  /// Forming the closure inside this `nonisolated` function avoids the
+  /// inference — resume is thread-safe by design.
+  static nonisolated func requestAuthorizationStatus() async -> SFSpeechRecognizerAuthorizationStatus {
+    await withCheckedContinuation { continuation in
+      requestAuthorization { continuation.resume(returning: $0) }
+    }
+  }
+}
+
 /// Tracks the status of a transcript generation job
 enum TranscriptJobStatus: Equatable {
   case queued
@@ -387,11 +401,7 @@ class TranscriptManager {
           )
         case .notDetermined:
           // Request permission
-          let granted = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-              continuation.resume(returning: status == .authorized)
-            }
-          }
+          let granted = await SFSpeechRecognizer.requestAuthorizationStatus() == .authorized
           if !granted {
             throw NSError(
               domain: "TranscriptManager", code: 5,

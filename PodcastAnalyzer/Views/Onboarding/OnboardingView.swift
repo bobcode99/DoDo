@@ -288,14 +288,12 @@ private struct PermissionsOnboardingPage: View {
     // system won't show the dialog again — route to Settings instead.
     switch speechStatus {
     case .notDetermined:
-      // Bridge the completion-handler API to async so the state write lands on
-      // the MainActor cleanly (same pattern TranscriptManager uses). Writing
-      // @State straight from the raw background callback is what was crashing.
+      // requestAuthorizationStatus() is the nonisolated wrapper — a completion
+      // closure formed here (MainActor context) would be inferred @MainActor and
+      // crash with dispatch_assert_queue when TCC invokes it on a background
+      // queue. The Task body stays on the MainActor for the @State write.
       Task {
-        let status = await withCheckedContinuation { continuation in
-          SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
-        }
-        speechStatus = status
+        speechStatus = await SFSpeechRecognizer.requestAuthorizationStatus()
       }
     case .denied, .restricted:
       openSettings()
