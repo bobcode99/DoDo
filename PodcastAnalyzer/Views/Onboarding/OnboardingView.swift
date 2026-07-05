@@ -78,20 +78,20 @@ private struct WelcomeOnboardingPage: View {
         FeatureRow(
           icon: "arrow.down.circle.fill",
           color: .green,
-          title: "Download Episodes",
-          description: "Save episodes for offline listening"
+          title: String(localized: "Download Episodes"),
+          description: String(localized: "Save episodes for offline listening")
         )
         FeatureRow(
           icon: "text.bubble.fill",
           color: .purple,
-          title: "AI Transcripts",
-          description: "On-device speech-to-text with Whisper"
+          title: String(localized: "AI Transcripts"),
+          description: String(localized: "On-device speech-to-text with Whisper")
         )
         FeatureRow(
           icon: "sparkles",
           color: .orange,
-          title: "Smart Analysis",
-          description: "Summaries, highlights, and Q&A"
+          title: String(localized: "Smart Analysis"),
+          description: String(localized: "Summaries, highlights, and Q&A")
         )
       }
       .padding(.horizontal, 28)
