@@ -472,8 +472,11 @@ class BackgroundSyncManager {
     let content = UNMutableNotificationContent()
 
     if totalCount == 1, let first = details.first {
-      content.title = "New Episode"
-      content.body = "\(first.podcastTitle): \(first.episodeTitle)"
+      // Podcast as the bold title, episode as the body — mirrors Apple Podcasts.
+      content.title = first.podcastTitle
+      content.subtitle = "New Episode"
+      content.body = first.episodeTitle
+      content.threadIdentifier = first.podcastTitle  // group repeats by show
       // Include episode info for navigation on tap
       content.userInfo = [
         "type": "newEpisode",
@@ -483,15 +486,23 @@ class BackgroundSyncManager {
         "imageURL": first.imageURL ?? "",
         "language": first.language
       ]
-    } else if details.count <= 3 {
-      content.title = "\(totalCount) New Episodes"
-      content.body = details.map { $0.podcastTitle }.joined(separator: ", ")
-      content.userInfo = ["type": "multipleEpisodes"]
     } else {
+      // Batch: list "Podcast — Episode" lines (multiline body expands on long-press),
+      // capped at 3 with an "and N more" tail so the text stays scannable.
       content.title = "\(totalCount) New Episodes"
-      let podcastNames = Set(details.map { $0.podcastTitle })
-      content.body = "From \(podcastNames.count) podcasts"
+      let shown = details.prefix(3).map { "\($0.podcastTitle) — \($0.episodeTitle)" }
+      let remainder = totalCount - shown.count
+      var lines = shown
+      if remainder > 0 { lines.append("…and \(remainder) more") }
+      content.body = lines.joined(separator: "\n")
+      content.threadIdentifier = "newEpisodes"
       content.userInfo = ["type": "multipleEpisodes"]
+    }
+
+    // Best-effort artwork thumbnail — the single biggest context boost for a
+    // podcast notification. Uses the first episode's image; skipped on failure.
+    if let attachment = await imageAttachment(from: details.first?.imageURL) {
+      content.attachments = [attachment]
     }
 
     content.sound = .default
@@ -508,6 +519,25 @@ class BackgroundSyncManager {
       logger.info("Notification sent for \(totalCount) new episodes")
     } catch {
       logger.error("Failed to send notification: \(error.localizedDescription, privacy: .public)")
+    }
+  }
+
+  /// Downloads podcast artwork to a temp file for use as a notification
+  /// attachment. Best-effort: returns nil on any failure so the notification
+  /// still fires without the thumbnail. UNNotificationAttachment copies the file
+  /// into its own store, so the temp file can be discarded afterwards.
+  private func imageAttachment(from urlString: String?) async -> UNNotificationAttachment? {
+    guard let urlString, let url = URL(string: urlString) else { return nil }
+    do {
+      let (data, _) = try await URLSession.shared.data(from: url)
+      let ext = url.pathExtension.isEmpty ? "jpg" : url.pathExtension
+      let tmp = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension(ext)
+      try data.write(to: tmp)
+      return try UNNotificationAttachment(identifier: "artwork", url: tmp)
+    } catch {
+      return nil
     }
   }
 
