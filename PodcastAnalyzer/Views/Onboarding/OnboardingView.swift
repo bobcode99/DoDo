@@ -8,7 +8,9 @@
 //
 
 #if os(iOS)
+import Speech
 import SwiftUI
+import UIKit
 
 struct OnboardingView: View {
   @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -18,8 +20,12 @@ struct OnboardingView: View {
     TabView(selection: $currentPage) {
       WelcomeOnboardingPage(onNext: { currentPage = 1 })
         .tag(0)
-      ImportOnboardingPage(onSkip: { hasCompletedOnboarding = true })
+      PermissionsOnboardingPage(onNext: { currentPage = 2 })
         .tag(1)
+      TranscriptionOnboardingPage(onNext: { currentPage = 3 })
+        .tag(2)
+      ImportOnboardingPage(onSkip: { hasCompletedOnboarding = true })
+        .tag(3)
     }
     .tabViewStyle(.page)
     .indexViewStyle(.page(backgroundDisplayMode: .always))
@@ -149,6 +155,209 @@ private struct ImportOnboardingPage: View {
           .padding(.bottom, 52)
       }
     }
+  }
+}
+
+// MARK: - Transcription Page
+
+private struct TranscriptionOnboardingPage: View {
+  let onNext: () -> Void
+
+  var body: some View {
+    Form {
+      Section {
+        VStack(spacing: 10) {
+          Image(systemName: "text.bubble.fill")
+            .font(.system(size: 52))
+            .foregroundStyle(.purple.gradient)
+          Text("Transcription")
+            .font(.largeTitle)
+            .fontWeight(.bold)
+          Text("Apple Speech transcribes on-device with no setup. For faster, higher-quality transcripts, point DoDo at a Yap server on your network.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .listRowBackground(Color.clear)
+      }
+
+      // Reuse the Settings section: URL, optional API key, Test Connection.
+      YapServerSection()
+
+      Section {
+        Button(action: onNext) {
+          Text("Continue")
+            .fontWeight(.semibold)
+            .frame(maxWidth: .infinity)
+        }
+      } footer: {
+        Text("Optional — you can set this up anytime in Settings. Swipe to skip.")
+      }
+    }
+  }
+}
+
+// MARK: - Permissions Page
+
+private struct PermissionsOnboardingPage: View {
+  let onNext: () -> Void
+
+  private let sync = BackgroundSyncManager.shared
+  @State private var speechStatus = SFSpeechRecognizer.authorizationStatus()
+  // Background App Refresh is a system setting — we can read it but not request it.
+  @State private var backgroundRefresh = UIApplication.shared.backgroundRefreshStatus
+
+  var body: some View {
+    ScrollView {
+      VStack(spacing: 0) {
+        Image(systemName: "hand.raised.fill")
+          .font(.system(size: 60))
+          .foregroundStyle(.blue.gradient)
+          .padding(.top, 64)
+          .padding(.bottom, 16)
+
+        VStack(spacing: 10) {
+          Text("Enable Full Experience")
+            .font(.largeTitle)
+            .fontWeight(.bold)
+            .multilineTextAlignment(.center)
+
+          Text("We recommend turning all of these on.\nYou stay in control — decide what to allow.")
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+        }
+        .padding(.bottom, 28)
+
+        VStack(spacing: 12) {
+          PermissionRow(
+            icon: "waveform",
+            color: .purple,
+            title: "Speech Recognition",
+            description: "On-device transcripts with Apple Speech",
+            isOn: speechStatus == .authorized,
+            onRequest: requestSpeech
+          )
+          PermissionRow(
+            icon: "bell.badge.fill",
+            color: .red,
+            title: "Notifications",
+            description: "Get notified about new episodes",
+            isOn: sync.notificationPermissionStatus == .authorized,
+            onRequest: requestNotifications
+          )
+          PermissionRow(
+            icon: "arrow.clockwise.circle.fill",
+            color: .green,
+            title: "Background App Refresh",
+            description: "Fetch new episodes while you're away",
+            isOn: backgroundRefresh == .available,
+            // OS-controlled system setting — can't request, only deep-link.
+            onRequest: openSettings
+          )
+        }
+        .padding(.horizontal, 24)
+
+        Button("Continue", action: onNext)
+          .font(.headline)
+          .foregroundStyle(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 16)
+          .background(.blue, in: .rect(cornerRadius: 14))
+          .padding(.horizontal, 24)
+          .padding(.top, 28)
+          .padding(.bottom, 52)
+      }
+    }
+    .task { await sync.checkNotificationPermission() }
+    .onReceive(
+      NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+    ) { _ in
+      // Returning from Settings — pick up any changes the user made there.
+      speechStatus = SFSpeechRecognizer.authorizationStatus()
+      backgroundRefresh = UIApplication.shared.backgroundRefreshStatus
+      Task { await sync.checkNotificationPermission() }
+    }
+  }
+
+  private func requestSpeech() {
+    // Only the first, undetermined state can prompt. Once denied/restricted the
+    // system won't show the dialog again — route to Settings instead.
+    switch speechStatus {
+    case .notDetermined:
+      // Bridge the completion-handler API to async so the state write lands on
+      // the MainActor cleanly (same pattern TranscriptManager uses). Writing
+      // @State straight from the raw background callback is what was crashing.
+      Task {
+        let status = await withCheckedContinuation { continuation in
+          SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+        }
+        speechStatus = status
+      }
+    case .denied, .restricted:
+      openSettings()
+    default:
+      break
+    }
+  }
+
+  private func requestNotifications() {
+    switch sync.notificationPermissionStatus {
+    case .notDetermined:
+      sync.requestNotificationPermission()
+    case .denied:
+      openSettings()
+    default:
+      break
+    }
+  }
+
+  private func openSettings() {
+    if let url = URL(string: UIApplication.openSettingsURLString) {
+      UIApplication.shared.open(url)
+    }
+  }
+}
+
+// MARK: - Permission Row
+
+private struct PermissionRow: View {
+  let icon: String
+  let color: Color
+  let title: String
+  let description: String
+  /// Reflects the live OS authorization — the toggle mirrors it, it isn't owned here.
+  let isOn: Bool
+  let onRequest: () -> Void
+
+  var body: some View {
+    // ponytail: get/set binding, not @State — the source of truth is the OS
+    // permission, not local state. Flipping on fires the request; the OS decides
+    // the real value and `isOn` snaps to it on the next status refresh. A granted
+    // permission can't be revoked in-app, so flip-off is a no-op.
+    Toggle(isOn: Binding(get: { isOn }, set: { if $0 { onRequest() } })) {
+      HStack(spacing: 14) {
+        Image(systemName: icon)
+          .font(.title2)
+          .foregroundStyle(color)
+          .frame(width: 34)
+
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title)
+            .font(.subheadline)
+            .fontWeight(.semibold)
+          Text(description)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+    .tint(color)
+    .padding(14)
+    .background(.regularMaterial, in: .rect(cornerRadius: 14))
   }
 }
 

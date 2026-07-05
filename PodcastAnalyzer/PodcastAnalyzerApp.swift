@@ -139,20 +139,25 @@ struct PodcastAnalyzerApp: App {
           // Cheap to call; no-op on Siri's side if nothing changed.
           PodcastAnalyzerShortcuts.updateAppShortcutParameters()
 
-          // Request critical permissions early so they don't interrupt mid-session
+          // Request critical permissions early so they don't interrupt mid-session.
+          // Only for users who already finished onboarding — new users grant these
+          // deliberately on the onboarding Permissions page, so don't ambush them
+          // with system prompts on first launch.
           #if os(iOS)
-          // Speech recognition (used by on-device transcription).
-          // Must be detached: requestAuthorization delivers its callback on a non-main
-          // thread, which would crash under Swift 6 MainActor isolation if called inline.
-          Task.detached(priority: .utility) {
-            SFSpeechRecognizer.requestAuthorization { _ in }
+          if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+            // Speech recognition (used by on-device transcription).
+            // Must be detached: requestAuthorization delivers its callback on a non-main
+            // thread, which would crash under Swift 6 MainActor isolation if called inline.
+            Task.detached(priority: .utility) {
+              SFSpeechRecognizer.requestAuthorization { _ in }
+            }
+            // Notification permission if enabled in settings
+            if BackgroundSyncManager.shared.isNotificationsEnabled {
+              BackgroundSyncManager.shared.requestNotificationPermission()
+            }
+            // Trigger paste permission prompt (used by AI Shortcuts clipboard fallback)
+            _ = UIPasteboard.general.hasStrings
           }
-          // Notification permission if enabled in settings
-          if BackgroundSyncManager.shared.isNotificationsEnabled {
-            BackgroundSyncManager.shared.requestNotificationPermission()
-          }
-          // Trigger paste permission prompt (used by AI Shortcuts clipboard fallback)
-          _ = UIPasteboard.general.hasStrings
           #endif
 
           // Register low-memory warning handler to clear caches
