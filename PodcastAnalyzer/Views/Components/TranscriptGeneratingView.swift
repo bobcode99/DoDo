@@ -1,16 +1,20 @@
 import SwiftUI
 
-/// Live "generating transcript" UI: progress ring, a coarse pipeline, and the
-/// active config chips. Presentational — driven only by values the coordinator
-/// already publishes (state progress + real chunk part-progress).
+/// Live "generating transcript" UI: progress ring, the real pipeline stages, and
+/// the active config chips. Stages are driven by the actual `TranscriptionPhase`
+/// the service emits (Apple Speech) plus model-download state — not guessed from
+/// the percentage. Yap has no phase stream, so its steps derive from progress.
 struct TranscriptGeneratingView: View {
     let engine: TranscriptEngine
     let languageName: String
-    /// True while the Whisper model is still downloading (before transcription).
-    let isModelDownload: Bool
+    /// True while the engine's assets are still downloading (Whisper model or
+    /// Apple Speech per-language assets) — i.e. the `.downloadingModel` state.
+    let isDownloadingAssets: Bool
     let progress: Double
     /// Real chunk counts for the split Apple Speech path (nil otherwise).
     let partProgress: TranscriptPartProgress?
+    /// Real pipeline step from the service (nil for Yap / before first emit).
+    let phase: TranscriptionPhase?
     let onCancel: () -> Void
 
     private var settings: SubtitleSettingsManager { .shared }
@@ -36,9 +40,10 @@ struct TranscriptGeneratingView: View {
     }
 
     private var headline: String {
-        isModelDownload
-            ? "Downloading Speech Model…"
-            : "Generating Transcript (\(languageName))…"
+        if isDownloadingAssets {
+            return engine == .whisper ? "Downloading Model…" : "Downloading Assets…"
+        }
+        return "Generating Transcript (\(languageName))…"
     }
 
     // MARK: - Ring
@@ -69,51 +74,87 @@ struct TranscriptGeneratingView: View {
         let title: String
         let detail: String?
         let state: StageState
+        /// Show the per-chunk bar strip under this stage (transcribe step only).
+        var showsChunks: Bool = false
     }
 
-    /// ponytail: split/merge boundaries are approximated from the single progress
-    /// value — only model-download and chunk part-progress are real events. Full
-    /// per-phase fidelity would need the transcription service to emit phase
-    /// markers up through the coordinator.
+    private var partDetail: String? {
+        partProgress.map { "Part \(min($0.completed + 1, $0.total))/\($0.total)" }
+    }
+
     private var stages: [Stage] {
-        if engine == .whisper {
-            return [
-                Stage(title: "Download model", detail: nil,
-                      state: isModelDownload ? .active : .done),
-                Stage(title: "Transcribe", detail: nil,
-                      state: isModelDownload ? .pending : (progress >= 0.99 ? .done : .active)),
-                Stage(title: "Finalize & align", detail: nil,
-                      state: progress >= 0.99 ? .active : .pending),
-            ]
+        switch engine {
+        case .appleSpeech: return appleSpeechStages
+        case .whisper: return whisperStages
+        case .yapServer: return yapStages
         }
-        // Apple Speech / Yap
-        let partDetail = partProgress.map {
-            "Part \(min($0.completed + 1, $0.total))/\($0.total)"
+    }
+
+    /// Apple Speech: real phases from the service (prepare/split/transcribe/merge)
+    /// plus the asset-download state ahead of them.
+    private var appleSpeechStages: [Stage] {
+        let merging = phase == .merging || progress >= 1
+        let transcribing = phase == .transcribing && !merging
+        // "Splitting" covers prepare + split, before any chunk transcription.
+        let splitting = !isDownloadingAssets && !transcribing && !merging
+
+        func s(_ done: Bool, _ active: Bool) -> StageState {
+            done ? .done : (active ? .active : .pending)
         }
         return [
-            Stage(title: "Prepare audio", detail: nil,
-                  state: (progress > 0.02 || partProgress != nil) ? .done : .active),
+            Stage(title: "Download assets", detail: nil,
+                  state: isDownloadingAssets ? .active : .done),
+            Stage(title: "Prepare & split audio", detail: nil,
+                  state: isDownloadingAssets ? .pending : s(transcribing || merging, splitting)),
             Stage(title: "Transcribe", detail: partDetail,
-                  state: progress >= 0.98 ? .done : .active),
+                  state: s(merging, transcribing),
+                  showsChunks: transcribing && partProgress != nil),
             Stage(title: "Merge & align", detail: nil,
-                  state: progress >= 0.98 ? .active : .pending),
+                  state: s(progress >= 1, merging)),
+        ]
+    }
+
+    private var whisperStages: [Stage] {
+        [
+            Stage(title: "Download model", detail: nil,
+                  state: isDownloadingAssets ? .active : .done),
+            Stage(title: "Transcribe", detail: nil,
+                  state: isDownloadingAssets ? .pending : (progress >= 0.99 ? .done : .active)),
+            Stage(title: "Finalize & align", detail: nil,
+                  state: progress >= 0.99 ? .active : .pending),
+        ]
+    }
+
+    private var yapStages: [Stage] {
+        [
+            Stage(title: "Upload to server", detail: nil,
+                  state: progress > 0 ? .done : .active),
+            Stage(title: "Transcribe on server", detail: nil,
+                  state: progress >= 0.99 ? .done : .active),
+            Stage(title: "Finalize", detail: nil,
+                  state: progress >= 0.99 ? .active : .pending),
         ]
     }
 
     private var pipeline: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(stages) { stage in
-                HStack(spacing: 11) {
-                    stageIcon(stage.state)
-                        .frame(width: 20)
-                    Text(stage.title)
-                        .font(.subheadline)
-                        .foregroundStyle(stage.state == .pending ? .secondary : .primary)
-                    Spacer(minLength: 0)
-                    if let detail = stage.detail {
-                        Text(detail)
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 11) {
+                        stageIcon(stage.state).frame(width: 20)
+                        Text(stage.title)
+                            .font(.subheadline)
+                            .fontWeight(stage.state == .active ? .semibold : .regular)
+                            .foregroundStyle(stage.state == .pending ? .secondary : .primary)
+                        Spacer(minLength: 0)
+                        if let detail = stage.detail {
+                            Text(detail)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    if stage.showsChunks, let parts = partProgress {
+                        chunkBar(parts).padding(.leading, 31)
                     }
                 }
                 .opacity(stage.state == .pending ? 0.55 : 1)
@@ -122,6 +163,24 @@ struct TranscriptGeneratingView: View {
         .frame(maxWidth: 300)
         .padding(14)
         .background(.regularMaterial, in: .rect(cornerRadius: 14))
+    }
+
+    /// Segmented bar mirroring the design: one cell per chunk, filled as parts
+    /// complete, the in-flight cell tinted lighter.
+    private func chunkBar(_ parts: TranscriptPartProgress) -> some View {
+        HStack(spacing: 4) {
+            ForEach(0..<max(parts.total, 1), id: \.self) { i in
+                Capsule()
+                    .fill(chunkColor(index: i, completed: parts.completed))
+                    .frame(height: 5)
+            }
+        }
+    }
+
+    private func chunkColor(index: Int, completed: Int) -> Color {
+        if index < completed { return .blue }
+        if index == completed { return .blue.opacity(0.4) }
+        return Color.secondary.opacity(0.18)
     }
 
     @ViewBuilder

@@ -57,7 +57,8 @@ extension TranscriptService {
 
         continuation.yield(TranscriptionProgress(
           progress: 0.0, currentTimeSeconds: 0,
-          totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil
+          totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil,
+          phase: .preparing
         ))
 
         // Detect music in parallel with chunk export when the global toggle
@@ -74,6 +75,14 @@ extension TranscriptService {
           minimumConfidence: musicDetectionConfidence
         )
 
+        // Splitting: exporting the file into overlapping chunks can take a
+        // moment on long episodes — surface it as its own step.
+        continuation.yield(TranscriptionProgress(
+          progress: 0.0, currentTimeSeconds: 0,
+          totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil,
+          phase: .splitting
+        ))
+
         self.logger.info("Exporting audio chunks (chunkDuration: \(chunkDuration)s)")
         let overlap: TimeInterval = 2.0
         let chunks = try await ChunkedTranscriptionService.exportAudioChunks(
@@ -88,7 +97,7 @@ extension TranscriptService {
         continuation.yield(TranscriptionProgress(
           progress: 0.0, currentTimeSeconds: 0,
           totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil,
-          totalParts: chunks.count, completedParts: 0
+          totalParts: chunks.count, completedParts: 0, phase: .transcribing
         ))
 
         // Apple Speech allows ~2 simultaneous recognition sessions.
@@ -157,6 +166,14 @@ extension TranscriptService {
             }
             return results
           }
+
+        // Merging: stitch overlapping chunk results, splice music markers,
+        // and format — the last real step before the transcript is ready.
+        continuation.yield(TranscriptionProgress(
+          progress: 0.99, currentTimeSeconds: audioFileDuration,
+          totalDurationSeconds: audioFileDuration, isComplete: false, srtContent: nil,
+          totalParts: chunks.count, completedParts: chunks.count, phase: .merging
+        ))
 
         let mergedSegments = ChunkedTranscriptionService.mergeChunkSegments(
           allChunkResults, chunks: chunks)

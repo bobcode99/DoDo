@@ -78,6 +78,9 @@ final class TranscriptCoordinator {
   /// Mirrored from the active TranscriptManager job so the generating UI can
   /// show a real "Part X/Y" instead of guessing.
   var transcriptPartProgress: TranscriptPartProgress?
+  /// Current pipeline step, mirrored from the active job so the generating UI
+  /// can show the real stage (splitting / transcribing / merging).
+  var transcriptPhase: TranscriptionPhase?
 
   // MARK: - Segments & Grouping
 
@@ -223,10 +226,20 @@ final class TranscriptCoordinator {
   /// Immediately syncs transcriptState from current job status to avoid 0% flash.
   private func syncTranscriptState() {
     guard let job = TranscriptManager.shared.activeJobs[episodeKey] else { return }
+    // Restore the *running job's* engine/language so a re-entered generating view
+    // shows the real pipeline (e.g. Whisper), not the coordinator's stale default
+    // — otherwise effectiveEngine falls back to Apple Speech and its split stages.
+    if let engine = job.engine {
+      selectedTranscriptEngine = engine
+    }
+    if let lang = job.language {
+      selectedTranscriptLanguage = lang
+    }
     if let lang = job.detectedLanguage {
       transcriptDetectedLanguage = lang
     }
     transcriptPartProgress = job.partProgress
+    transcriptPhase = job.phase
     switch job.status {
     case .queued:
       transcriptState = .transcribing(progress: 0)

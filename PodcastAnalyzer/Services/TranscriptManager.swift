@@ -39,6 +39,7 @@ struct TranscriptJob: Identifiable {
   var yapServerJobID: String?    // Set once the yap HTTP job is accepted; used to cancel server-side
   var detectedLanguage: String?  // Populated by Whisper auto-detect before full transcription
   var partProgress: TranscriptPartProgress?  // Split-transcription part counts (Apple Speech, chunked)
+  var phase: TranscriptionPhase?  // Current pipeline step (prepare/split/transcribe/merge)
 }
 
 /// Manages background transcript generation with parallel processing.
@@ -450,11 +451,16 @@ class TranscriptManager {
           if progressUpdate.isComplete {
             finalSRTContent = progressUpdate.srtContent
             activeJobs[job.id]?.partProgress = parts
+            activeJobs[job.id]?.phase = progressUpdate.phase
             activeJobs[job.id]?.status = .transcribing(progress: 1.0)
           } else {
             let now = Date()
-            if now.timeIntervalSince(lastUIUpdate) >= 0.25 {
+            // Always forward phase transitions promptly (they're rare); throttle
+            // only the high-frequency percentage updates.
+            let phaseChanged = activeJobs[job.id]?.phase != progressUpdate.phase
+            if phaseChanged || now.timeIntervalSince(lastUIUpdate) >= 0.25 {
               activeJobs[job.id]?.partProgress = parts
+              activeJobs[job.id]?.phase = progressUpdate.phase
               activeJobs[job.id]?.status = .transcribing(progress: progressUpdate.progress)
               lastUIUpdate = now
             }
@@ -503,6 +509,7 @@ class TranscriptManager {
 
         try Task.checkCancellation()
         activeJobs[job.id]?.status = .transcribing(progress: 0)
+        activeJobs[job.id]?.phase = .transcribing
 
         let whisperService = WhisperTranscriptService()
         var finalSRTContent: String?
@@ -602,7 +609,7 @@ class TranscriptManager {
           }
         }
 
-        let srtContent = try await yapService.pollForResult(
+        let srtContent = try await yapService.streamEvents(
           jobID: yapJobID, baseURL: base, apiKey: key, onProgress: onProgress
         )
 

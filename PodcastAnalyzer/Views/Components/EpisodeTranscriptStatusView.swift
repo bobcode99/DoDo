@@ -11,9 +11,9 @@ struct EpisodeTranscriptStatusView: View {
         case .idle:
             idleView
         case .downloadingModel(let progress):
-            generating(isModelDownload: true, progress: progress)
+            generating(isDownloadingAssets: true, progress: progress)
         case .transcribing(let progress):
-            generating(isModelDownload: false, progress: progress)
+            generating(isDownloadingAssets: false, progress: progress)
         case .completed:
             completedView
         case .error(let message):
@@ -63,13 +63,14 @@ struct EpisodeTranscriptStatusView: View {
 
     // MARK: - Generating
 
-    private func generating(isModelDownload: Bool, progress: Double) -> some View {
+    private func generating(isDownloadingAssets: Bool, progress: Double) -> some View {
         TranscriptGeneratingView(
             engine: viewModel.transcript.effectiveEngine,
             languageName: viewModel.transcript.transcriptLanguageName,
-            isModelDownload: isModelDownload,
+            isDownloadingAssets: isDownloadingAssets,
             progress: progress,
             partProgress: viewModel.transcript.transcriptPartProgress,
+            phase: viewModel.transcript.transcriptPhase,
             onCancel: { viewModel.transcript.cancelTranscript() }
         )
     }

@@ -3,7 +3,7 @@
 //  PodcastAnalyzer
 //
 //  Actor-based service that submits audio to a local yap HTTP server
-//  and polls for the completed SRT transcript.
+//  and streams progress/result via Server-Sent Events.
 //
 
 import Foundation
@@ -44,7 +44,7 @@ struct YapHealthResult: Sendable {
 actor YapTranscriptService {
     private let logger = Logger(subsystem: "com.podcast.analyzer", category: "YapTranscriptService")
 
-    /// Uploads the audio file to the yap server and polls until the transcript is ready.
+    /// Uploads the audio file to the yap server and streams events via SSE until done.
     ///
     /// Uses `URLSession.shared.upload(for:fromFile:)` to stream the audio without
     /// loading it into memory.
@@ -75,7 +75,7 @@ actor YapTranscriptService {
         logger.info("Yap job submitted, id=\(jobID)")
         onJobSubmitted?(jobID)
 
-        return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
+        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
     }
 
     /// Submits a remote audio URL to the yap server (JSON body mode).
@@ -102,7 +102,7 @@ actor YapTranscriptService {
         )
         logger.info("Yap remote-URL job submitted, id=\(jobID)")
         onJobSubmitted?(jobID)
-        return try await pollForResult(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
+        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
     }
 
     /// Hits `GET /health` and `GET /backends` to confirm the yap server is
@@ -304,70 +304,121 @@ actor YapTranscriptService {
         return try JSONDecoder().decode(SubmitResponse.self, from: data).id
     }
 
-    func pollForResult(
+    func streamEvents(
         jobID: String,
         baseURL: URL,
         apiKey: String?,
         onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
-        let pollURL = baseURL.appending(path: "transcriptions/\(jobID)")
-        var delay: Duration = .seconds(1)
-        let maxDelay: Duration = .seconds(5)
+        let url = baseURL.appending(path: "transcriptions/\(jobID)/events")
+        var request = URLRequest(url: url)
+        // Proper SSE client headers: without Accept: text/event-stream (and
+        // no-cache) URLSession / any intermediary may buffer the whole body and
+        // deliver it only at completion — which shows up as 0% then a jump to
+        // 100% instead of live progress. `bytes(for:)` itself streams.
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        if let key = apiKey, !key.isEmpty {
+            request.setValue(key, forHTTPHeaderField: "X-API-Key")
+        }
 
-        while true {
-            try Task.checkCancellation()
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
-            try await Task.sleep(for: delay)
-            delay = min(delay * 2, maxDelay)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw YapError.serverError("Non-HTTP response from SSE stream")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw YapError.serverError("HTTP \(httpResponse.statusCode) from SSE stream")
+        }
 
-            try Task.checkCancellation()
+        struct SSEEvent: Decodable {
+            let id: String
+            let status: String
+            let progress: Int?
+            let transcript: String?
+            let format: String?
+            let error: String?
+        }
 
-            var request = URLRequest(url: pollURL)
-            if let key = apiKey, !key.isEmpty {
-                request.setValue(key, forHTTPHeaderField: "X-API-Key")
-            }
+        do {
+            for try await line in bytes.lines {
+                try Task.checkCancellation()
 
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw YapError.serverError("Non-HTTP response while polling")
-            }
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                let body = String(data: data, encoding: .utf8) ?? "unknown"
-                throw YapError.serverError("HTTP \(httpResponse.statusCode): \(body)")
-            }
-
-            struct PollResponse: Decodable {
-                let id: String
-                let status: String
-                let progress: Int?   // 0–99 when status == "running"
-                let format: String?
-                let transcript: String?
-                let error: String?
-            }
-            let decoded = try JSONDecoder().decode(PollResponse.self, from: data)
-
-            switch decoded.status {
-            case "queued", "running":
-                if decoded.status == "running", let pct = decoded.progress {
-                    // Divide by 100 so the maximum running value is 0.99;
-                    // 1.0 is reserved for the explicit "done" signal in the caller.
-                    onProgress?(Double(pct) / 100.0)
+                // Dispatch on the `data:` line directly rather than waiting for the
+                // frame's blank-line terminator. URLSession's AsyncLineSequence can
+                // withhold that trailing empty line until the *next* frame arrives,
+                // which stalls live progress (updates only land one frame late, and
+                // the final one only at stream end). Each yap frame carries a single
+                // self-contained JSON `data:` line, so per-line dispatch is safe.
+                guard line.hasPrefix("data:") else { continue }  // skip event:/comments/blanks
+                let json = line.hasPrefix("data: ") ? line.dropFirst(6) : line.dropFirst(5)
+                guard let decoded = try? JSONDecoder().decode(SSEEvent.self, from: Data(json.utf8)) else {
+                    continue
                 }
-                logger.debug("Yap job \(jobID) status=\(decoded.status), retrying…")
-                continue
-            case "done":
-                guard let srt = decoded.transcript, !srt.isEmpty else {
-                    throw YapError.emptyTranscript
+
+                switch decoded.status {
+                case "queued", "running":
+                    if decoded.status == "running", let pct = decoded.progress {
+                        onProgress?(Double(pct) / 100.0)
+                    }
+                    logger.debug("Yap job \(jobID) status=\(decoded.status) progress=\(decoded.progress ?? -1)")
+                case "done":
+                    guard let srt = decoded.transcript, !srt.isEmpty else {
+                        throw YapError.emptyTranscript
+                    }
+                    logger.info("Yap job \(jobID) completed")
+                    return srt
+                case "failed":
+                    throw YapError.serverError("Job failed: \(decoded.error ?? "unknown")")
+                case "cancelled":
+                    throw YapError.serverError("Job was cancelled")
+                default:
+                    break
                 }
-                logger.info("Yap job \(jobID) completed")
-                return srt
-            case "failed":
-                let detail = decoded.error ?? "unknown"
-                throw YapError.serverError("Job failed: \(detail)")
-            default:
-                throw YapError.serverError("Unknown status '\(decoded.status)'")
             }
+        } catch let error as YapError {
+            throw error  // terminal server states — don't mask them with the GET fallback
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.warning("SSE stream error for job \(jobID): \(error.localizedDescription)")
+        }
+
+        logger.warning("SSE stream ended without terminal event for job \(jobID), falling back to GET")
+        return try await pollOnce(jobID: jobID, baseURL: baseURL, apiKey: apiKey)
+    }
+
+    private struct JobStatus: Decodable {
+        let id: String
+        let status: String
+        let progress: Int?
+        let transcript: String?
+        let error: String?
+    }
+
+    private func pollOnce(jobID: String, baseURL: URL, apiKey: String?) async throws -> String {
+        let url = baseURL.appending(path: "transcriptions/\(jobID)")
+        var request = URLRequest(url: url)
+        if let key = apiKey, !key.isEmpty {
+            request.setValue(key, forHTTPHeaderField: "X-API-Key")
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw YapError.serverError("SSE stream ended without completion")
+        }
+        let decoded = try JSONDecoder().decode(JobStatus.self, from: data)
+        switch decoded.status {
+        case "done":
+            guard let srt = decoded.transcript, !srt.isEmpty else {
+                throw YapError.emptyTranscript
+            }
+            return srt
+        case "failed":
+            throw YapError.serverError("Job failed: \(decoded.error ?? "unknown")")
+        case "cancelled":
+            throw YapError.serverError("Job was cancelled")
+        default:
+            throw YapError.serverError("SSE stream ended without completion")
         }
     }
 

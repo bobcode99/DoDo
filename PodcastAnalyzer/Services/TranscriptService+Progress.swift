@@ -10,6 +10,16 @@ import Speech
 import OSLog
 import AVFoundation
 
+/// Coarse pipeline phase surfaced to the generating UI so it can show the real
+/// step ("Splitting audio", "Merging") instead of guessing from the percentage.
+/// Top-level (not gated on iOS 26) so the coordinator + views can reference it.
+public enum TranscriptionPhase: String, Sendable {
+  case preparing
+  case splitting
+  case transcribing
+  case merging
+}
+
 @available(iOS 26.0, *)
 extension TranscriptService {
 
@@ -27,6 +37,8 @@ extension TranscriptService {
     public var totalParts: Int = 1
     /// How many of those parts have fully finished transcribing.
     public var completedParts: Int = 0
+    /// Which pipeline step produced this snapshot.
+    public var phase: TranscriptionPhase = .transcribing
   }
 
   // MARK: - Streaming SRT
@@ -70,7 +82,8 @@ extension TranscriptService {
           currentTimeSeconds: 0,
           totalDurationSeconds: audioFileDuration,
           isComplete: false,
-          srtContent: nil
+          srtContent: nil,
+          phase: .preparing
         ))
 
         try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
