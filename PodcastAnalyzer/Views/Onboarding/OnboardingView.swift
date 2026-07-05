@@ -99,12 +99,17 @@ private struct WelcomeOnboardingPage: View {
       Spacer()
 
       VStack(spacing: 12) {
-        Button("Get Started", action: onNext)
-          .font(.headline)
-          .foregroundStyle(.white)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 16)
-          .background(.blue, in: .rect(cornerRadius: 14))
+        // Styling lives on the label so the whole pill is tappable — modifiers
+        // outside Button only decorate; the hit target would stay text-sized.
+        Button(action: onNext) {
+          Text("Get Started")
+            .font(.headline)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(.blue, in: .rect(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
 
         Text("Named after 兜 (Dōu), the Sand Dollar Cactus.")
           .font(.footnote)
@@ -261,15 +266,19 @@ private struct PermissionsOnboardingPage: View {
         }
         .padding(.horizontal, 24)
 
-        Button("Continue", action: onNext)
-          .font(.headline)
-          .foregroundStyle(.white)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 16)
-          .background(.blue, in: .rect(cornerRadius: 14))
-          .padding(.horizontal, 24)
-          .padding(.top, 28)
-          .padding(.bottom, 52)
+        // Styling on the label — full pill tappable, not just the text.
+        Button(action: onNext) {
+          Text("Continue")
+            .font(.headline)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(.blue, in: .rect(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 24)
+        .padding(.top, 28)
+        .padding(.bottom, 52)
       }
     }
     .task { await sync.checkNotificationPermission() }

@@ -252,6 +252,9 @@ struct PodcastAnalyzerApp: App {
         case "import-podcasts":
           // Callback from "ApplePodcast To PodcastAnalyzer" shortcut.
           // Expected format: podcastanalyzer://import-podcasts?rssURLs=url1,url2,...
+          // Importing *is* completing setup — land on the home screen, not back
+          // on the onboarding page the user launched the shortcut from.
+          UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
           if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
              let rawValue = components.queryItems?.first(where: { $0.name == "rssURLs" })?.value {
             let rssURLs = rawValue
