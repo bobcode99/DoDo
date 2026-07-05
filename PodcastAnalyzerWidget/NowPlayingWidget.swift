@@ -88,18 +88,41 @@ struct NowPlayingProvider: AppIntentTimelineProvider {
   func timeline(for configuration: NowPlayingConfiguration, in context: Context) async -> Timeline<NowPlayingEntry> {
     let entry = createEntry()
 
-    // When playing: refresh every 30s so episode changes appear quickly.
-    // When paused: refresh every 5 minutes (low priority).
-    // The app also calls WidgetCenter.reloadTimelines() on every episode
-    // change/play/pause which triggers an immediate re-render.
-    let refreshInterval: TimeInterval = if let data = entry.playbackData, data.isPlaying {
-      30
-    } else {
-      300
+    // Paused / empty: nothing moves on its own — the app pushes
+    // WidgetCenter.reloadTimelines() on every play/pause/episode change, so a
+    // slow fallback refresh is enough (frequent .after() just burns the
+    // ~40-70/day WidgetKit reload budget and gets throttled anyway).
+    guard let data = entry.playbackData, data.isPlaying else {
+      return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60)))
     }
 
-    let nextUpdate = Date().addingTimeInterval(refreshInterval)
-    return Timeline(entries: [entry], policy: .after(nextUpdate))
+    // Playing: pre-render one entry per minute with an extrapolated playhead so
+    // the progress bar advances between reloads at zero budget cost — WidgetKit
+    // swaps entries from a single timeline for free.
+    // ponytail: extrapolates at 1× — playbackRate isn't in the shared payload;
+    // add it there if 1.5×/2× listeners notice the bar lagging.
+    let now = Date()
+    let remainingMinutes = max(Int((data.duration - data.currentTime) / 60), 0)
+    let horizon = min(remainingMinutes + 1, 30)
+    let entries = (0...horizon).map { minute -> NowPlayingEntry in
+      let offset = TimeInterval(minute * 60)
+      let extrapolated = WidgetPlaybackData(
+        episodeTitle: data.episodeTitle,
+        podcastTitle: data.podcastTitle,
+        imageURL: data.imageURL,
+        audioURL: data.audioURL,
+        currentTime: min(data.currentTime + offset, data.duration),
+        duration: data.duration,
+        isPlaying: true,
+        lastUpdated: data.lastUpdated
+      )
+      return NowPlayingEntry(
+        date: now.addingTimeInterval(offset),
+        playbackData: extrapolated,
+        artworkData: entry.artworkData
+      )
+    }
+    return Timeline(entries: entries, policy: .after(now.addingTimeInterval(TimeInterval(horizon * 60))))
   }
 
   private func createEntry() -> NowPlayingEntry {

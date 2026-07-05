@@ -70,7 +70,9 @@ struct TranscriptGeneratingView: View {
     private enum StageState { case done, active, pending }
 
     private struct Stage: Identifiable {
-        let id = UUID()
+        // Stable identity: titles are unique per pipeline. A fresh UUID here would
+        // change every body evaluation and make ForEach rebuild all rows per tick.
+        var id: String { title }
         let title: String
         let detail: String?
         let state: StageState

@@ -140,6 +140,7 @@ class EnhancedAudioManager: NSObject {
   // Task-based observers for Swift 6 concurrency
   private var interruptionTask: Task<Void, Never>?
   private var interruptionResumeTask: Task<Void, Never>?
+  private var routeChangeTask: Task<Void, Never>?
   private var playerEndedTask: Task<Void, Never>?
   private var playerStalledTask: Task<Void, Never>?
   private var artworkFetchTask: Task<Void, Never>?
@@ -248,6 +249,20 @@ class EnhancedAudioManager: NSObject {
     interruptionTask = Task { @MainActor [weak self] in
       for await notification in NotificationCenter.default.notifications(named: AVAudioSession.interruptionNotification) {
         self?.handleAudioInterruption(notification)
+      }
+    }
+    // Pause when the output route disappears (headphones unplugged, Bluetooth
+    // device off) — otherwise AVPlayer keeps playing through the loudspeaker,
+    // which is never what the user wants mid-commute.
+    routeChangeTask = Task { @MainActor [weak self] in
+      for await notification in NotificationCenter.default.notifications(named: AVAudioSession.routeChangeNotification) {
+        guard let self,
+              let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              AVAudioSession.RouteChangeReason(rawValue: reasonValue) == .oldDeviceUnavailable,
+              self.isPlaying
+        else { continue }
+        self.logger.info("Audio route lost (device unplugged) — pausing")
+        self.pause()
       }
     }
     logger.info("Audio interruption observer configured")
