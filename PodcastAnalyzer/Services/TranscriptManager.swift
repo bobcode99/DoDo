@@ -115,6 +115,9 @@ class TranscriptManager {
   // dictionary doesn't invalidate every SwiftUI consumer on each tick.
   private var lastYapProgressUpdate: [String: Date] = [:]
 
+  private static let speechDeniedError = String(localized: "Speech recognition permission denied. Enable in Settings > Privacy > Speech Recognition.")
+  private static let speechRestrictedError = String(localized: "Speech recognition is restricted on this device.")
+
   private init() {}
 
   // No deinit needed — TranscriptManager is a singleton (static let shared)
@@ -375,12 +378,12 @@ class TranscriptManager {
         case .denied:
           throw NSError(
             domain: "TranscriptManager", code: 5,
-            userInfo: [NSLocalizedDescriptionKey: "Speech recognition permission denied. Enable in Settings > Privacy > Speech Recognition."]
+            userInfo: [NSLocalizedDescriptionKey: Self.speechDeniedError]
           )
         case .restricted:
           throw NSError(
             domain: "TranscriptManager", code: 6,
-            userInfo: [NSLocalizedDescriptionKey: "Speech recognition is restricted on this device."]
+            userInfo: [NSLocalizedDescriptionKey: Self.speechRestrictedError]
           )
         case .notDetermined:
           // Request permission
@@ -392,7 +395,7 @@ class TranscriptManager {
           if !granted {
             throw NSError(
               domain: "TranscriptManager", code: 5,
-              userInfo: [NSLocalizedDescriptionKey: "Speech recognition permission denied. Enable in Settings > Privacy > Speech Recognition."]
+              userInfo: [NSLocalizedDescriptionKey: Self.speechDeniedError]
             )
           }
         case .authorized:

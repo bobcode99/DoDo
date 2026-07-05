@@ -75,22 +75,22 @@ enum TranslationTargetLanguage: String, CaseIterable, Codable, Sendable {
 
   var displayName: String {
     switch self {
-    case .deviceLanguage: return "Device Language"
-    case .english: return "English"
-    case .traditionalChinese: return "Traditional Chinese"
-    case .simplifiedChinese: return "Simplified Chinese"
-    case .japanese: return "Japanese"
-    case .korean: return "Korean"
-    case .spanish: return "Spanish"
-    case .french: return "French"
-    case .german: return "German"
-    case .portuguese: return "Portuguese"
-    case .italian: return "Italian"
-    case .russian: return "Russian"
-    case .arabic: return "Arabic"
-    case .hindi: return "Hindi"
-    case .thai: return "Thai"
-    case .vietnamese: return "Vietnamese"
+    case .deviceLanguage: return String(localized: "Device Language")
+    case .english: return String(localized: "English")
+    case .traditionalChinese: return String(localized: "Traditional Chinese")
+    case .simplifiedChinese: return String(localized: "Simplified Chinese")
+    case .japanese: return String(localized: "Japanese")
+    case .korean: return String(localized: "Korean")
+    case .spanish: return String(localized: "Spanish")
+    case .french: return String(localized: "French")
+    case .german: return String(localized: "German")
+    case .portuguese: return String(localized: "Portuguese")
+    case .italian: return String(localized: "Italian")
+    case .russian: return String(localized: "Russian")
+    case .arabic: return String(localized: "Arabic")
+    case .hindi: return String(localized: "Hindi")
+    case .thai: return String(localized: "Thai")
+    case .vietnamese: return String(localized: "Vietnamese")
     }
   }
 
