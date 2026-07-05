@@ -14585,13 +14585,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点按 **添加快捷指令** 以安装到您的设备。"
+            "value" : "点按 **Add Shortcut** 以安装到您的设备。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "點按 **加入捷徑** 以安裝到您的裝置。"
+            "value" : "點按 **Add Shortcut** 以安裝到您的裝置。"
           }
         }
       }
