@@ -19,7 +19,7 @@ struct ImportShortcutInstructionsView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 22) {
-      StepRow(number: 1, title: "Get the shortcut") {
+      StepRow(number: 1, title: String(localized: "Get the shortcut")) {
         Text("Tap below to open the **ApplePodcast to Dodo** shortcut in the Shortcuts app.")
         Button("Get Shortcut", systemImage: "square.and.arrow.down") {
           openURL(shortcutLink)
@@ -28,15 +28,15 @@ struct ImportShortcutInstructionsView: View {
         .padding(.top, 2)
       }
 
-      StepRow(number: 2, title: "Add it") {
+      StepRow(number: 2, title: String(localized: "Add it")) {
         Text("Tap **Add Shortcut** to install it on your device.")
       }
 
-      StepRow(number: 3, title: "Find it") {
+      StepRow(number: 3, title: String(localized: "Find it")) {
         Text("In the Shortcuts app, open **All Shortcuts**.")
       }
 
-      StepRow(number: 4, title: "Run it") {
+      StepRow(number: 4, title: String(localized: "Run it")) {
         Text("Tap **ApplePodcast to Dodo** to import all your shows.")
         Button("Run Shortcut", systemImage: "play.fill") {
           openURL(runLink)

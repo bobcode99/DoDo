@@ -241,24 +241,24 @@ private struct PermissionsOnboardingPage: View {
           PermissionRow(
             icon: "waveform",
             color: .purple,
-            title: "Speech Recognition",
-            description: "On-device transcripts with Apple Speech",
+            title: String(localized: "Speech Recognition"),
+            description: String(localized: "On-device transcripts with Apple Speech"),
             isOn: speechStatus == .authorized,
             onRequest: requestSpeech
           )
           PermissionRow(
             icon: "bell.badge.fill",
             color: .red,
-            title: "Notifications",
-            description: "Get notified about new episodes",
+            title: String(localized: "Notifications"),
+            description: String(localized: "Get notified about new episodes"),
             isOn: sync.notificationPermissionStatus == .authorized,
             onRequest: requestNotifications
           )
           PermissionRow(
             icon: "arrow.clockwise.circle.fill",
             color: .green,
-            title: "Background App Refresh",
-            description: "Fetch new episodes while you're away",
+            title: String(localized: "Background App Refresh"),
+            description: String(localized: "Fetch new episodes while you're away"),
             isOn: backgroundRefresh == .available,
             // OS-controlled system setting — can't request, only deep-link.
             onRequest: openSettings
