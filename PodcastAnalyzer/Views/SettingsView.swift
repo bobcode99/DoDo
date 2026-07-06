@@ -19,6 +19,7 @@ struct SettingsView: View {
   @AppStorage("allowCellularAutoDownload") private var allowCellularAutoDownload = false
   @AppStorage("allowAutoDownloadOnBattery") private var allowAutoDownloadOnBattery = false
   @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
+  @AppStorage("autoDeletePlayedEnabled") private var autoDeletePlayedEnabled = false
 
   private let cacheLimitOptions: [(label: String, value: Int)] = [
     ("Unlimited", 0),
@@ -171,6 +172,20 @@ struct SettingsView: View {
                 .foregroundStyle(.orange)
                 .frame(width: 24)
               Text("Episode Cache Limit")
+            }
+          }
+
+          Toggle(isOn: $autoDeletePlayedEnabled) {
+            HStack {
+              Image(systemName: "trash.circle")
+                .foregroundStyle(.red)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Auto-Delete Played Episodes")
+                Text("Remove downloads a day after you finish them. Starred episodes are kept.")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
             }
           }
         } header: {

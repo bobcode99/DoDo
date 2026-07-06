@@ -445,6 +445,54 @@ final class DownloadManager {
     self.modelContainer = container
   }
 
+  // MARK: - Auto-delete played downloads
+
+  /// Timestamp of the last played-episode sweep, to keep foreground churn low.
+  @ObservationIgnored
+  private var lastPlayedSweep: Date = .distantPast
+
+  /// Deletes downloads of episodes the user finished. Opt-in
+  /// ("autoDeletePlayedEnabled", default off) and deliberately soft:
+  ///   - runs on foreground/launch sweeps, never at the moment playback ends
+  ///   - 24h grace after the last listen, so a just-finished episode can be
+  ///     reopened or re-listened without re-downloading
+  ///   - starred episodes and the episode loaded in the player are never touched
+  ///   - only the audio file goes; the model row (history, position, transcript
+  ///     source) stays, so the episode can always be re-downloaded
+  func sweepPlayedDownloads() {
+    guard UserDefaults.standard.bool(forKey: "autoDeletePlayedEnabled") else { return }
+    let now = Date()
+    guard now.timeIntervalSince(lastPlayedSweep) > 3600 else { return }  // at most hourly
+    guard let container = modelContainer else { return }
+    lastPlayedSweep = now
+
+    let context = container.mainContext
+    // Cheap predicate for the indexed/simple fields; the date-grace and
+    // current-episode checks run in memory on the (small) candidate set.
+    let descriptor = FetchDescriptor<EpisodeDownloadModel>(
+      predicate: #Predicate { $0.localAudioPath != nil && $0.isCompleted && !$0.isStarred }
+    )
+    guard let candidates = try? context.fetch(descriptor), !candidates.isEmpty else { return }
+
+    let cutoff = now.addingTimeInterval(-24 * 3600)  // ponytail: fixed 24h grace; make it a setting if asked
+    let current = EnhancedAudioManager.shared.currentEpisode
+
+    var deleted = 0
+    for model in candidates {
+      guard let lastPlayed = model.lastPlayedDate, lastPlayed < cutoff else { continue }
+      if let current, current.title == model.episodeTitle, current.podcastTitle == model.podcastTitle {
+        continue
+      }
+      deleteDownload(episodeTitle: model.episodeTitle, podcastTitle: model.podcastTitle)
+      model.localAudioPath = nil
+      deleted += 1
+    }
+    if deleted > 0 {
+      try? context.save()
+      logger.info("Auto-deleted \(deleted) played download(s)")
+    }
+  }
+
   /// Episode keys whose on-disk presence has already been checked.
   /// Prevents `getDownloadState` from repeating 7-extension disk scans on every call.
   @ObservationIgnored
