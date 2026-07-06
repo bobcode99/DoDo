@@ -75,6 +75,7 @@ struct HomeView: View {
   @State private var viewModel = HomeViewModel()
   @Environment(\.modelContext) private var modelContext
   @State private var showRegionPicker = false
+  @State private var showNotificationInbox = false
 
   var body: some View {
     ScrollView {
@@ -143,6 +144,22 @@ struct HomeView: View {
         SyncProgressToolbarBadge()
       }
       ToolbarItem(placement: .primaryAction) {
+        Button {
+          showNotificationInbox = true
+        } label: {
+          Image(systemName: "bell")
+            .overlay(alignment: .topTrailing) {
+              if NotificationInbox.shared.unreadCount > 0 {
+                Circle()
+                  .fill(.red)
+                  .frame(width: 8, height: 8)
+                  .offset(x: 2, y: -2)
+              }
+            }
+        }
+        .accessibilityLabel("Notifications")
+      }
+      ToolbarItem(placement: .primaryAction) {
         Button(action: { showRegionPicker = true }) {
           HStack(spacing: 4) {
             Text(viewModel.selectedRegionFlag)
@@ -155,6 +172,9 @@ struct HomeView: View {
           .glassEffect(Glass.regular.interactive(), in: .rect(cornerRadius: 12))
         }
       }
+    }
+    .sheet(isPresented: $showNotificationInbox) {
+      NotificationInboxView()
     }
     .sheet(isPresented: $showRegionPicker) {
       RegionPickerSheet(

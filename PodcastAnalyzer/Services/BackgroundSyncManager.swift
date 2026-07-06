@@ -386,6 +386,22 @@ class BackgroundSyncManager {
       !existingKeys.contains(ep.guid ?? ep.audioURL ?? ep.title)
     }
 
+    // The conditional GET returned 200, so the feed content changed — apply the
+    // merge even when no *new* episode appeared. Gating this on newEpisodes
+    // used to drop metadata updates (descriptions, fixed audio URLs, artwork,
+    // edited episodes) and left the release prediction stale.
+    // Merge: RSS episodes + orphaned episodes the user has touched
+    // (downloaded/starred/played) so they don't vanish when a feed trims its backlog.
+    let merged = podcast.podcastInfo.merging(updatedFrom: updatedPodcast, preservedKeys: episodesWithUserData)
+    podcast.applyPodcastInfo(merged)
+    podcast.lastUpdated = Date()
+
+    // Update release schedule prediction from the latest episode pub dates
+    let pubDates = updatedPodcast.episodes.compactMap { $0.pubDate }
+    let (cadence, nextDate) = ReleaseScheduleGuesser.guess(pubDates: pubDates)
+    podcast.detectedCadence = cadence.rawValue
+    podcast.predictedNextReleaseDate = nextDate
+
     if !newEpisodes.isEmpty {
       totalNewEpisodes += newEpisodes.count
       for episode in newEpisodes.prefix(3) {
@@ -397,18 +413,6 @@ class BackgroundSyncManager {
           language: updatedPodcast.language
         ))
       }
-
-      // Merge: RSS episodes + orphaned episodes the user has touched (downloaded/starred/played)
-      // so they don't vanish when a feed trims its backlog.
-      let merged = podcast.podcastInfo.merging(updatedFrom: updatedPodcast, preservedKeys: episodesWithUserData)
-      podcast.applyPodcastInfo(merged)
-      podcast.lastUpdated = Date()
-
-      // Update release schedule prediction from the latest episode pub dates
-      let pubDates = updatedPodcast.episodes.compactMap { $0.pubDate }
-      let (cadence, nextDate) = ReleaseScheduleGuesser.guess(pubDates: pubDates)
-      podcast.detectedCadence = cadence.rawValue
-      podcast.predictedNextReleaseDate = nextDate
 
       logger.info("Found \(newEpisodes.count) new episodes for \(updatedPodcast.title)")
 
@@ -469,57 +473,64 @@ class BackgroundSyncManager {
     totalCount: Int,
     details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)]
   ) async {
-    let content = UNMutableNotificationContent()
+    let center = UNUserNotificationCenter.current()
 
-    if totalCount == 1, let first = details.first {
+    // One notification per episode — each is individually tappable and iOS
+    // stacks them per show via threadIdentifier. `details` is already capped
+    // at 3 episodes per podcast by processSyncResult, so a big backlog can't
+    // spam the lock screen.
+    for detail in details {
+      // Record in the in-app inbox first; it drives the app icon badge.
+      NotificationInbox.shared.add(
+        podcastTitle: detail.podcastTitle,
+        episodeTitle: detail.episodeTitle,
+        audioURL: detail.audioURL ?? "",
+        imageURL: detail.imageURL ?? ""
+      )
+
+      let content = UNMutableNotificationContent()
       // Podcast as the bold title, episode as the body — mirrors Apple Podcasts.
-      content.title = first.podcastTitle
+      content.title = detail.podcastTitle
       content.subtitle = "New Episode"
-      content.body = first.episodeTitle
-      content.threadIdentifier = first.podcastTitle  // group repeats by show
-      // Include episode info for navigation on tap
+      content.body = detail.episodeTitle
+      content.threadIdentifier = detail.podcastTitle  // stack by show
       content.userInfo = [
         "type": "newEpisode",
-        "podcastTitle": first.podcastTitle,
-        "episodeTitle": first.episodeTitle,
-        "audioURL": first.audioURL ?? "",
-        "imageURL": first.imageURL ?? "",
-        "language": first.language
+        "podcastTitle": detail.podcastTitle,
+        "episodeTitle": detail.episodeTitle,
+        "audioURL": detail.audioURL ?? "",
+        "imageURL": detail.imageURL ?? "",
+        "language": detail.language
       ]
-    } else {
-      // Batch: list "Podcast — Episode" lines (multiline body expands on long-press),
-      // capped at 3 with an "and N more" tail so the text stays scannable.
-      content.title = "\(totalCount) New Episodes"
-      let shown = details.prefix(3).map { "\($0.podcastTitle) — \($0.episodeTitle)" }
-      let remainder = totalCount - shown.count
-      var lines = shown
-      if remainder > 0 { lines.append("…and \(remainder) more") }
-      content.body = lines.joined(separator: "\n")
+      // Best-effort artwork thumbnail; skipped on failure.
+      if let attachment = await imageAttachment(from: detail.imageURL) {
+        content.attachments = [attachment]
+      }
+      content.sound = .default
+      content.badge = NSNumber(value: NotificationInbox.shared.unreadCount)
+
+      do {
+        try await center.add(UNNotificationRequest(
+          identifier: UUID().uuidString, content: content, trigger: nil))
+      } catch {
+        logger.error("Failed to send notification: \(error.localizedDescription, privacy: .public)")
+      }
+    }
+
+    // Episodes beyond the per-podcast cap get one summary so the count is honest.
+    let remainder = totalCount - details.count
+    if remainder > 0 {
+      let content = UNMutableNotificationContent()
+      content.title = "\(remainder) More New Episodes"
+      content.body = "Open DoDo to see everything that just arrived."
       content.threadIdentifier = "newEpisodes"
       content.userInfo = ["type": "multipleEpisodes"]
+      content.sound = .default
+      try? await center.add(UNNotificationRequest(
+        identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
-    // Best-effort artwork thumbnail — the single biggest context boost for a
-    // podcast notification. Uses the first episode's image; skipped on failure.
-    if let attachment = await imageAttachment(from: details.first?.imageURL) {
-      content.attachments = [attachment]
-    }
-
-    content.sound = .default
-    content.badge = NSNumber(value: totalCount)
-
-    let request = UNNotificationRequest(
-      identifier: UUID().uuidString,
-      content: content,
-      trigger: nil  // Deliver immediately
-    )
-
-    do {
-      try await UNUserNotificationCenter.current().add(request)
-      logger.info("Notification sent for \(totalCount) new episodes")
-    } catch {
-      logger.error("Failed to send notification: \(error.localizedDescription, privacy: .public)")
-    }
+    logger.info("Sent \(details.count) episode notification(s), \(remainder) summarized")
   }
 
   /// Downloads podcast artwork to a temp file for use as a notification
