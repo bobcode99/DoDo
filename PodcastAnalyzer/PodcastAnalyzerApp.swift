@@ -81,6 +81,15 @@ struct PodcastAnalyzerApp: App {
     // Register background task for episode sync
     BackgroundSyncManager.registerBackgroundTask()
 
+    // Containers must be wired here, not only in WindowGroup.task: on a cold
+    // BGAppRefreshTask launch the scene never connects, .task never runs, and
+    // performSync bails with "ModelContainer not set" — background refresh
+    // silently did nothing for terminated apps. Setters are idempotent; the
+    // .task calls below stay as belt-and-braces.
+    BackgroundSyncManager.shared.setModelContainer(sharedModelContainer)
+    DownloadManager.shared.setModelContainer(sharedModelContainer)
+    TranscriptManager.shared.setModelContainer(sharedModelContainer)
+
     // Show new-episode banners in foreground + route taps to episode detail.
     UNUserNotificationCenter.current().delegate = NotificationTapDelegate.shared
 
@@ -115,6 +124,9 @@ struct PodcastAnalyzerApp: App {
           NotificationNavigationManager.shared.setModelContainer(sharedModelContainer)
           DownloadManager.shared.setModelContainer(sharedModelContainer)
           TranscriptManager.shared.setModelContainer(sharedModelContainer)
+
+          // Opt-in cleanup of finished episodes (24h grace; see sweep docs).
+          DownloadManager.shared.sweepPlayedDownloads()
 
           // Migrate flat caption files to podcast subfolders (one-time, safe to re-run)
           Task.detached(priority: .utility) {
@@ -186,6 +198,11 @@ struct PodcastAnalyzerApp: App {
       case .active:
         // App became active - handle widget toggle (pause) flag if pending
         EnhancedAudioManager.shared.handleWidgetToggleOnActive()
+        // Opt-in cleanup of finished episodes (self-throttled to hourly).
+        DownloadManager.shared.sweepPlayedDownloads()
+        // Re-anchor the app icon badge to the inbox's unread count. Also clears
+        // badges stranded by older builds that set but never cleared them.
+        NotificationInbox.shared.syncBadge()
         // Force widget to re-read latest playback data every time app becomes active
         WidgetCenter.shared.reloadAllTimelines()
         // Start foreground sync

@@ -143,6 +143,11 @@ final class HomeViewModel {
   @ObservationIgnored
   private var reconnectObserverTask: Task<Void, Never>?
 
+  // Task observing background/foreground sync completion so new episodes
+  // appear on Home without a pull-to-refresh
+  @ObservationIgnored
+  private var syncObserverTask: Task<Void, Never>?
+
   // Track current playing episode to detect changes
   @ObservationIgnored
   private var lastCurrentEpisodeId: String?
@@ -268,6 +273,19 @@ final class HomeViewModel {
           // never reshuffle a list that's already fresh this session.
           guard !self.hasFreshPopularShowsThisSession || self.topPodcasts.isEmpty else { continue }
           await self.refreshDiscoveryContent(forceRefresh: true)
+        }
+      }
+    }
+    if syncObserverTask == nil {
+      syncObserverTask = Task { [weak self] in
+        for await notification in NotificationCenter.default.notifications(named: .podcastSyncCompleted) {
+          guard let self else { return }
+          // Only reload when the sync actually found episodes — the notification
+          // also fires for timestamp-only updates.
+          let newCount = notification.userInfo?["newEpisodeCount"] as? Int ?? 0
+          guard newCount > 0 else { continue }
+          await self.loadPodcastFeeds()
+          await self.loadUpNextEpisodes()
         }
       }
     }
@@ -957,6 +975,8 @@ final class HomeViewModel {
     completionObserverTask = nil
     reconnectObserverTask?.cancel()
     reconnectObserverTask = nil
+    syncObserverTask?.cancel()
+    syncObserverTask = nil
   }
 
   // MARK: - Find Podcast Model
