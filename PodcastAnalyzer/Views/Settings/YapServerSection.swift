@@ -52,6 +52,16 @@ struct YapServerSection: View {
                 testState = .idle
             }
 
+            HStack {
+                Image(systemName: "timer")
+                    .foregroundStyle(.purple)
+                    .frame(width: 24)
+                Stepper(value: $settings.timeoutSeconds, in: 30...600, step: 30) {
+                    Text("Timeout: \(Int(settings.timeoutSeconds))s")
+                }
+                .onChange(of: settings.timeoutSeconds) { _, _ in settings.save() }
+            }
+
             Button(action: runTest) {
                 HStack {
                     Image(systemName: "bolt.horizontal.circle")

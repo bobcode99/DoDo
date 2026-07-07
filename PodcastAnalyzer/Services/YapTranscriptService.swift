@@ -58,6 +58,7 @@ actor YapTranscriptService {
         locale: String?,
         serverURL: String,
         apiKey: String?,
+        timeout: TimeInterval = 120,
         onProgress: (@Sendable (Double) -> Void)? = nil,
         onJobSubmitted: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
@@ -75,7 +76,7 @@ actor YapTranscriptService {
         logger.info("Yap job submitted, id=\(jobID)")
         onJobSubmitted?(jobID)
 
-        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
+        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, timeout: timeout, onProgress: onProgress)
     }
 
     /// Submits a remote audio URL to the yap server (JSON body mode).
@@ -88,6 +89,7 @@ actor YapTranscriptService {
         locale: String?,
         serverURL: String,
         apiKey: String?,
+        timeout: TimeInterval = 120,
         onProgress: (@Sendable (Double) -> Void)? = nil,
         onJobSubmitted: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
@@ -102,7 +104,7 @@ actor YapTranscriptService {
         )
         logger.info("Yap remote-URL job submitted, id=\(jobID)")
         onJobSubmitted?(jobID)
-        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, onProgress: onProgress)
+        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, timeout: timeout, onProgress: onProgress)
     }
 
     /// Hits `GET /health` and `GET /backends` to confirm the yap server is
@@ -308,6 +310,7 @@ actor YapTranscriptService {
         jobID: String,
         baseURL: URL,
         apiKey: String?,
+        timeout: TimeInterval = 120,
         onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
         let url = baseURL.appending(path: "transcriptions/\(jobID)/events")
@@ -322,7 +325,10 @@ actor YapTranscriptService {
             request.setValue(key, forHTTPHeaderField: "X-API-Key")
         }
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let session = URLSession(configuration: .default)
+        session.configuration.timeoutIntervalForResource = timeout
+        session.configuration.timeoutIntervalForRequest = min(timeout / 2, 60)
+        let (bytes, response) = try await session.bytes(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw YapError.serverError("Non-HTTP response from SSE stream")
@@ -385,7 +391,7 @@ actor YapTranscriptService {
         }
 
         logger.warning("SSE stream ended without terminal event for job \(jobID), falling back to GET")
-        return try await pollOnce(jobID: jobID, baseURL: baseURL, apiKey: apiKey)
+        return try await pollOnce(jobID: jobID, baseURL: baseURL, apiKey: apiKey, timeout: timeout)
     }
 
     private struct JobStatus: Decodable {
@@ -396,13 +402,15 @@ actor YapTranscriptService {
         let error: String?
     }
 
-    private func pollOnce(jobID: String, baseURL: URL, apiKey: String?) async throws -> String {
+    private func pollOnce(jobID: String, baseURL: URL, apiKey: String?, timeout: TimeInterval = 120) async throws -> String {
         let url = baseURL.appending(path: "transcriptions/\(jobID)")
         var request = URLRequest(url: url)
         if let key = apiKey, !key.isEmpty {
             request.setValue(key, forHTTPHeaderField: "X-API-Key")
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let session = URLSession(configuration: .default)
+        session.configuration.timeoutIntervalForResource = timeout
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw YapError.serverError("SSE stream ended without completion")
         }

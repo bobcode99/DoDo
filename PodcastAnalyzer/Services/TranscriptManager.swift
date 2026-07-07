@@ -572,6 +572,7 @@ class TranscriptManager {
         let serverURL = await MainActor.run { YapServerSettings.shared.serverURL }
         let apiKey = await MainActor.run { YapServerSettings.shared.apiKey }
         let key = apiKey.isEmpty ? nil : apiKey
+        let timeout = await MainActor.run { YapServerSettings.shared.timeoutSeconds }
 
         // Forward the global subtitle settings so Yap uses the same music
         // detection behavior as the local Apple Speech path.
@@ -623,7 +624,7 @@ class TranscriptManager {
         }
 
         let srtContent = try await yapService.streamEvents(
-          jobID: yapJobID, baseURL: base, apiKey: key, onProgress: onProgress
+          jobID: yapJobID, baseURL: base, apiKey: key, timeout: timeout, onProgress: onProgress
         )
 
         activeJobs[job.id]?.status = .transcribing(progress: 1.0)
