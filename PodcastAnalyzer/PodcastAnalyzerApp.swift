@@ -304,6 +304,12 @@ struct PodcastAnalyzerApp: App {
               imageURL: params["image"] ?? ""
             )
           }
+        case "open-shared-link":
+          // "Open in DoDo" share extension: podcastanalyzer://open-shared-link?url=<shared link>
+          if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+             let shared = components.queryItems?.first(where: { $0.name == "url" })?.value {
+            await openSharedApplePodcastsLink(shared)
+          }
         case "expandplayer":
           // Widget tap: open expanded player directly
           NotificationNavigationManager.shared.requestExpandPlayer()
@@ -323,6 +329,41 @@ struct PodcastAnalyzerApp: App {
       Task { @MainActor in
         ShortcutsAIService.shared.handleURL(url)
       }
+    }
+  }
+
+  /// Resolve an Apple Podcasts episode link (…/podcast/name/id<podcastID>?i=<episodeID>)
+  /// via the iTunes Lookup API and navigate straight to the episode detail page.
+  private func openSharedApplePodcastsLink(_ link: String) async {
+    guard let url = URL(string: link),
+          let idComponent = url.pathComponents.last(where: { $0.hasPrefix("id") }),
+          let podcastId = Int(idComponent.dropFirst(2))
+    else {
+      logger.warning("Shared link is not an Apple Podcasts link: \(link)")
+      return
+    }
+
+    // ponytail: podcast-only links (no ?i=) just open the app; add podcast
+    // navigation when someone actually shares one.
+    guard let episodeIdString = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "i" })?.value,
+          let episodeId = Int(episodeIdString)
+    else { return }
+
+    do {
+      let episodes = try await ApplePodcastService().fetchEpisodes(for: podcastId)
+      guard let episode = episodes.first(where: { $0.trackId == episodeId }) else {
+        logger.warning("Episode \(episodeId) not found in lookup for podcast \(podcastId)")
+        return
+      }
+      NotificationNavigationManager.shared.navigateToEpisodeDetail(
+        title: episode.trackName,
+        podcastTitle: episode.collectionName ?? "",
+        audioURL: episode.episodeUrl ?? episode.previewUrl ?? "",
+        imageURL: episode.artworkUrl600 ?? episode.artworkUrl160 ?? ""
+      )
+    } catch {
+      logger.error("Failed to resolve shared episode link: \(error.localizedDescription)")
     }
   }
 }

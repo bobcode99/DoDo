@@ -325,9 +325,13 @@ actor YapTranscriptService {
             request.setValue(key, forHTTPHeaderField: "X-API-Key")
         }
 
-        let session = URLSession(configuration: .default)
-        session.configuration.timeoutIntervalForResource = timeout
-        session.configuration.timeoutIntervalForRequest = min(timeout / 2, 60)
+        // Configure BEFORE creating the session — URLSession copies its
+        // configuration at init, so mutating session.configuration is a no-op.
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 120  // max idle gap between SSE events
+        config.timeoutIntervalForResource = timeout  // total wall clock for the job
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
         let (bytes, response) = try await session.bytes(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -408,8 +412,10 @@ actor YapTranscriptService {
         if let key = apiKey, !key.isEmpty {
             request.setValue(key, forHTTPHeaderField: "X-API-Key")
         }
-        let session = URLSession(configuration: .default)
-        session.configuration.timeoutIntervalForResource = timeout
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForResource = timeout
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw YapError.serverError("SSE stream ended without completion")

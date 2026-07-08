@@ -71,6 +71,7 @@ struct EpisodeTranscriptStatusView: View {
             progress: progress,
             partProgress: viewModel.transcript.transcriptPartProgress,
             phase: viewModel.transcript.transcriptPhase,
+            timeoutSeconds: viewModel.transcript.transcriptTimeoutSeconds,
             onCancel: { viewModel.transcript.cancelTranscript() }
         )
     }

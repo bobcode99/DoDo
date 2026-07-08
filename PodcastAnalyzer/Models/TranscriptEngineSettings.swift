@@ -299,12 +299,10 @@ final class YapServerSettings {
 
     var serverURL: String = "http://127.0.0.1:8080"
     var apiKey: String = ""
-    var timeoutSeconds: Double = 120
 
     private enum Keys {
         static let serverURL = "yap_server_url"
         static let apiKey = "yap_server_api_key"
-        static let timeoutSeconds = "yap_server_timeout"
     }
 
     private init() {
@@ -312,14 +310,11 @@ final class YapServerSettings {
             serverURL = saved
         }
         apiKey = UserDefaults.standard.string(forKey: Keys.apiKey) ?? ""
-        let saved = UserDefaults.standard.double(forKey: Keys.timeoutSeconds)
-        timeoutSeconds = saved > 0 ? saved : 120
     }
 
     func save() {
         UserDefaults.standard.set(serverURL, forKey: Keys.serverURL)
         UserDefaults.standard.set(apiKey, forKey: Keys.apiKey)
-        UserDefaults.standard.set(timeoutSeconds, forKey: Keys.timeoutSeconds)
     }
 
 }

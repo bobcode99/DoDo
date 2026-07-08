@@ -15,6 +15,7 @@
 		15AEEAE02F26464200D90D05 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 15AEEA152F2642D900D90D05 /* WidgetKit.framework */; };
 		15AEEAE12F26464200D90D05 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 15AEEA172F2642D900D90D05 /* SwiftUI.framework */; };
 		15AEEAEE2F26464500D90D05 /* PodcastAnalyzerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5EA5D0022FF0000000000001 /* OpenInDoDoExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5EA5D0012FF0000000000001 /* OpenInDoDoExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000022ED303EC000ABAA0 /* WhisperKit */; };
 		AABB0003000000000000AABB /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002000000000000AABB /* MCP */; };
 		ACDDA2642FD871880075A140 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
@@ -28,6 +29,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 15AEEADE2F26464200D90D05;
 			remoteInfo = PodcastAnalyzerWidgetExtension;
+		};
+		5EA5D0032FF0000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 15ED5EE52EC44BC6001B6CD7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5EA5D00A2FF0000000000001;
+			remoteInfo = OpenInDoDoExtension;
 		};
 		15ED5EFD2EC44BC9001B6CD7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -53,6 +61,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				15AEEAEE2F26464500D90D05 /* PodcastAnalyzerWidgetExtension.appex in Embed Foundation Extensions */,
+				5EA5D0022FF0000000000001 /* OpenInDoDoExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -63,6 +72,7 @@
 		15AEEA152F2642D900D90D05 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		15AEEA172F2642D900D90D05 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PodcastAnalyzerWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EA5D0012FF0000000000001 /* OpenInDoDoExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = OpenInDoDoExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5EED2EC44BC6001B6CD7 /* DoDo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoDo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5EFC2EC44BC9001B6CD7 /* PodcastAnalyzerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5F062EC44BC9001B6CD7 /* PodcastAnalyzerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -77,6 +87,13 @@
 				Info.plist,
 			);
 			target = 15AEEADE2F26464200D90D05 /* PodcastAnalyzerWidgetExtension */;
+		};
+		5EA5D0062FF0000000000001 /* Exceptions for "OpenInDoDoExtension" folder in "OpenInDoDoExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5EA5D00A2FF0000000000001 /* OpenInDoDoExtension */;
 		};
 		15CA20872EF2E1FE000FF253 /* Exceptions for "PodcastAnalyzer" folder in "PodcastAnalyzer" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -96,6 +113,14 @@
 			path = PodcastAnalyzerWidget;
 			sourceTree = "<group>";
 		};
+		5EA5D0052FF0000000000001 /* OpenInDoDoExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5EA5D0062FF0000000000001 /* Exceptions for "OpenInDoDoExtension" folder in "OpenInDoDoExtension" target */,
+			);
+			path = OpenInDoDoExtension;
+			sourceTree = "<group>";
+		};
 		15ED5EEF2EC44BC6001B6CD7 /* PodcastAnalyzer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -112,6 +137,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		5EA5D0082FF0000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		15AEEADC2F26464200D90D05 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -169,6 +201,7 @@
 				15ED5EEF2EC44BC6001B6CD7 /* PodcastAnalyzer */,
 				15ED5EFF2EC44BC9001B6CD7 /* PodcastAnalyzerTests */,
 				15AEEAE22F26464200D90D05 /* PodcastAnalyzerWidget */,
+				5EA5D0052FF0000000000001 /* OpenInDoDoExtension */,
 				155164742ED374440015567A /* Frameworks */,
 				15ED5EEE2EC44BC6001B6CD7 /* Products */,
 				ACDDA2632FD871880075A140 /* dodo.icon */,
@@ -182,6 +215,7 @@
 				15ED5EFC2EC44BC9001B6CD7 /* PodcastAnalyzerTests.xctest */,
 				15ED5F062EC44BC9001B6CD7 /* PodcastAnalyzerUITests.xctest */,
 				15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */,
+				5EA5D0012FF0000000000001 /* OpenInDoDoExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -189,6 +223,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		5EA5D00A2FF0000000000001 /* OpenInDoDoExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EA5D00D2FF0000000000001 /* Build configuration list for PBXNativeTarget "OpenInDoDoExtension" */;
+			buildPhases = (
+				5EA5D0072FF0000000000001 /* Sources */,
+				5EA5D0082FF0000000000001 /* Frameworks */,
+				5EA5D0092FF0000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5EA5D0052FF0000000000001 /* OpenInDoDoExtension */,
+			);
+			name = OpenInDoDoExtension;
+			packageProductDependencies = (
+			);
+			productName = OpenInDoDoExtension;
+			productReference = 5EA5D0012FF0000000000001 /* OpenInDoDoExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		15AEEADE2F26464200D90D05 /* PodcastAnalyzerWidgetExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 15AEEAF12F26464500D90D05 /* Build configuration list for PBXNativeTarget "PodcastAnalyzerWidgetExtension" */;
@@ -224,6 +280,7 @@
 			);
 			dependencies = (
 				15AEEAED2F26464500D90D05 /* PBXTargetDependency */,
+				5EA5D0042FF0000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				15ED5EEF2EC44BC6001B6CD7 /* PodcastAnalyzer */,
@@ -338,11 +395,19 @@
 				15ED5EFB2EC44BC9001B6CD7 /* PodcastAnalyzerTests */,
 				15ED5F052EC44BC9001B6CD7 /* PodcastAnalyzerUITests */,
 				15AEEADE2F26464200D90D05 /* PodcastAnalyzerWidgetExtension */,
+				5EA5D00A2FF0000000000001 /* OpenInDoDoExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		5EA5D0092FF0000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		15AEEADD2F26464200D90D05 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -375,6 +440,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5EA5D0072FF0000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		15AEEADB2F26464200D90D05 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -406,6 +478,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		5EA5D0042FF0000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 5EA5D00A2FF0000000000001 /* OpenInDoDoExtension */;
+			targetProxy = 5EA5D0032FF0000000000001 /* PBXContainerItemProxy */;
+		};
 		15AEEAED2F26464500D90D05 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 15AEEADE2F26464200D90D05 /* PodcastAnalyzerWidgetExtension */;
@@ -424,6 +502,64 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		5EA5D00B2FF0000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = OpenInDoDoExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Open in DoDo";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jn.PodcastAnalyzer.OpenInDoDo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5EA5D00C2FF0000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = OpenInDoDoExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Open in DoDo";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jn.PodcastAnalyzer.OpenInDoDo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		15AEEAEF2F26464500D90D05 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -851,6 +987,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		5EA5D00D2FF0000000000001 /* Build configuration list for PBXNativeTarget "OpenInDoDoExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EA5D00B2FF0000000000001 /* Debug */,
+				5EA5D00C2FF0000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		15AEEAF12F26464500D90D05 /* Build configuration list for PBXNativeTarget "PodcastAnalyzerWidgetExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

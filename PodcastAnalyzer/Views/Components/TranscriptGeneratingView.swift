@@ -15,6 +15,9 @@ struct TranscriptGeneratingView: View {
     let partProgress: TranscriptPartProgress?
     /// Real pipeline step from the service (nil for Yap / before first emit).
     let phase: TranscriptionPhase?
+    /// Active timeout for this job: yap = total wall clock, local engines =
+    /// stall limit (no-progress watchdog). nil = not yet known.
+    let timeoutSeconds: TimeInterval?
     let onCancel: () -> Void
 
     private var settings: SubtitleSettingsManager { .shared }
@@ -219,6 +222,15 @@ struct TranscriptGeneratingView: View {
                         icon: "cpu",
                         label: WhisperModelManager.shared.selectedModel.displayName,
                         tint: .indigo)
+                }
+
+                if let timeoutSeconds {
+                    // Yap: hard wall clock. Local: stall watchdog (only fires
+                    // when progress stops) — same chip, close enough.
+                    ConfigChip(
+                        icon: "timer",
+                        label: "Timeout: \(Int(timeoutSeconds / 60))m",
+                        tint: .orange)
                 }
             }
         }

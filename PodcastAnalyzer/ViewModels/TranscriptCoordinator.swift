@@ -81,6 +81,9 @@ final class TranscriptCoordinator {
   /// Current pipeline step, mirrored from the active job so the generating UI
   /// can show the real stage (splitting / transcribing / merging).
   var transcriptPhase: TranscriptionPhase?
+  /// Active timeout for the running job (yap = dynamic wall clock, local =
+  /// stall limit), mirrored so the generating UI can surface it.
+  var transcriptTimeoutSeconds: TimeInterval?
 
   // MARK: - Segments & Grouping
 
@@ -240,6 +243,7 @@ final class TranscriptCoordinator {
     }
     transcriptPartProgress = job.partProgress
     transcriptPhase = job.phase
+    transcriptTimeoutSeconds = job.timeoutSeconds
     switch job.status {
     case .queued:
       transcriptState = .transcribing(progress: 0)

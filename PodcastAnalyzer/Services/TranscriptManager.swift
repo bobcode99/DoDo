@@ -5,6 +5,7 @@
 //  Manages background transcript generation across the app
 //
 
+import AVFoundation
 import SwiftData
 import Foundation
 import OSLog
@@ -54,6 +55,7 @@ struct TranscriptJob: Identifiable {
   var detectedLanguage: String?  // Populated by Whisper auto-detect before full transcription
   var partProgress: TranscriptPartProgress?  // Split-transcription part counts (Apple Speech, chunked)
   var phase: TranscriptionPhase?  // Current pipeline step (prepare/split/transcribe/merge)
+  var timeoutSeconds: TimeInterval?  // Active timeout: yap = dynamic wall clock, local = stall limit
 }
 
 /// Manages background transcript generation with parallel processing.
@@ -361,6 +363,60 @@ class TranscriptManager {
     }
   }
 
+  /// Yap-server timeout scaled to episode length: ≤1h → 3 min, 2h → 5 min,
+  /// capped at 10 min. Unknown duration → 5 min.
+  /// ponytail: linear duration/24 hits both requested anchors; tune the
+  /// divisor if server throughput changes.
+  nonisolated static func yapTimeout(forDuration duration: TimeInterval?) -> TimeInterval {
+    guard let duration, duration.isFinite, duration > 0 else { return 300 }
+    return min(max(duration / 24, 180), 600)
+  }
+
+  /// Local engines (Apple Speech / Whisper) can be slower than real time on
+  /// old hardware, so a wall-clock cap would kill legitimate runs. Instead,
+  /// treat "no progress event for this long" as a hang.
+  private static let localStallSeconds: TimeInterval = 300
+
+  /// Wraps a local-engine progress stream so a stall — no element arriving
+  /// within `stallSeconds` — throws instead of hanging the job forever.
+  private nonisolated static func withStallTimeout<Element: Sendable>(
+    _ stream: AsyncThrowingStream<Element, Error>,
+    stallSeconds: TimeInterval,
+    label: String
+  ) -> AsyncThrowingStream<Element, Error> {
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        // Single consumer task; nonisolated(unsafe) silences the false
+        // capture-mutation diagnostic from the per-element race below.
+        nonisolated(unsafe) var iterator = stream.makeAsyncIterator()
+        do {
+          while true {
+            let element = try await withThrowingTaskGroup(of: Element?.self) { group in
+              group.addTask { try await iterator.next() }
+              group.addTask {
+                try await Task.sleep(for: .seconds(stallSeconds))
+                throw NSError(
+                  domain: "TranscriptManager", code: 7,
+                  userInfo: [NSLocalizedDescriptionKey:
+                    "\(label) stalled — no progress for \(Int(stallSeconds / 60)) minutes."]
+                )
+              }
+              let value = try await group.next()!
+              group.cancelAll()
+              return value
+            }
+            guard let element else { break }
+            continuation.yield(element)
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
+  }
+
   private func processJob(_ job: TranscriptJob) async {
     var updatedJob = job
     updatedJob.status = .downloadingModel(progress: 0)
@@ -446,6 +502,7 @@ class TranscriptManager {
 
         try Task.checkCancellation()
         activeJobs[job.id]?.status = .transcribing(progress: 0)
+        activeJobs[job.id]?.timeoutSeconds = Self.localStallSeconds
 
         // Single-pass when the user turned off splitting; otherwise chunked
         // parallel parts (which itself falls back to single-pass under 1 min).
@@ -456,7 +513,9 @@ class TranscriptManager {
 
         var finalSRTContent: String?
         var lastUIUpdate = Date.distantPast
-        for try await progressUpdate in progressStream {
+        for try await progressUpdate in Self.withStallTimeout(
+          progressStream, stallSeconds: Self.localStallSeconds, label: "Apple Speech"
+        ) {
           let parts = progressUpdate.totalParts > 1
             ? TranscriptPartProgress(
                 completed: progressUpdate.completedParts, total: progressUpdate.totalParts)
@@ -523,16 +582,19 @@ class TranscriptManager {
         try Task.checkCancellation()
         activeJobs[job.id]?.status = .transcribing(progress: 0)
         activeJobs[job.id]?.phase = .transcribing
+        activeJobs[job.id]?.timeoutSeconds = Self.localStallSeconds
 
         let whisperService = WhisperTranscriptService()
         var finalSRTContent: String?
         var lastUIUpdate = Date.distantPast
 
-        for try await progressUpdate in await whisperService.audioToSRTWithProgress(
-          inputFile: audioURL,
-          modelVariant: modelVariant,
-          language: job.language)
-        {
+        for try await progressUpdate in Self.withStallTimeout(
+          await whisperService.audioToSRTWithProgress(
+            inputFile: audioURL,
+            modelVariant: modelVariant,
+            language: job.language),
+          stallSeconds: Self.localStallSeconds, label: "Whisper"
+        ) {
           // Capture detected language as soon as Whisper reports it.
           if let lang = progressUpdate.detectedLanguage {
             activeJobs[job.id]?.detectedLanguage = lang
@@ -572,7 +634,13 @@ class TranscriptManager {
         let serverURL = await MainActor.run { YapServerSettings.shared.serverURL }
         let apiKey = await MainActor.run { YapServerSettings.shared.apiKey }
         let key = apiKey.isEmpty ? nil : apiKey
-        let timeout = await MainActor.run { YapServerSettings.shared.timeoutSeconds }
+
+        // Dynamic timeout scaled to episode length (see yapTimeout).
+        let audioDuration: TimeInterval? = fileExists
+          ? try? await AVURLAsset(url: audioURL).load(.duration).seconds
+          : nil
+        let timeout = Self.yapTimeout(forDuration: audioDuration)
+        activeJobs[job.id]?.timeoutSeconds = timeout
 
         // Forward the global subtitle settings so Yap uses the same music
         // detection behavior as the local Apple Speech path.
