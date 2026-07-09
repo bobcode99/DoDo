@@ -44,68 +44,7 @@ struct YapHealthResult: Sendable {
 actor YapTranscriptService {
     private let logger = Logger(subsystem: "com.podcast.analyzer", category: "YapTranscriptService")
 
-    /// Uploads the audio file to the yap server and streams events via SSE until done.
-    ///
-    /// Uses `URLSession.shared.upload(for:fromFile:)` to stream the audio without
-    /// loading it into memory.
-    ///
-    /// - Parameter onProgress: Called with a 0.0–1.0 fraction each time the server
-    ///   reports a `running` status. The closure is invoked synchronously on the
-    ///   YapTranscriptService actor — use `Task { await ... }` inside it to hop to
-    ///   another actor if needed.
-    func transcribeToSRT(
-        audioURL: URL,
-        locale: String?,
-        serverURL: String,
-        apiKey: String?,
-        timeout: TimeInterval = 120,
-        onProgress: (@Sendable (Double) -> Void)? = nil,
-        onJobSubmitted: (@Sendable (String) -> Void)? = nil
-    ) async throws -> String {
-        guard let base = URL(string: serverURL) else {
-            throw YapError.invalidServerURL
-        }
-
-        let jobID = try await submitJob(
-            audioURL: audioURL,
-            locale: locale,
-            baseURL: base,
-            apiKey: apiKey
-        )
-
-        logger.info("Yap job submitted, id=\(jobID)")
-        onJobSubmitted?(jobID)
-
-        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, timeout: timeout, onProgress: onProgress)
-    }
-
-    /// Submits a remote audio URL to the yap server (JSON body mode).
-    /// Use this when the episode hasn't been downloaded locally.
-    ///
-    /// - Parameter onProgress: Called with a 0.0–1.0 fraction each time the server
-    ///   reports a `running` status. See ``transcribeToSRT`` for threading notes.
-    func transcribeRemoteURL(
-        remoteURL: String,
-        locale: String?,
-        serverURL: String,
-        apiKey: String?,
-        timeout: TimeInterval = 120,
-        onProgress: (@Sendable (Double) -> Void)? = nil,
-        onJobSubmitted: (@Sendable (String) -> Void)? = nil
-    ) async throws -> String {
-        guard let base = URL(string: serverURL) else {
-            throw YapError.invalidServerURL
-        }
-        let jobID = try await submitRemoteURLJob(
-            remoteURL: remoteURL,
-            locale: locale,
-            baseURL: base,
-            apiKey: apiKey
-        )
-        logger.info("Yap remote-URL job submitted, id=\(jobID)")
-        onJobSubmitted?(jobID)
-        return try await streamEvents(jobID: jobID, baseURL: base, apiKey: apiKey, timeout: timeout, onProgress: onProgress)
-    }
+    private struct SubmitResponse: Decodable { let id: String }
 
     /// Hits `GET /health` and `GET /backends` to confirm the yap server is
     /// reachable and that the configured API key (when present) is accepted.
@@ -245,11 +184,7 @@ actor YapTranscriptService {
             throw YapError.serverError("HTTP \(httpResponse.statusCode): \(body)")
         }
 
-        struct SubmitResponse: Decodable {
-            let id: String
-        }
-        let decoded = try JSONDecoder().decode(SubmitResponse.self, from: data)
-        return decoded.id
+        return try JSONDecoder().decode(SubmitResponse.self, from: data).id
     }
 
     func submitRemoteURLJob(
@@ -302,7 +237,6 @@ actor YapTranscriptService {
             throw YapError.serverError("HTTP \(httpResponse.statusCode): \(bodyStr)")
         }
 
-        struct SubmitResponse: Decodable { let id: String }
         return try JSONDecoder().decode(SubmitResponse.self, from: data).id
     }
 
@@ -310,7 +244,7 @@ actor YapTranscriptService {
         jobID: String,
         baseURL: URL,
         apiKey: String?,
-        timeout: TimeInterval = 120,
+        timeout: TimeInterval,
         onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
         let url = baseURL.appending(path: "transcriptions/\(jobID)/events")
@@ -406,7 +340,7 @@ actor YapTranscriptService {
         let error: String?
     }
 
-    private func pollOnce(jobID: String, baseURL: URL, apiKey: String?, timeout: TimeInterval = 120) async throws -> String {
+    private func pollOnce(jobID: String, baseURL: URL, apiKey: String?, timeout: TimeInterval) async throws -> String {
         let url = baseURL.appending(path: "transcriptions/\(jobID)")
         var request = URLRequest(url: url)
         if let key = apiKey, !key.isEmpty {

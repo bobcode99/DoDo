@@ -112,8 +112,13 @@ extension TranscriptService {
               repeating: [], count: chunks.count)
             var launched = 0
 
-            for i in 0..<min(maxConcurrent, chunks.count) {
-              let chunk = chunks[i]
+            // Shared launcher for the initial batch and the refill loop below.
+            func launch(
+              _ chunk: ChunkedTranscriptionService.AudioChunk,
+              in group: inout ThrowingTaskGroup<
+                (Int, [ChunkedTranscriptionService.ChunkSegment]), Error
+              >
+            ) {
               let chunkIndex = chunk.index
               group.addTask {
                 let segments = try await ChunkedTranscriptionService.transcribeChunkParallel(
@@ -137,31 +142,14 @@ extension TranscriptService {
               launched += 1
             }
 
+            for i in 0..<min(maxConcurrent, chunks.count) {
+              launch(chunks[i], in: &group)
+            }
+
             for try await (chunkIndex, segments) in group {
               results[chunkIndex] = segments
               if launched < chunks.count {
-                let chunk = chunks[launched]
-                let nextChunkIndex = chunk.index
-                group.addTask {
-                  let segments = try await ChunkedTranscriptionService.transcribeChunkParallel(
-                    chunk: chunk, locale: locale, censor: censor, isCJK: isCJK,
-                    maxSegmentLength: effectiveMaxLength,
-                    contextualStrings: contextualStrings,
-                    onProgress: { chunkProgress in
-                      let (overall, completed) = progressTracker.updateProgress(
-                        chunkIndex: nextChunkIndex, progress: chunkProgress)
-                      continuation.yield(TranscriptionProgress(
-                        progress: min(overall, 0.99),
-                        currentTimeSeconds: overall * audioFileDuration,
-                        totalDurationSeconds: audioFileDuration,
-                        isComplete: false, srtContent: nil,
-                        totalParts: chunks.count, completedParts: completed
-                      ))
-                    }
-                  )
-                  return (nextChunkIndex, segments)
-                }
-                launched += 1
+                launch(chunks[launched], in: &group)
               }
             }
             return results

@@ -214,29 +214,14 @@ class TranscriptManager {
     }
   }
 
-  /// Checks if a transcript is being generated for an episode
+  /// Checks if a transcript is being generated for an episode. Every pending
+  /// and running job has an `activeJobs` entry, so its status is authoritative.
   func isGenerating(episodeTitle: String, podcastTitle: String) -> Bool {
     let jobId = makeJobId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
-
-    if pendingJobs.contains(where: { $0.id == jobId }) || runningJobIds.contains(jobId) {
-      return true
+    switch activeJobs[jobId]?.status {
+    case .queued, .downloadingModel, .transcribing: return true
+    case .completed, .failed, nil: return false
     }
-
-    if let job = activeJobs[jobId] {
-      switch job.status {
-      case .queued, .downloadingModel, .transcribing:
-        return true
-      case .completed, .failed:
-        return false
-      }
-    }
-    return false
-  }
-
-  /// Gets the current status of a transcript job
-  func getJobStatus(episodeTitle: String, podcastTitle: String) -> TranscriptJobStatus? {
-    let jobId = makeJobId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
-    return activeJobs[jobId]?.status
   }
 
   /// Cancels all pending and running transcript jobs.
@@ -716,10 +701,7 @@ class TranscriptManager {
       activeJobs.removeValue(forKey: job.id)
       logger.info("Transcript cancelled for: \(job.episodeTitle)")
     } catch {
-      // Track consecutive yap failures to gate auto-queuing.
-      let engine = job.engine ?? TranscriptEngine(
-        rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
-      ) ?? .appleSpeech
+      // `engine` resolved at the top of processJob is still in scope here.
       let message = Self.describeFailure(error, engine: engine)
       activeJobs[job.id]?.status = .failed(error: message)
       logger.error("Transcript failed for \(job.episodeTitle) [\(engine.rawValue)]: \(error.localizedDescription, privacy: .public)")
@@ -783,12 +765,6 @@ class TranscriptManager {
     guard elapsed >= 0.25 || delta >= 0.05 || progress >= 1.0 else { return }
     lastYapProgressUpdate[jobID] = now
     activeJobs[jobID]?.status = .transcribing(progress: progress)
-  }
-
-  /// Stores the yap HTTP server job ID so it can be cancelled later.
-  private func storeYapServerJobID(_ yapJobID: String, forJobID jobID: String) {
-    activeJobs[jobID]?.yapServerJobID = yapJobID
-    logger.info("[YapServer] tracked server job id=\(yapJobID) for episode job=\(jobID)")
   }
 
   /// Sends DELETE /transcriptions/{id} to the yap server for a given server job ID.
