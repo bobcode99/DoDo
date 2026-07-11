@@ -564,14 +564,7 @@ final class DownloadManager {
   /// Synchronously checks if audio file exists on disk
   private func checkAudioFileExistsSynchronously(episodeTitle: String, podcastTitle: String) -> String? {
     let fm = FileManager.default
-
-    #if os(macOS)
-    let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    let audioDir = appSupport.appendingPathComponent("PodcastAnalyzer/Audio", isDirectory: true)
-    #else
-    let libraryDir = fm.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-    let audioDir = libraryDir.appendingPathComponent("Audio", isDirectory: true)
-    #endif
+    let audioDir = FileStorageManager.platformAudioDirectory(fileManager: fm)
 
     let invalidCharacters = CharacterSet(charactersIn: ":/\\?%*|\"<>")
     let baseFileName = "\(podcastTitle)_\(episodeTitle)"

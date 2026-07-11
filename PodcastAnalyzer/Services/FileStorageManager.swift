@@ -56,13 +56,19 @@ actor FileStorageManager {
 
   // Audio files in Application Support (proper location for macOS app-managed files)
   private var audioDirectory: URL {
+    Self.platformAudioDirectory(fileManager: fileManager)
+  }
+
+  /// Audio storage directory: Application Support on macOS (better permissions for app-managed
+  /// files), Library on iOS. `nonisolated` so callers off the actor (background scans, other
+  /// services) don't need to hop through `FileStorageManager.shared`.
+  nonisolated static func platformAudioDirectory(fileManager: FileManager = .default) -> URL {
     #if os(macOS)
-    // On macOS, use Application Support directory for better permissions
     let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     return appSupport.appendingPathComponent("PodcastAnalyzer/Audio", isDirectory: true)
     #else
-    // On iOS, use Library directory
-    return libraryDirectory.appendingPathComponent("Audio", isDirectory: true)
+    let library = fileManager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+    return library.appendingPathComponent("Audio", isDirectory: true)
     #endif
   }
 
@@ -85,15 +91,8 @@ actor FileStorageManager {
     // Compute directory URLs inline (actor computed properties aren't accessible from nonisolated init)
     let fm = FileManager.default
     let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    let lib = fm.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-    #if os(macOS)
-    let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    let audio = appSupport.appendingPathComponent("PodcastAnalyzer/Audio", isDirectory: true)
-    #else
-    let audio = lib.appendingPathComponent("Audio", isDirectory: true)
-    #endif
     let dirs = [
-      audio,
+      Self.platformAudioDirectory(fileManager: fm),
       docs.appendingPathComponent("Captions", isDirectory: true),
       docs.appendingPathComponent("Logs", isDirectory: true),
       fm.temporaryDirectory.appendingPathComponent("Downloads", isDirectory: true)

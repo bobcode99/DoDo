@@ -961,14 +961,7 @@ final class LibraryViewModel {
     // 2. Single off-MainActor scan of the audio directory.
     let audioFileIndex = await Task.detached(priority: .background) { () -> [String: String] in
       let fm = FileManager.default
-
-      #if os(macOS)
-      let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-      let audioDir = appSupport.appendingPathComponent("PodcastAnalyzer/Audio", isDirectory: true)
-      #else
-      let libraryDir = fm.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-      let audioDir = libraryDir.appendingPathComponent("Audio", isDirectory: true)
-      #endif
+      let audioDir = FileStorageManager.platformAudioDirectory(fileManager: fm)
 
       var index: [String: String] = [:]  // lowercased basename → full path
       guard let contents = try? fm.contentsOfDirectory(

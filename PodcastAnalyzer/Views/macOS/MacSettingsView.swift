@@ -41,6 +41,7 @@ struct MacSettingsView: View {
   }
 
   @State private var selection: SettingsTab = .general
+  @State private var viewModel = SettingsViewModel()
 
   var body: some View {
     TabView(selection: $selection) {
@@ -57,11 +58,11 @@ struct MacSettingsView: View {
   @ViewBuilder
   private func tabContent(for tab: SettingsTab) -> some View {
     switch tab {
-    case .general: GeneralSettingsTab()
-    case .appearance: AppearanceSettingsTab()
-    case .sync: SyncSettingsTab()
-    case .playback: PlaybackSettingsTab()
-    case .transcript: TranscriptSettingsTab()
+    case .general: GeneralSettingsTab(viewModel: viewModel)
+    case .appearance: AppearanceSettingsTab(viewModel: viewModel)
+    case .sync: SyncSettingsTab(viewModel: viewModel)
+    case .playback: PlaybackSettingsTab(viewModel: viewModel)
+    case .transcript: TranscriptSettingsTab(viewModel: viewModel)
     case .ai: AISettingsTab()
     case .mcp: MacMCPSettingsView()
     case .storage: StorageSettingsTab()
@@ -72,13 +73,15 @@ struct MacSettingsView: View {
 // MARK: - General Settings Tab
 
 struct GeneralSettingsTab: View {
-  @State private var viewModel = SettingsViewModel()
+  let viewModel: SettingsViewModel
   @State private var showAddFeedSheet = false
   @State private var showListeningStats = false
   @State private var showImportInstructions = false
   @Environment(\.modelContext) private var modelContext
 
   var body: some View {
+    @Bindable var viewModel = viewModel
+
     Form {
       Section {
         Button("Add RSS Feed") {
@@ -184,7 +187,7 @@ struct GeneralSettingsTab: View {
 // MARK: - Appearance Settings Tab
 
 struct AppearanceSettingsTab: View {
-  @State private var viewModel = SettingsViewModel()
+  let viewModel: SettingsViewModel
 
   var body: some View {
     @Bindable var viewModel = viewModel
@@ -219,7 +222,7 @@ struct AppearanceSettingsTab: View {
 // MARK: - Sync Settings Tab
 
 struct SyncSettingsTab: View {
-  @State private var viewModel = SettingsViewModel()
+  let viewModel: SettingsViewModel
   @AppStorage("allowAutoDownloadOnBattery") private var allowAutoDownloadOnBattery = false
   @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
 
@@ -296,7 +299,7 @@ struct SyncSettingsTab: View {
 // MARK: - Playback Settings Tab
 
 struct PlaybackSettingsTab: View {
-  @State private var viewModel = SettingsViewModel()
+  let viewModel: SettingsViewModel
   private let playbackSpeeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
   private let skipIntervalOptions: [Int] = [5, 10, 15, 20, 30, 45, 60]
 
@@ -351,7 +354,7 @@ struct PlaybackSettingsTab: View {
 // MARK: - Transcript Settings Tab
 
 struct TranscriptSettingsTab: View {
-  @State private var viewModel = SettingsViewModel()
+  let viewModel: SettingsViewModel
   @State private var showAutoTranscribeManagement = false
   @State private var showTranscriptionContext = false
 

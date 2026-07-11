@@ -6,6 +6,7 @@
 //
 
 
+#if os(macOS)
 import SwiftData
 import SwiftUI
 
@@ -79,3 +80,4 @@ struct MacTrendingEpisodesGrid: View {
     }
   }
 }
+#endif
