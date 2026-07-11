@@ -74,7 +74,7 @@ struct MacMiniPlayerBar: View {
 
           // Playback speed button
           Menu {
-            ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
+            ForEach(Formatters.playbackSpeeds, id: \.self) { speed in
               Button(action: { audioManager.setPlaybackRate(Float(speed)) }) {
                 HStack {
                   Text(Formatters.formatSpeed(Float(speed)))
@@ -109,14 +109,20 @@ struct MacMiniPlayerBar: View {
       .padding(.horizontal, 20)
       .padding(.vertical, 12)
     }
-    if #available(macOS 26, *) {
-      content
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
-    } else {
-      content
-        .clipShape(.rect(cornerRadius: 14))
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 14))
+    Group {
+      if #available(macOS 26, *) {
+        content
+          .glassEffect(.regular, in: .rect(cornerRadius: 14))
+      } else {
+        content
+          .clipShape(.rect(cornerRadius: 14))
+          .background(.ultraThinMaterial, in: .rect(cornerRadius: 14))
+      }
     }
+    // Now floats directly over page content (Library lists, Episode Detail, etc.)
+    // instead of sitting in a reserved safe-area strip, so it needs its own
+    // elevation to read as a floating card rather than blending into the page.
+    .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
   }
 
 }

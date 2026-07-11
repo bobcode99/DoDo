@@ -29,7 +29,7 @@ struct SettingsView: View {
     ("50 episodes", 50)
   ]
 
-  private let playbackSpeeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+  private let playbackSpeeds: [Float] = Formatters.playbackSpeeds
   private let skipIntervalOptions: [Int] = [5, 10, 15, 20, 30, 45, 60]
 
   var body: some View {

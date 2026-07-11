@@ -8,6 +8,9 @@
 import Foundation
 
 nonisolated enum Formatters {
+  /// Selectable playback speed stops, shared by every speed picker/menu in the app.
+  static let playbackSpeeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+
   /// Format a playback speed value for display (e.g., 1.0 → "1x", 1.5 → "1.5x", 2.0 → "2x")
   static func formatSpeed(_ speed: Float) -> String {
     if speed == 1.0 {

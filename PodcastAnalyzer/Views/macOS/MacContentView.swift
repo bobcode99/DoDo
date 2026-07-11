@@ -74,16 +74,20 @@ struct MacContentView: View {
     } detail: {
       mainContent
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .safeAreaInset(edge: .bottom) {
-          if hasCurrentEpisode {
-            MacMiniPlayerBar(showExpandedPlayer: $showExpandedPlayer)
-              .padding(.horizontal, 8)
-              .padding(.bottom, 4)
-              .transition(.move(edge: .bottom).combined(with: .opacity))
-          }
-        }
     }
     .navigationSplitViewStyle(.balanced)
+    // Overlay on the split view itself (outside the detail NavigationStack) so the
+    // bar stays put across every push destination — Library sub-pages, Episode
+    // Detail, etc. `.safeAreaInset` scoped inside `detail:` was getting dropped
+    // whenever a `navigationDestination` pushed a new screen onto the stack.
+    .overlay(alignment: .bottom) {
+      if hasCurrentEpisode {
+        MacMiniPlayerBar(showExpandedPlayer: $showExpandedPlayer)
+          .frame(maxWidth: 640)
+          .padding(.bottom, 16)
+          .transition(.move(edge: .bottom).combined(with: .opacity))
+      }
+    }
     .animation(.easeInOut(duration: 0.25), value: hasCurrentEpisode)
     .frame(minWidth: 900, minHeight: 600)
     .sheet(isPresented: $showExpandedPlayer) {

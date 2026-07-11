@@ -21,7 +21,7 @@ struct SpeedPickerOverlay: View {
   @State private var lastHapticSpeed: Float = 0
   @State private var hapticTrigger = false
 
-  private let speedStops: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+  private let speedStops: [Float] = Formatters.playbackSpeeds
 
   init(currentSpeed: Float, quickSpeeds: [Float], allSpeeds: [Float], onSelectSpeed: @escaping (Float) -> Void, onDismiss: @escaping () -> Void) {
     self.currentSpeed = currentSpeed
