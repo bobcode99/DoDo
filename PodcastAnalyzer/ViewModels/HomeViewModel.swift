@@ -562,12 +562,13 @@ final class HomeViewModel {
       duration: episode.episodeInfo.duration,
       guid: episode.episodeInfo.guid
     )
+    let startTime = episode.isCompleted ? 0 : episode.lastPlaybackPosition
     EnhancedAudioManager.shared.play(
       episode: playbackEpisode,
       audioURL: audioURL,
-      startTime: episode.lastPlaybackPosition,
+      startTime: startTime,
       imageURL: episode.imageURL,
-      useDefaultSpeed: episode.lastPlaybackPosition == 0
+      useDefaultSpeed: startTime == 0
     )
   }
 
@@ -582,6 +583,8 @@ final class HomeViewModel {
 
     if let model = try? context.fetch(descriptor).first {
       model.isCompleted = true
+      model.lastPlaybackPosition = 0
+      try? context.save()
     } else {
       // Create new model if doesn't exist
       let model = EpisodeDownloadModel(
@@ -1025,6 +1028,7 @@ final class HomeViewModel {
 
     if let model = try? context.fetch(descriptor).first {
       model.isCompleted.toggle()
+      model.lastPlaybackPosition = 0
       try? context.save()
     } else {
       // Create new model if doesn't exist

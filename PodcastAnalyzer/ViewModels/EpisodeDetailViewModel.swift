@@ -683,9 +683,7 @@ final class EpisodeDetailViewModel {
       return
     }
     model.isCompleted.toggle()
-    if !model.isCompleted {
-      model.lastPlaybackPosition = 0
-    }
+    model.lastPlaybackPosition = 0
 
     do {
       try modelContext?.save()

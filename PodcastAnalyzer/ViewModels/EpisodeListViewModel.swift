@@ -565,9 +565,7 @@ final class EpisodeListViewModel {
   func togglePlayed(for episode: PodcastEpisodeInfo) {
     guard let model = ensureModel(for: episode) else { return }
     model.isCompleted.toggle()
-    if !model.isCompleted {
-      model.lastPlaybackPosition = 0
-    }
+    model.lastPlaybackPosition = 0
     try? modelContext?.save()
   }
 

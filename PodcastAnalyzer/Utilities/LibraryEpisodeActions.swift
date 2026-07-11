@@ -55,9 +55,7 @@ enum LibraryEpisodeActions {
   ) {
     if let model = episodeModels[episode.id] {
       model.isCompleted.toggle()
-      if !model.isCompleted {
-        model.lastPlaybackPosition = 0
-      }
+      model.lastPlaybackPosition = 0
       try? context.save()
     } else if createIfMissing, let audioURL = episode.episodeInfo.audioURL {
       let model = EpisodeDownloadModel(
