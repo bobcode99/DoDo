@@ -366,6 +366,62 @@ struct SettingsView: View {
           WhisperModelsSection()
         }
 
+        // MARK: - Background Transcription Section
+        Section {
+          Toggle(isOn: Binding(
+            get: { BackgroundTranscriptProcessor.shared.isEnabled },
+            set: { BackgroundTranscriptProcessor.shared.isEnabled = $0 }
+          )) {
+            HStack {
+              Image(systemName: "bolt.fill")
+                .foregroundStyle(.yellow)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Auto-Transcribe While Charging")
+                Text("Transcribe downloaded episodes when plugged in")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+
+          if BackgroundTranscriptProcessor.shared.isProcessing {
+            HStack {
+              Image(systemName: "waveform")
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Processing")
+                Text("\(BackgroundTranscriptProcessor.shared.processedCount) of \(BackgroundTranscriptProcessor.shared.pendingCount) queued")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+              }
+              Spacer()
+              Button("Stop") {
+                BackgroundTranscriptProcessor.shared.cancelProcessing()
+              }
+              .font(.caption)
+              .foregroundStyle(.red)
+            }
+          }
+
+          Button {
+            BackgroundTranscriptProcessor.shared.processAll(podcasts: viewModel.podcastInfoModelList)
+          } label: {
+            HStack {
+              Image(systemName: "arrow.clockwise")
+                .foregroundStyle(.green)
+                .frame(width: 24)
+              Text("Process All Now")
+            }
+          }
+          .disabled(BackgroundTranscriptProcessor.shared.isProcessing)
+        } header: {
+          Text("Background Transcription")
+        } footer: {
+          Text("Automatically generate transcripts for all downloaded episodes when your device is charging")
+        }
+
         // MARK: - AI Settings Section
         Section {
           NavigationLink {

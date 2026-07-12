@@ -24,10 +24,16 @@ struct TranscriptSearchResult: Identifiable, Sendable {
 }
 
 struct TranscriptMatch: Identifiable, Sendable {
-    /// Segment index from the SRT file (TranscriptSegment.id).
     let id: Int
     let timestamp: TimeInterval
     let text: String
+
+    var formattedTimestamp: String {
+        let totalSeconds = Int(timestamp)
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 }
 
 // MARK: - ViewModel
@@ -47,6 +53,14 @@ final class TranscriptSearchViewModel {
     var isSearching = false
     /// When non-nil, filters results to the named podcast.
     var selectedPodcastFilter: String? = nil
+
+    var availablePodcasts: [String] {
+        Array(Set(allResults.map(\.podcastTitle))).sorted()
+    }
+
+    var totalMatches: Int {
+        results.reduce(0) { $0 + $1.matchCount }
+    }
 
     // MARK: Search
 

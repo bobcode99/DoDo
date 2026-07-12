@@ -82,6 +82,8 @@ struct PodcastAnalyzerApp: App {
             await FileStorageManager.shared.migrateFlatCaptionFilesToSubfolders()
           }
 
+          BackgroundTranscriptProcessor.shared.startMonitoring()
+
           // Handle any pending widget toggle (pause) flag from cold launch.
           EnhancedAudioManager.shared.handleWidgetToggleOnActive()
 
@@ -115,6 +117,22 @@ struct PodcastAnalyzerApp: App {
             }
           }
           #endif
+
+          NotificationCenter.default.addObserver(
+            forName: .autoTranscribeTriggered,
+            object: nil,
+            queue: .main
+          ) { _ in
+            Task { @MainActor in
+              let context = sharedModelContainer.mainContext
+              let descriptor = FetchDescriptor<PodcastInfoModel>(
+                predicate: #Predicate { $0.isSubscribed == true }
+              )
+              if let podcasts = try? context.fetch(descriptor) {
+                BackgroundTranscriptProcessor.shared.processAll(podcasts: podcasts)
+              }
+            }
+          }
         }
         .onOpenURL { url in
           // Handle URL callbacks from Shortcuts

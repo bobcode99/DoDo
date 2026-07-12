@@ -167,6 +167,28 @@ struct DataManagementView: View {
         Text("Clearing downloads and transcripts will free up storage space but won't affect your subscriptions")
       }
 
+      // MARK: - Per-Podcast Transcripts
+      Section {
+        NavigationLink {
+          PodcastTranscriptManagementView()
+        } label: {
+          HStack {
+            Image(systemName: "text.bubble")
+              .foregroundStyle(.blue)
+              .frame(width: 24)
+            Text("Manage Transcripts by Podcast")
+            Spacer()
+            Image(systemName: "chevron.right")
+              .foregroundStyle(.secondary)
+              .font(.caption)
+          }
+        }
+      } header: {
+        Text("Per-Podcast Management")
+      } footer: {
+        Text("Delete transcripts for individual podcasts")
+      }
+
       // MARK: - Storage Summary
       if !isCalculating {
         Section {
