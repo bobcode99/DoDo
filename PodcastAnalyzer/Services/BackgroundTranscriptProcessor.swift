@@ -96,7 +96,7 @@ final class BackgroundTranscriptProcessor {
           guard !hasTranscript else { continue }
 
           if let audioURL = episode.audioURL {
-            let downloadState = DownloadManager.shared.getDownloadState(for: audioURL)
+            let downloadState = DownloadManager.shared.getDownloadState(episodeTitle: episode.title, podcastTitle: info.title)
             if case .downloaded(let path) = downloadState {
               episodesToProcess.append((
                 episodeTitle: episode.title,
