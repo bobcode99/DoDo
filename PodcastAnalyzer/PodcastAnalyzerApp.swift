@@ -98,6 +98,15 @@ struct PodcastAnalyzerApp: App {
     // path update fires — touching it here kicks off monitoring during init
     // so playback gating later sees an accurate value.
     _ = NetworkMonitor.shared
+
+    // Flip to accessory (no dock icon) before the first window is ever shown.
+    // Doing this later (e.g. in WindowGroup.task, after the first frame) lets
+    // the dock icon flash on every launch even with headless mode enabled.
+    #if os(macOS)
+    if UserDefaults.standard.bool(forKey: MCPMenubarController.keyHeadless) {
+      NSApplication.shared.setActivationPolicy(.accessory)
+    }
+    #endif
   }
 
   var body: some Scene {

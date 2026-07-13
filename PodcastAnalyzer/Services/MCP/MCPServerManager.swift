@@ -61,6 +61,12 @@ final class MCPServerManager {
 
   private var modelContainer: ModelContainer?
   private var server: MCPHTTPServer?
+  /// Owns the in-flight stop/start sequence so overlapping calls (rapid
+  /// toggle, port edit while enabled) can't race and clobber `status`/`server`
+  /// with a stale result. Each call cancels the previous Task before starting
+  /// a new one; `start()` checks `Task.isCancelled` before it would otherwise
+  /// overwrite state a newer reconcile already owns.
+  private var reconcileTask: Task<Void, Never>?
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "MCPServerManager")
 
   // MARK: - Init
@@ -117,15 +123,16 @@ final class MCPServerManager {
   // MARK: - Reconciliation
 
   private func reconcile(forceRestart: Bool = false) {
-    if enabled {
-      if forceRestart || server == nil {
-        Task { @MainActor in
+    reconcileTask?.cancel()
+    reconcileTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      if self.enabled {
+        if forceRestart || self.server == nil {
           await self.stop()
+          guard !Task.isCancelled else { return }
           await self.start()
         }
-      }
-    } else {
-      Task { @MainActor in
+      } else {
         await self.stop()
       }
     }

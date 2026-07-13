@@ -32,7 +32,20 @@ class EpisodeDownloadModel {
   // Playback state
   var lastPlaybackPosition: TimeInterval = 0
   var duration: TimeInterval = 0
-  var isCompleted: Bool = false
+  // didSet stamps lastPlayedDate whenever an episode transitions to completed,
+  // regardless of which call site flips it (manual "mark played", playback
+  // reaching the end, etc). Without this, only the auto-completion path
+  // (PlaybackStateCoordinator) touched lastPlayedDate — every manually
+  // marked-played episode kept it nil, so sweepPlayedDownloads()'s grace-window
+  // guard (`guard let lastPlayed = model.lastPlayedDate ...`) skipped them
+  // forever, no matter how old.
+  var isCompleted: Bool = false {
+    didSet {
+      if isCompleted && !oldValue {
+        lastPlayedDate = Date()
+      }
+    }
+  }
   var lastPlayedDate: Date?
   var playCount: Int = 0
 
@@ -102,6 +115,12 @@ class EpisodeDownloadModel {
     self.pubDate = pubDate
     self.autoDownloadEnabled = autoDownloadEnabled
     self.upNextDismissedAt = upNextDismissedAt
+    // didSet above doesn't fire for values assigned during init, so a caller
+    // constructing directly with isCompleted: true (no explicit lastPlayedDate)
+    // needs the same fallback stamp here.
+    if isCompleted, self.lastPlayedDate == nil {
+      self.lastPlayedDate = Date()
+    }
   }
 
   /// Progress percentage (0.0 to 1.0)

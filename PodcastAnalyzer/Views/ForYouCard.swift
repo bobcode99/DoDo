@@ -35,12 +35,14 @@ struct ForYouCard: View {
       guid: episode.episodeInfo.guid
     )
 
+    // Completed episodes always restart from 0 — see EpisodeRowView.playAction().
+    let startTime = episode.isCompleted ? 0 : episode.lastPlaybackPosition
     audioManager.play(
       episode: playbackEpisode,
       audioURL: observer.playbackURL,
-      startTime: episode.lastPlaybackPosition,
+      startTime: startTime,
       imageURL: episode.imageURL ?? "",
-      useDefaultSpeed: episode.lastPlaybackPosition == 0
+      useDefaultSpeed: startTime == 0
     )
   }
 

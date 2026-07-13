@@ -499,7 +499,10 @@ struct EpisodeRowView: View {
       guid: episode.guid
     )
 
-    let startTime = episodeModel?.lastPlaybackPosition ?? 0
+    // Completed episodes always restart from 0 — lastPlaybackPosition on a
+    // completed episode sits near the end (set by the completion sweep), so
+    // using it raw here seeks a freshly-created AVPlayerItem to its own end.
+    let startTime = (episodeModel?.isCompleted ?? false) ? 0 : (episodeModel?.lastPlaybackPosition ?? 0)
     let useDefaultSpeed = startTime == 0
 
     audioManager.play(

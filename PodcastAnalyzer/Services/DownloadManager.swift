@@ -508,7 +508,21 @@ final class DownloadManager {
   /// ViewModels use this to start/stop their progress-polling timers.
   var hasActiveDownloads: Bool { !inFlightProgress.isEmpty }
 
-  private init() {}
+  @ObservationIgnored
+  private var episodeCompletionObserverTask: Task<Void, Never>?
+
+  private init() {
+    // The foreground/launch sweeps (see sweepPlayedDownloads) miss any episode
+    // that completes during a long session that never backgrounds or
+    // relaunches. Piggyback on the same notification every "mark played" path
+    // (manual or automatic) already posts so a long-lived session still gets
+    // swept once an hour has passed since the last sweep.
+    episodeCompletionObserverTask = Task { [weak self] in
+      for await _ in NotificationCenter.default.notifications(named: .episodeCompletionChanged) {
+        self?.sweepPlayedDownloads()
+      }
+    }
+  }
 
   func persistCompletedDownload(
     episodeTitle: String,
