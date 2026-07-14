@@ -135,6 +135,7 @@ class PlaybackStateCoordinator {
       // Update playback state
       model.lastPlaybackPosition = update.position
       model.lastPlayedDate = Date()
+      model.progressUpdatedAt = Date()
 
       // IMPORTANT: Always update duration from the player (this is the actual duration)
       if update.duration > 0 {
@@ -171,6 +172,8 @@ class PlaybackStateCoordinator {
       logger.info(
         "✅ Saved playback: \(update.episodeTitle) at \(Int(update.position))s / \(Int(update.duration))s"
       )
+
+      PlaybackProgressSyncCoordinator.shared.push(from: model, force: update.forceSync)
 
     } catch {
       logger.error("Failed to save playback position: \(error.localizedDescription, privacy: .public)")

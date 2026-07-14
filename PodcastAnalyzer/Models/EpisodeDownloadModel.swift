@@ -49,6 +49,12 @@ class EpisodeDownloadModel {
   var lastPlayedDate: Date?
   var playCount: Int = 0
 
+  /// Stamped on every local playback-position write (unlike `lastPlayedDate`,
+  /// which only moves on completion). Lets `PlaybackProgressSyncCoordinator`
+  /// tell whether an incoming CloudKit row is newer than what this device
+  /// already knows before overwriting local state.
+  var progressUpdatedAt: Date?
+
   // User preferences
   var isStarred: Bool = false
   var notes: String?

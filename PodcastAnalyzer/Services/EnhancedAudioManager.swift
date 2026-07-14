@@ -41,6 +41,9 @@ struct PlaybackPositionUpdate: Sendable {
   let position: TimeInterval
   let duration: TimeInterval
   let audioURL: String  // Added: needed to create new models
+  /// True for pause/seek/completion — moments that should reach other devices
+  /// immediately rather than waiting for the next throttled iCloud push.
+  var forceSync: Bool = false
 }
 
 // MARK: - Sleep Timer Options
@@ -531,7 +534,7 @@ private func handleAudioInterruption(_ notification: Notification) {
     isPlaying = false
     updateNowPlayingPlaybackRate()
     savePlaybackState()
-    postPlaybackPositionUpdate()
+    postPlaybackPositionUpdate(forceSync: true)
     updateWidgetPlaybackData()
   }
 
@@ -614,7 +617,7 @@ private func handleAudioInterruption(_ notification: Notification) {
         self.currentTime = time
         self.updateNowPlayingCurrentTime()
         self.savePlaybackState()
-        self.postPlaybackPositionUpdate()
+        self.postPlaybackPositionUpdate(forceSync: true)
       }
     }
   }
@@ -1294,8 +1297,16 @@ private func handleAudioInterruption(_ notification: Notification) {
 
   // MARK: - State Persistence
 
+  /// Forces an immediate iCloud sync of the current playback position instead
+  /// of waiting for the next throttled push. Call when the app is about to
+  /// background — otherwise a device backgrounded mid-throttle-window could
+  /// leave another device's "continue listening" stale by up to 30s.
+  func syncPlaybackProgressNow() {
+    postPlaybackPositionUpdate(forceSync: true)
+  }
+
   /// Posts a notification with current playback position for SwiftData persistence
-  private func postPlaybackPositionUpdate() {
+  private func postPlaybackPositionUpdate(forceSync: Bool = false) {
     guard let episode = currentEpisode, duration > 0 else { return }
 
     let update = PlaybackPositionUpdate(
@@ -1303,7 +1314,8 @@ private func handleAudioInterruption(_ notification: Notification) {
       podcastTitle: episode.podcastTitle,
       position: currentTime,
       duration: duration,
-      audioURL: episode.audioURL
+      audioURL: episode.audioURL,
+      forceSync: forceSync
     )
 
     NotificationCenter.default.post(
@@ -1487,7 +1499,7 @@ private func handleAudioInterruption(_ notification: Notification) {
     // before AVPlayerItemDidPlayToEndTime fires.
     if duration > 0 {
       currentTime = duration
-      postPlaybackPositionUpdate()
+      postPlaybackPositionUpdate(forceSync: true)
     }
 
     // Remove current episode from auto-play candidates (it's been fully played)

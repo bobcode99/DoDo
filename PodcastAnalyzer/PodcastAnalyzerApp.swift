@@ -37,36 +37,62 @@ struct PodcastAnalyzerApp: App {
   /// launches or returns from a paused state.
   @State private var wasPlayingOnBackground = false
 
+  /// CloudKit container shared by every device signed into the same Apple ID.
+  static let cloudKitContainerIdentifier = "iCloud.com.jn.PodcastAnalyzer"
+
   let sharedModelContainer: ModelContainer = {
-    let schema = Schema([
+    let fullSchema = Schema([
       PodcastInfoModel.self,
       EpisodeDownloadModel.self,
       EpisodeAIAnalysis.self,
       EpisodeQuickTagsModel.self,
       QueueItemModel.self,
+      PlaybackProgressModel.self,
     ])
-    let modelConfiguration = ModelConfiguration(
-      schema: schema,
+
+    // Local-only store: unchanged from before. Kept off CloudKit because it
+    // carries device-specific state (downloaded file paths, caption paths)
+    // that would be meaningless — or actively wrong — synced to another device.
+    let localConfiguration = ModelConfiguration(
+      "local",
+      schema: Schema([
+        PodcastInfoModel.self,
+        EpisodeDownloadModel.self,
+        EpisodeAIAnalysis.self,
+        EpisodeQuickTagsModel.self,
+        QueueItemModel.self,
+      ]),
       isStoredInMemoryOnly: false,
       cloudKitDatabase: .none
     )
 
+    // CloudKit-synced store: just playback progress, mirrored to the user's
+    // private database so pausing on one device resumes correctly on another.
+    let cloudConfiguration = ModelConfiguration(
+      "cloud",
+      schema: Schema([PlaybackProgressModel.self]),
+      isStoredInMemoryOnly: false,
+      cloudKitDatabase: .private(cloudKitContainerIdentifier)
+    )
+
     do {
-      return try ModelContainer(for: schema, configurations: [modelConfiguration])
+      return try ModelContainer(for: fullSchema, configurations: [localConfiguration, cloudConfiguration])
     } catch {
       // The project intentionally ships no schema migrations — a schema change
       // is allowed to reset the local store (see CLAUDE.md). Rather than brick
-      // the app on a migration failure, delete the incompatible store (and its
-      // -wal/-shm sidecars) and rebuild it from scratch. This is what makes
+      // the app on a migration failure, delete the incompatible stores (and their
+      // -wal/-shm sidecars) and rebuild them from scratch. This is what makes
       // future schema changes (indexes, #Unique, new properties) safe to ship.
       logger.error("ModelContainer init failed, rebuilding store: \(error.localizedDescription, privacy: .public)")
-      let storeURL = modelConfiguration.url
       let fm = FileManager.default
-      try? fm.removeItem(at: storeURL)
-      try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-wal"))
-      try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-shm"))
+      for configuration in [localConfiguration, cloudConfiguration] {
+        let storeURL = configuration.url
+        try? fm.removeItem(at: storeURL)
+        try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-wal"))
+        try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-shm"))
+      }
       do {
-        return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        return try ModelContainer(for: fullSchema, configurations: [localConfiguration, cloudConfiguration])
       } catch {
         logger.error("ModelContainer rebuild failed: \(error.localizedDescription, privacy: .public)")
         fatalError("Could not create ModelContainer even after store reset: \(error)")
@@ -89,6 +115,7 @@ struct PodcastAnalyzerApp: App {
     BackgroundSyncManager.shared.setModelContainer(sharedModelContainer)
     DownloadManager.shared.setModelContainer(sharedModelContainer)
     TranscriptManager.shared.setModelContainer(sharedModelContainer)
+    PlaybackProgressSyncCoordinator.shared.setModelContainer(sharedModelContainer)
 
     // Show new-episode banners in foreground + route taps to episode detail.
     UNUserNotificationCenter.current().delegate = NotificationTapDelegate.shared
@@ -246,6 +273,12 @@ struct PodcastAnalyzerApp: App {
         // see the current process, so this must run at the end of a session — not
         // at launch, when nothing has been logged yet.
         PersistentLogService.shared.exportLogsInBackground()
+        // Flush playback progress to iCloud immediately rather than waiting on
+        // the throttle window — otherwise another device could see a stale
+        // "continue listening" position for up to 30s after backgrounding.
+        if EnhancedAudioManager.shared.currentEpisode != nil {
+          EnhancedAudioManager.shared.syncPlaybackProgressNow()
+        }
         #if os(iOS)
         // Remember whether we left mid-playback so .active can decide whether
         // to auto-open the player on return.
