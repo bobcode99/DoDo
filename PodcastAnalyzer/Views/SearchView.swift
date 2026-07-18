@@ -52,9 +52,24 @@ struct PodcastSearchView: View {
                     libraryResultsView
                 }
             }
+
         }
         .navigationTitle("Search")
+        #if os(iOS)
+        // navigationBarDrawer placement keeps the field out of the tab bar:
+        // the iOS 26 tab-bar-hosted search field orphans its keyboard on a
+        // NavigationStack push (nothing — isPresented, dismissSearch,
+        // endEditing — can resign it afterwards). Nav-bar placement gets the
+        // stock behavior back: pushing a screen hides the field and keyboard.
+        .searchable(
+            text: $searchText,
+            isPresented: $searchPresented,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: searchPrompt
+        )
+        #else
         .searchable(text: $searchText, isPresented: $searchPresented, prompt: searchPrompt)
+        #endif
         // Hide the keyboard when a tapped result pushes onto this tab's
         // NavigationPath. Deactivating the search presentation is the only
         // thing that reliably dismisses the search field's keyboard —
@@ -311,9 +326,12 @@ struct PodcastSearchView: View {
     private func dismissKeyboard() {
         searchPresented = false
         #if os(iOS)
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
-        )
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                window.endEditing(true)
+            }
+        }
         #endif
     }
 
