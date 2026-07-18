@@ -122,6 +122,7 @@ struct PodcastAnalyzerApp: App {
     TranscriptManager.shared.setModelContainer(sharedModelContainer)
     PlaybackProgressSyncCoordinator.shared.setModelContainer(sharedModelContainer)
     TranscriptStore.shared.setModelContainer(sharedModelContainer)
+    AppIntentsModelStore.container = sharedModelContainer
 
     // Show new-episode banners in foreground + route taps to episode detail.
     UNUserNotificationCenter.current().delegate = NotificationTapDelegate.shared

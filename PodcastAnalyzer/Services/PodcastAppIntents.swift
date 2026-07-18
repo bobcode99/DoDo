@@ -236,48 +236,14 @@ struct GetCurrentTranscriptIntent: AppIntent {
             return "No episode is currently playing."
         }
 
-        // Try to load transcript from file.
-        // Path: Captions/{sanitizedPodcast}/{sanitizedEpisode}.srt
-        let fm = FileManager.default
-        let docsDir = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let captionsDir = docsDir.appendingPathComponent("Captions")
-
-        let invalidCharacters = CharacterSet(charactersIn: ":/\\?%*|\"<>")
-        let sanitizedPodcast = episode.podcastTitle
-            .components(separatedBy: invalidCharacters)
-            .joined(separator: "_")
-            .trimmingCharacters(in: .whitespaces)
-        let sanitizedEpisode = episode.title
-            .components(separatedBy: invalidCharacters)
-            .joined(separator: "_")
-            .trimmingCharacters(in: .whitespaces)
-
-        let srtPath = captionsDir
-            .appendingPathComponent(sanitizedPodcast, isDirectory: true)
-            .appendingPathComponent("\(sanitizedEpisode).srt")
-
-        if let content = try? String(contentsOf: srtPath, encoding: .utf8) {
-            // Parse SRT to plain text
-            return parseSRTToText(content)
+        // Transcripts live in SwiftData (TranscriptStore), not caption files.
+        if let text = TranscriptStore.shared.plainText(
+            episodeTitle: episode.title, podcastTitle: episode.podcastTitle
+        ), !text.isEmpty {
+            return text
         }
 
         return "No transcript available for this episode."
-    }
-
-    private func parseSRTToText(_ srt: String) -> String {
-        let lines = srt.components(separatedBy: .newlines)
-        var textLines: [String] = []
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            // Skip index numbers and timestamps
-            if trimmed.isEmpty { continue }
-            if Int(trimmed) != nil { continue }
-            if trimmed.contains("-->") { continue }
-            textLines.append(trimmed)
-        }
-
-        return textLines.joined(separator: " ")
     }
 }
 
@@ -541,7 +507,7 @@ struct PlayPodcastByNameIntent: AudioPlaybackIntent {
         // Resume from saved position if any.
         let podcastTitle = model.title
         let episodeTitle = latest.title
-        let episodeKey = "\(podcastTitle)\u{1F}\(episodeTitle)"
+        let episodeKey = EpisodeKeyUtils.makeKey(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
         var startTime: TimeInterval = 0
         let downloadDescriptor = FetchDescriptor<EpisodeDownloadModel>(
             predicate: #Predicate<EpisodeDownloadModel> { $0.id == episodeKey }
@@ -574,27 +540,15 @@ struct PlayPodcastByNameIntent: AudioPlaybackIntent {
     }
 }
 
-/// Lazy, process-wide ModelContainer for AppIntents that need to read podcasts
-/// outside the App's `.modelContainer` injection. The on-disk store is shared
-/// with the main app — this just gives intents a way to fetch without
-/// reaching into PodcastAnalyzerApp.
+/// Process-wide ModelContainer for AppIntents that need to read podcasts
+/// outside the App's `.modelContainer` injection. Injected from
+/// PodcastAnalyzerApp.init — intents run in the app process, so the App
+/// struct has always initialized before perform(). A self-built container
+/// here would open `default.store`, a DIFFERENT file from the app's named
+/// "local"/"cloud" stores, and serve stale pre-migration data to Siri.
 @MainActor
-private enum AppIntentsModelStore {
-    static let container: ModelContainer? = {
-        let schema = Schema([
-            PodcastInfoModel.self,
-            EpisodeDownloadModel.self,
-            EpisodeAIAnalysis.self,
-            EpisodeQuickTagsModel.self,
-            QueueItemModel.self,
-        ])
-        let config = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: .none
-        )
-        return try? ModelContainer(for: schema, configurations: [config])
-    }()
+enum AppIntentsModelStore {
+    static var container: ModelContainer?
 
     static func fetchSubscribed<T: Sendable>(
         _ transform: ([PodcastInfoModel]) -> T

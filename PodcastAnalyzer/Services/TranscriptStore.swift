@@ -94,6 +94,11 @@ final class TranscriptStore {
     return segments
   }
 
+  /// Plain transcript text (no timestamps) — powers search and Shortcuts.
+  func plainText(episodeTitle: String, podcastTitle: String) -> String? {
+    fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle)?.plainText
+  }
+
   func loadSegments(episodeTitle: String, podcastTitle: String) -> [TranscriptSegment]? {
     guard let model = fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle) else { return nil }
     var segments = Self.decodeSegments(model.segmentsJSON)
