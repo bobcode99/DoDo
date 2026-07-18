@@ -112,7 +112,9 @@ public actor TranscriptDownloadService {
     }
 
     // 3. Save to structured storage (parsed once here, not re-parsed on every load)
-    try await MainActor.run {
+    // `_ =`: saveTranscript is @discardableResult, but that doesn't propagate
+    // through MainActor.run's generic return value.
+    _ = try await MainActor.run {
       try TranscriptStore.shared.saveTranscript(
         srtContent: srtContent,
         episodeTitle: episodeTitle,
