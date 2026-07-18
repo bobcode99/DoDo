@@ -22,7 +22,7 @@ struct PodcastSearchView: View {
 
     @State private var selectedTab: SearchTab = .applePodcasts
     @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
+    @State private var searchPresented = false
 
     // Cached library filter results (updated only when searchText changes)
     @State private var filteredPodcasts: [PodcastInfoModel] = []
@@ -54,12 +54,12 @@ struct PodcastSearchView: View {
             }
         }
         .navigationTitle("Search")
-        .searchable(text: $searchText, prompt: searchPrompt)
-        .searchFocused($isSearchFocused)
+        .searchable(text: $searchText, isPresented: $searchPresented, prompt: searchPrompt)
         // Hide the keyboard when a tapped result pushes onto this tab's
-        // NavigationPath. Dropping the focus binding alone doesn't reliably
-        // resign the search field mid-push, so also resign the first
-        // responder directly.
+        // NavigationPath. Deactivating the search presentation is the only
+        // thing that reliably dismisses the search field's keyboard —
+        // focus-state changes alone don't resign it mid-push. searchText is
+        // untouched, so the results are still there on swipe-back.
         .onChange(of: tabCoordinator?.searchRouter.path.count ?? 0) { oldCount, newCount in
             if newCount > oldCount {
                 dismissKeyboard()
@@ -99,6 +99,7 @@ struct PodcastSearchView: View {
         .onDisappear {
             subscribeTask?.cancel()
             debounceTask?.cancel()
+            dismissKeyboard()
         }
         .alert("Subscription Failed", isPresented: Binding(get: { subscribeError != nil }, set: { if !$0 { subscribeError = nil } })) {
             Button("OK", role: .cancel) { subscribeError = nil }
@@ -308,7 +309,7 @@ struct PodcastSearchView: View {
     // MARK: - Helper Methods
 
     private func dismissKeyboard() {
-        isSearchFocused = false
+        searchPresented = false
         #if os(iOS)
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
