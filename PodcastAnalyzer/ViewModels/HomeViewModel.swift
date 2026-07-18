@@ -801,6 +801,7 @@ final class HomeViewModel {
         let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date(), isSubscribed: true)
         context.insert(model)
         try context.save()
+        SubscriptionSyncCoordinator.shared.sync(from: model)
         podcastInfoModelList.insert(model, at: 0)
         await loadUpNextEpisodes()
         logger.info("Successfully subscribed to \(podcastInfo.title)")

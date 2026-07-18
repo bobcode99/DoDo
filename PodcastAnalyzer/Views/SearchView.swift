@@ -330,6 +330,9 @@ struct PodcastSearchView: View {
                 } else {
                     let podcastInfoModel = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now)
                     modelContext.insert(podcastInfoModel)
+                    try? modelContext.save()
+                    SubscriptionSyncCoordinator.shared.sync(from: podcastInfoModel)
+                    return
                 }
 
                 try? modelContext.save()

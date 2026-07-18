@@ -380,6 +380,7 @@ final class SettingsViewModel {
         modelContext.insert(podcastInfoModel)
         do {
           try modelContext.save()
+          SubscriptionSyncCoordinator.shared.sync(from: podcastInfoModel)
         } catch {
           modelContext.delete(podcastInfoModel)
           throw error

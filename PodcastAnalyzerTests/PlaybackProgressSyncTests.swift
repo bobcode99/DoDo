@@ -215,4 +215,31 @@ struct PlaybackProgressSyncTests {
 
         #expect(local.lastPlaybackPosition == 77)
     }
+
+    @MainActor
+    @Test("mergeIncomingChanges() creates a local EpisodeDownloadModel for an episode never seen on this device")
+    func mergeCreatesMissingLocalModel() throws {
+        let container = try makeContainer()
+        let coordinator = PlaybackProgressSyncCoordinator()
+        coordinator.setModelContainer(container)
+
+        // No local EpisodeDownloadModel exists yet — this episode was only
+        // ever started on another device.
+        let episodeId = EpisodeKeyUtils.makeKey(podcastTitle: "Show", episodeTitle: "Episode 1")
+        let remote = PlaybackProgressModel(
+            id: episodeId, lastPlaybackPosition: 42, duration: 100, updatedAt: Date()
+        )
+        container.mainContext.insert(remote)
+        try container.mainContext.save()
+
+        coordinator.mergeIncomingChanges()
+
+        let created = try container.mainContext.fetch(
+            FetchDescriptor<EpisodeDownloadModel>(predicate: #Predicate { $0.id == episodeId })
+        ).first
+        #expect(created != nil, "should have created a local placeholder row instead of dropping the sync")
+        #expect(created?.lastPlaybackPosition == 42)
+        #expect(created?.podcastTitle == "Show")
+        #expect(created?.episodeTitle == "Episode 1")
+    }
 }

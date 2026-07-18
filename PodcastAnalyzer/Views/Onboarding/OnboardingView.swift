@@ -15,6 +15,9 @@ import UIKit
 struct OnboardingView: View {
   @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
   @State private var currentPage = 0
+  /// nil = not checked yet (show nothing conclusive on page 4 until we know);
+  /// checked once on appear since it only needs to reflect state at launch.
+  @State private var hasCloudSubscriptions: Bool?
 
   var body: some View {
     TabView(selection: $currentPage) {
@@ -24,12 +27,86 @@ struct OnboardingView: View {
         .tag(1)
       TranscriptionOnboardingPage(onNext: { currentPage = 3 })
         .tag(2)
-      ImportOnboardingPage(onSkip: { hasCompletedOnboarding = true })
-        .tag(3)
+      if hasCloudSubscriptions == true {
+        RestoreFromICloudOnboardingPage(onDone: { hasCompletedOnboarding = true })
+          .tag(3)
+      } else {
+        ImportOnboardingPage(onSkip: { hasCompletedOnboarding = true })
+          .tag(3)
+      }
     }
     .tabViewStyle(.page)
     .indexViewStyle(.page(backgroundDisplayMode: .always))
     .ignoresSafeArea()
+    .task {
+      // A returning user's Apple ID already has subscriptions in iCloud —
+      // skip the manual "bring your podcasts" step and restore instead.
+      hasCloudSubscriptions = SubscriptionSyncCoordinator.shared.hasCloudSubscriptions()
+    }
+  }
+}
+
+// MARK: - Restore From iCloud Page
+
+private struct RestoreFromICloudOnboardingPage: View {
+  let onDone: () -> Void
+  @State private var isRestoring = true
+  @State private var restoredCount = 0
+
+  var body: some View {
+    VStack(spacing: 0) {
+      Spacer()
+
+      Image(systemName: "icloud.and.arrow.down.fill")
+        .font(.system(size: 64))
+        .foregroundStyle(.blue.gradient)
+        .padding(.bottom, 18)
+
+      VStack(spacing: 10) {
+        Text("Welcome Back")
+          .font(.largeTitle)
+          .fontWeight(.bold)
+          .multilineTextAlignment(.center)
+
+        Text(isRestoring
+          ? "Restoring your subscriptions from iCloud…"
+          : "Restored \(restoredCount) podcast\(restoredCount == 1 ? "" : "s") from iCloud.")
+          .font(.body)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 32)
+      }
+      .padding(.top, 4)
+
+      if isRestoring {
+        ProgressView()
+          .padding(.top, 24)
+      }
+
+      Spacer()
+
+      Button(action: onDone) {
+        Text(isRestoring ? "Skip" : "Continue")
+          .font(.headline)
+          .foregroundStyle(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 16)
+          .background(.blue, in: .rect(cornerRadius: 14))
+      }
+      .buttonStyle(.plain)
+      .padding(.horizontal, 24)
+      .padding(.bottom, 52)
+    }
+    .task {
+      let rssURLs = SubscriptionSyncCoordinator.shared.cloudSubscriptionRSSURLs()
+      restoredCount = rssURLs.count
+      await PodcastImportManager.shared.importPodcasts(from: rssURLs)
+      // Suppress the import sheet this triggers — this page has its own
+      // progress UI, and the sheet's presentation context is the base
+      // ContentView underneath this fullScreenCover.
+      PodcastImportManager.shared.dismissImportSheet()
+      isRestoring = false
+    }
   }
 }
 

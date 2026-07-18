@@ -228,6 +228,7 @@ struct MacSearchView: View {
 
         modelContext.insert(podcastInfoModel)
         try? modelContext.save()
+        SubscriptionSyncCoordinator.shared.sync(from: podcastInfoModel)
       } catch {
         logger.error("Failed to subscribe: \(error.localizedDescription, privacy: .public)")
       }

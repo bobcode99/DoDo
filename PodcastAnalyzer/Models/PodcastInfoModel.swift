@@ -32,7 +32,21 @@ class PodcastInfoModel {
 
   /// Whether the user has subscribed to this podcast.
   /// false = browsed/cached podcast, true = subscribed podcast
-  var isSubscribed: Bool = false
+  ///
+  /// didSet pushes to iCloud (SubscriptionSyncCoordinator) here rather than
+  /// at each call site: subscribe/unsubscribe is toggled directly on this
+  /// property from ~8 places (PodcastSubscriptionViewModel, HomeViewModel,
+  /// SearchView, EpisodeListView, PodcastContextMenu). Centralizing means
+  /// every future call site gets sync for free. Doesn't fire during `init` —
+  /// the two call sites that construct an already-subscribed model
+  /// (PodcastImportManager, SubscriptionSyncCoordinator's own silent
+  /// resubscribe) push explicitly right after insert.
+  var isSubscribed: Bool = false {
+    didSet {
+      guard isSubscribed != oldValue else { return }
+      SubscriptionSyncCoordinator.shared.sync(from: self)
+    }
+  }
 
   // MARK: - Queryable Properties (Swift 6 Predicate Compatibility)
   // These top-level properties enable #Predicate to work without nested keypaths

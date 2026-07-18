@@ -27,7 +27,6 @@ class EpisodeDownloadModel {
   var podcastTitle: String = ""
   var audioURL: String = ""
   var localAudioPath: String?
-  var captionPath: String?
 
   // Playback state
   var lastPlaybackPosition: TimeInterval = 0
@@ -39,11 +38,22 @@ class EpisodeDownloadModel {
   // marked-played episode kept it nil, so sweepPlayedDownloads()'s grace-window
   // guard (`guard let lastPlayed = model.lastPlayedDate ...`) skipped them
   // forever, no matter how old.
+  //
+  // Also pushes to iCloud here rather than at each call site: "mark played" /
+  // "mark unplayed" are toggled directly on this property from ~8 places
+  // (HomeViewModel, EpisodeListViewModel, EpisodeDetailViewModel,
+  // LibraryEpisodeActions, TrendingEpisodeContextMenu) and only the automatic
+  // playback-position pipeline (PlaybackStateCoordinator) synced — manual
+  // toggles were silently local-only. Centralizing here means every future
+  // call site gets sync for free instead of needing to remember it.
   var isCompleted: Bool = false {
     didSet {
-      if isCompleted && !oldValue {
+      guard isCompleted != oldValue else { return }
+      if isCompleted {
         lastPlayedDate = Date()
       }
+      progressUpdatedAt = Date()
+      PlaybackProgressSyncCoordinator.shared.push(from: self, force: true)
     }
   }
   var lastPlayedDate: Date?
@@ -68,9 +78,6 @@ class EpisodeDownloadModel {
   /// matching Apple Podcasts' behavior where replaying a removed item brings it back.
   var upNextDismissedAt: Date?
 
-  // Transcript metadata
-  var transcriptSource: String = ""     // "" = unknown, "rss" = from RSS, "local" = generated locally
-
   // Episode metadata (cached)
   var imageURL: String?
   var pubDate: Date?
@@ -84,7 +91,6 @@ class EpisodeDownloadModel {
     podcastTitle: String,
     audioURL: String,
     localAudioPath: String? = nil,
-    captionPath: String? = nil,
     lastPlaybackPosition: TimeInterval = 0,
     duration: TimeInterval = 0,
     isCompleted: Bool = false,
@@ -107,7 +113,6 @@ class EpisodeDownloadModel {
     self.podcastTitle = podcastTitle
     self.audioURL = audioURL
     self.localAudioPath = localAudioPath
-    self.captionPath = captionPath
     self.lastPlaybackPosition = lastPlaybackPosition
     self.duration = duration
     self.isCompleted = isCompleted

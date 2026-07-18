@@ -141,7 +141,22 @@ final class PlaybackProgressSyncCoordinator {
       for row in progressRows {
         let id = row.id
         let localDescriptor = FetchDescriptor<EpisodeDownloadModel>(predicate: #Predicate { $0.id == id })
-        guard let localModel = try context.fetch(localDescriptor).first else { continue }
+        let localModel: EpisodeDownloadModel
+        if let existing = try context.fetch(localDescriptor).first {
+          localModel = existing
+        } else {
+          // Episode started on another device but never seen on this one —
+          // without this, the sync silently dropped it: an episode you began
+          // on your phone would never show as "in progress" (or synced at
+          // all) on your Mac until you happened to touch it there first.
+          // audioURL is unknown from progress data alone; it gets filled in
+          // once the episode's real metadata is loaded (e.g. subscription
+          // sync brings the podcast's RSS episode list).
+          guard let (podcastTitle, episodeTitle) = EpisodeKeyUtils.parseKey(id) else { continue }
+          let created = EpisodeDownloadModel(episodeTitle: episodeTitle, podcastTitle: podcastTitle, audioURL: "")
+          context.insert(created)
+          localModel = created
+        }
         guard PlaybackProgressMerge.isRemoteNewer(
           remoteUpdatedAt: row.updatedAt, localUpdatedAt: localModel.progressUpdatedAt
         ) else { continue }

@@ -48,29 +48,34 @@ struct PodcastAnalyzerApp: App {
       EpisodeQuickTagsModel.self,
       QueueItemModel.self,
       PlaybackProgressModel.self,
+      EpisodeTranscriptModel.self,
+      SubscribedPodcastModel.self,
     ])
 
     // Local-only store: unchanged from before. Kept off CloudKit because it
-    // carries device-specific state (downloaded file paths, caption paths)
-    // that would be meaningless — or actively wrong — synced to another device.
+    // carries device-specific state (downloaded file paths) that would be
+    // meaningless — or actively wrong — synced to another device.
     let localConfiguration = ModelConfiguration(
       "local",
       schema: Schema([
         PodcastInfoModel.self,
         EpisodeDownloadModel.self,
-        EpisodeAIAnalysis.self,
         EpisodeQuickTagsModel.self,
         QueueItemModel.self,
+        EpisodeTranscriptModel.self,
       ]),
       isStoredInMemoryOnly: false,
       cloudKitDatabase: .none
     )
 
-    // CloudKit-synced store: just playback progress, mirrored to the user's
-    // private database so pausing on one device resumes correctly on another.
+    // CloudKit-synced store: playback progress, subscribed-podcast pointers
+    // (rssUrl/title only, not the full episode blob — PodcastInfoModel's RSS
+    // snapshot risks CloudKit's 1MB-per-record cap for large back-catalogs),
+    // and AI analyses (text JSON, comfortably under the record cap) mirrored
+    // to the user's private database.
     let cloudConfiguration = ModelConfiguration(
       "cloud",
-      schema: Schema([PlaybackProgressModel.self]),
+      schema: Schema([PlaybackProgressModel.self, SubscribedPodcastModel.self, EpisodeAIAnalysis.self]),
       isStoredInMemoryOnly: false,
       cloudKitDatabase: .private(cloudKitContainerIdentifier)
     )
@@ -116,6 +121,7 @@ struct PodcastAnalyzerApp: App {
     DownloadManager.shared.setModelContainer(sharedModelContainer)
     TranscriptManager.shared.setModelContainer(sharedModelContainer)
     PlaybackProgressSyncCoordinator.shared.setModelContainer(sharedModelContainer)
+    TranscriptStore.shared.setModelContainer(sharedModelContainer)
 
     // Show new-episode banners in foreground + route taps to episode detail.
     UNUserNotificationCenter.current().delegate = NotificationTapDelegate.shared
@@ -163,11 +169,6 @@ struct PodcastAnalyzerApp: App {
 
           // Opt-in cleanup of finished episodes (24h grace; see sweep docs).
           DownloadManager.shared.sweepPlayedDownloads()
-
-          // Migrate flat caption files to podcast subfolders (one-time, safe to re-run)
-          Task.detached(priority: .utility) {
-            await FileStorageManager.shared.migrateFlatCaptionFilesToSubfolders()
-          }
 
           // macOS: embed the MCP HTTP server and set up the menubar controller.
           // Both honor the user's Preferences toggles; neither runs unless asked.
