@@ -51,7 +51,6 @@ struct BackupEpisode: Codable, Sendable {
     var isStarred: Bool
     var notes: String?
     var upNextDismissedAt: Date?
-    var transcriptSource: String
     var autoDownloadEnabled: Bool
 }
 

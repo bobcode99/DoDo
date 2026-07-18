@@ -21,13 +21,6 @@ private let logger = Logger(subsystem: "com.podcast.analyzer", category: "Expand
 @MainActor
 @Observable
 final class ExpandedPlayerViewModel {
-  // Pre-compiled SRT regex (compiled once, reused for every parse)
-  private static let srtRegex: NSRegularExpression? = {
-    let entryPattern =
-      #"(?:^|\n)(\d+)\n(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\n"#
-    return try? NSRegularExpression(pattern: entryPattern, options: [])
-  }()
-
   // Stored properties that require SwiftData lookups
   var isStarred: Bool = false
   var isCompleted: Bool = false
@@ -47,9 +40,6 @@ final class ExpandedPlayerViewModel {
   private let audioManager = EnhancedAudioManager.shared
   private let downloadManager = DownloadManager.shared
   private let subtitleSettings = SubtitleSettingsManager.shared
-
-  @ObservationIgnored
-  private let fileStorage = FileStorageManager.shared
 
   @ObservationIgnored
   private let applePodcastService = ApplePodcastService()
@@ -439,112 +429,19 @@ final class ExpandedPlayerViewModel {
 
     loadTranscriptTask?.cancel()
     loadTranscriptTask = Task {
-      let exists = await fileStorage.captionFileExists(
-        for: episode.title,
-        podcastTitle: episode.podcastTitle
-      )
-
-      if exists {
-        do {
-          let content = try await fileStorage.loadCaptionFile(
-            for: episode.title,
-            podcastTitle: episode.podcastTitle
-          )
-          let segments = parseTranscriptSegments(from: content)
-
-          self.hasTranscript = true
-          self.transcriptSegments = segments
-          self.groupedSentences = TranscriptGrouping.groupIntoSentences(segments)
-          self.lastLoadedEpisodeId = episodeId
-        } catch {
-          self.hasTranscript = false
-          self.transcriptSegments = []
-          self.groupedSentences = []
-        }
+      if let segments = TranscriptStore.shared.loadSegments(
+        episodeTitle: episode.title, podcastTitle: episode.podcastTitle
+      ) {
+        self.hasTranscript = true
+        self.transcriptSegments = segments
+        self.groupedSentences = TranscriptGrouping.groupIntoSentences(segments)
+        self.lastLoadedEpisodeId = episodeId
       } else {
         self.hasTranscript = false
         self.transcriptSegments = []
         self.groupedSentences = []
       }
     }
-  }
-
-  /// Parses SRT content into transcript segments
-  private func parseTranscriptSegments(from srtContent: String) -> [TranscriptSegment] {
-    var segments: [TranscriptSegment] = []
-
-    let normalizedText = srtContent.replacingOccurrences(of: "\r\n", with: "\n")
-      .replacingOccurrences(of: "\r", with: "\n")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-
-    guard let regex = Self.srtRegex else {
-      return []
-    }
-
-    let nsText = normalizedText as NSString
-    let matches = regex.matches(
-      in: normalizedText, options: [], range: NSRange(location: 0, length: nsText.length))
-
-    for (index, match) in matches.enumerated() {
-      guard match.numberOfRanges >= 4 else { continue }
-
-      let startTimeRange = match.range(at: 2)
-      let endTimeRange = match.range(at: 3)
-
-      guard startTimeRange.location != NSNotFound,
-        endTimeRange.location != NSNotFound
-      else { continue }
-
-      let startTimeStr = nsText.substring(with: startTimeRange)
-      let endTimeStr = nsText.substring(with: endTimeRange)
-
-      guard let startTime = parseSRTTime(startTimeStr),
-        let endTime = parseSRTTime(endTimeStr)
-      else { continue }
-
-      let textStart = match.range.location + match.range.length
-      let textEnd: Int
-      if index + 1 < matches.count {
-        textEnd = matches[index + 1].range.location
-      } else {
-        textEnd = nsText.length
-      }
-
-      guard textStart < textEnd else { continue }
-
-      let textRange = NSRange(location: textStart, length: textEnd - textStart)
-      var text = nsText.substring(with: textRange)
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .replacingOccurrences(of: "\n", with: " ")
-
-      text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !text.isEmpty else { continue }
-
-      segments.append(
-        TranscriptSegment(
-          id: index,
-          startTime: startTime,
-          endTime: endTime,
-          text: text
-        ))
-    }
-
-    return segments
-  }
-
-  private func parseSRTTime(_ timeString: String) -> TimeInterval? {
-    let components = timeString.replacingOccurrences(of: ",", with: ".").components(
-      separatedBy: ":")
-    guard components.count == 3 else { return nil }
-
-    guard let hours = Double(components[0]),
-      let minutes = Double(components[1]),
-      let seconds = Double(components[2])
-    else {
-      return nil
-    }
-
-    return hours * 3600 + minutes * 60 + seconds
   }
 
   /// Seek to a specific transcript segment

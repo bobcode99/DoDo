@@ -35,8 +35,8 @@ protocol TranscriptTranslationBridge: AnyObject {
   func loadTranslationsAfterParsing() async
 }
 
-/// SwiftData host — for the `EpisodeDownloadModel.transcriptSource` write
-/// after RSS download / regeneration.
+/// SwiftData host — gives the coordinator access to the podcast's ModelContext
+/// (e.g. for language lookups) and the episode's download model.
 @MainActor
 protocol TranscriptModelHost: AnyObject {
   var modelContext: ModelContext? { get }
@@ -49,18 +49,6 @@ protocol TranscriptHost: TranscriptPlaybackBridge, TranscriptTranslationBridge, 
 
 @MainActor @Observable
 final class TranscriptCoordinator {
-
-  // MARK: - Pre-compiled regex (single instance reused per parse)
-
-  private static let srtRegex: NSRegularExpression? = {
-    let entryPattern =
-      #"(?:^|\n)(\d+)\n(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\n"#
-    return try? NSRegularExpression(pattern: entryPattern, options: [])
-  }()
-
-  private static let numericEntityRegex: NSRegularExpression? = {
-    return try? NSRegularExpression(pattern: "&#(\\d+);", options: [])
-  }()
 
   // MARK: - Generation / Engine State
 
@@ -107,12 +95,8 @@ final class TranscriptCoordinator {
 
   // MARK: - Date Cache
 
-  /// Synchronous mirror of the SRT file's modification date for view rendering.
+  /// Synchronous mirror of the stored transcript's generation date for view rendering.
   var cachedTranscriptDate: Date?
-
-  /// Word-level timing data loaded from a sidecar JSON when present.
-  @ObservationIgnored
-  private var wordTimingsData: TranscriptData?
 
   // MARK: - Inputs / Host
 
@@ -121,7 +105,6 @@ final class TranscriptCoordinator {
   @ObservationIgnored var podcastLanguage: String
   @ObservationIgnored private weak var host: TranscriptHost?
 
-  @ObservationIgnored private let fileStorage = FileStorageManager.shared
   @ObservationIgnored private let transcriptDownloadService = TranscriptDownloadService.shared
 
   // MARK: - Task Ownership
@@ -161,13 +144,10 @@ final class TranscriptCoordinator {
 
   var hasTranscript: Bool { !transcriptText.isEmpty }
 
-  /// SRT modification date — slow async path. UI should read `cachedTranscriptDate`.
+  /// Stored transcript's generation date. UI should read `cachedTranscriptDate`.
   var transcriptGeneratedAt: Date? {
     get async {
-      await fileStorage.getCaptionFileDate(
-        for: episode.title,
-        podcastTitle: podcastTitle
-      )
+      TranscriptStore.shared.generatedAt(episodeTitle: episode.title, podcastTitle: podcastTitle)
     }
   }
 
@@ -315,21 +295,15 @@ final class TranscriptCoordinator {
       guard let self else { return }
       self.rssTranscriptState = .downloading(progress: 0.5)
       do {
-        let savedURL = try await self.transcriptDownloadService.downloadTranscript(
+        try await self.transcriptDownloadService.downloadTranscript(
           from: url,
           type: type,
           episodeTitle: self.episode.title,
           podcastTitle: self.podcastTitle
         )
         guard !Task.isCancelled else { return }
-        self.rssTranscriptState = .downloaded(localPath: savedURL.path)
+        self.rssTranscriptState = .downloaded
         logger.info("RSS transcript downloaded successfully")
-
-        // Track that this transcript came from RSS
-        if let host = self.host, let model = host.episodeModel {
-          model.transcriptSource = "rss"
-          try? host.modelContext?.save()
-        }
 
         await self.loadExistingTranscript()
       } catch {
@@ -366,8 +340,8 @@ final class TranscriptCoordinator {
       let transcriptService = TranscriptService(language: language)
       let modelReady = await transcriptService.isModelReady()
 
-      let exists = await self.fileStorage.captionFileExists(
-        for: self.episode.title,
+      let exists = TranscriptStore.shared.exists(
+        episodeTitle: self.episode.title,
         podcastTitle: self.podcastTitle
       )
       guard !Task.isCancelled else { return }
@@ -440,12 +414,6 @@ final class TranscriptCoordinator {
     groupedSentences = []
     transcriptText = ""
     transcriptState = .transcribing(progress: 0)
-
-    if let host, let model = host.episodeModel {
-      model.transcriptSource = "local"
-      try? host.modelContext?.save()
-    }
-
     generateTranscript()
   }
 
@@ -455,37 +423,27 @@ final class TranscriptCoordinator {
     PlatformClipboard.string = transcriptText
   }
 
+  /// Loads the already-parsed transcript from `TranscriptStore` — segments are
+  /// parsed once, at save time (by whichever engine/RSS produced the SRT text),
+  /// not re-parsed here on every view open.
   private func loadExistingTranscript() async {
-    do {
-      let content = try await fileStorage.loadCaptionFile(
-        for: episode.title,
-        podcastTitle: podcastTitle
-      )
-      let fileDate = await fileStorage.getCaptionFileDate(
-        for: episode.title,
-        podcastTitle: podcastTitle
-      )
-
-      var timingsData: TranscriptData?
-      if let wordTimingsJSON = try await fileStorage.loadWordTimingFile(
-        for: episode.title,
-        podcastTitle: podcastTitle
-      ) {
-        if let jsonData = wordTimingsJSON.data(using: .utf8) {
-          timingsData = try? JSONDecoder().decode(TranscriptData.self, from: jsonData)
-        }
-      }
-
-      transcriptText = content
-      cachedTranscriptDate = fileDate
-      wordTimingsData = timingsData
-      transcriptState = .completed
-      parseTranscriptSegments()
-      await host?.loadTranslationsAfterParsing()
-    } catch {
-      logger.error("Failed to load transcript: \(error.localizedDescription, privacy: .public)")
-      transcriptState = .error("Failed to load transcript: \(error.localizedDescription)")
+    guard let segments = TranscriptStore.shared.loadSegments(
+      episodeTitle: episode.title, podcastTitle: podcastTitle
+    ) else {
+      transcriptState = .error("Failed to load transcript")
+      return
     }
+
+    transcriptSegments = segments
+    transcriptText = TranscriptStore.shared.loadSRT(
+      episodeTitle: episode.title, podcastTitle: podcastTitle
+    ) ?? ""
+    cachedTranscriptDate = TranscriptStore.shared.generatedAt(
+      episodeTitle: episode.title, podcastTitle: podcastTitle
+    )
+    transcriptState = .completed
+    regroupSentences()
+    await host?.loadTranslationsAfterParsing()
   }
 
   func loadTranscriptDate() {
@@ -498,155 +456,11 @@ final class TranscriptCoordinator {
     }
   }
 
-  /// Find word timings for a segment from the loaded JSON sidecar.
-  private func findWordTimingsForSegment(
-    segmentId: Int,
-    startTime: TimeInterval,
-    endTime: TimeInterval
-  ) -> [WordTiming]? {
-    guard let data = wordTimingsData else { return nil }
-    if let segment = data.segments.first(where: { $0.id == segmentId }) {
-      return segment.wordTimings.map { timing in
-        WordTiming(word: timing.word, startTime: timing.startTime, endTime: timing.endTime)
-      }
-    }
-    for segment in data.segments {
-      if abs(segment.startTime - startTime) < 0.5 && abs(segment.endTime - endTime) < 0.5 {
-        return segment.wordTimings.map { timing in
-          WordTiming(word: timing.word, startTime: timing.startTime, endTime: timing.endTime)
-        }
-      }
-    }
-    return nil
-  }
-
-  func parseTranscriptSegments() {
-    guard !transcriptText.isEmpty else {
-      transcriptSegments = []
-      return
-    }
-
-    var segments: [TranscriptSegment] = []
-    let normalizedText = transcriptText.replacingOccurrences(of: "\r\n", with: "\n")
-      .replacingOccurrences(of: "\r", with: "\n")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-
-    guard let regex = Self.srtRegex else {
-      logger.error("SRT regex not available")
-      return
-    }
-
-    let nsText = normalizedText as NSString
-    let matches = regex.matches(
-      in: normalizedText, options: [], range: NSRange(location: 0, length: nsText.length))
-
-    logger.info("Raw SRT text length: \(self.transcriptText.count), Found \(matches.count) potential entries via regex")
-
-    for (index, match) in matches.enumerated() {
-      guard match.numberOfRanges >= 4 else { continue }
-
-      let startTimeRange = match.range(at: 2)
-      let endTimeRange = match.range(at: 3)
-      guard startTimeRange.location != NSNotFound,
-            endTimeRange.location != NSNotFound else { continue }
-
-      let startTimeStr = nsText.substring(with: startTimeRange)
-      let endTimeStr = nsText.substring(with: endTimeRange)
-
-      guard let startTime = parseSRTTime(startTimeStr),
-            let endTime = parseSRTTime(endTimeStr) else {
-        logger.warning("Entry \(index + 1): failed to parse times '\(startTimeStr)' -> '\(endTimeStr)'")
-        continue
-      }
-
-      let textStart = match.range.location + match.range.length
-      let textEnd: Int
-      if index + 1 < matches.count {
-        let nextMatch = matches[index + 1]
-        textEnd = nextMatch.range.location
-      } else {
-        textEnd = nsText.length
-      }
-      guard textStart < textEnd else { continue }
-
-      let textRange = NSRange(location: textStart, length: textEnd - textStart)
-      var text = nsText.substring(with: textRange)
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .replacingOccurrences(of: "\n", with: " ")
-
-      if let lastNewlineIndex = text.lastIndex(of: "\n") {
-        let afterNewline = String(text[text.index(after: lastNewlineIndex)...])
-        if afterNewline.trimmingCharacters(in: .whitespaces).allSatisfy({ $0.isNumber }) {
-          text = String(text[..<lastNewlineIndex])
-        }
-      }
-      text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      text = decodeHTMLEntities(text)
-      guard !text.isEmpty else {
-        logger.warning("Entry \(index + 1): empty text")
-        continue
-      }
-
-      let wordTimings: [WordTiming]? = findWordTimingsForSegment(
-        segmentId: index + 1,
-        startTime: startTime,
-        endTime: endTime
-      )
-
-      segments.append(
-        TranscriptSegment(
-          id: index,
-          startTime: startTime,
-          endTime: endTime,
-          text: text,
-          wordTimings: wordTimings
-        ))
-    }
-
-    transcriptSegments = segments
-    logger.info("Parsed \(segments.count) transcript segments from \(matches.count) regex matches")
-    regroupSentences()
-  }
-
-  private func parseSRTTime(_ timeString: String) -> TimeInterval? {
-    let components = timeString.replacingOccurrences(of: ",", with: ".").components(
-      separatedBy: ":")
-    guard components.count == 3 else { return nil }
-    guard let hours = Double(components[0]),
-          let minutes = Double(components[1]),
-          let seconds = Double(components[2]) else { return nil }
-    return hours * 3600 + minutes * 60 + seconds
-  }
-
-  /// Decode common HTML entities — used by SRT parsing and by translation
-  /// (TranslationCoordinator calls this via the public surface).
+  /// Decode common HTML entities — used by translation
+  /// (TranslationCoordinator calls this via the public surface). Delegates to
+  /// `SRTParser` so the entity table is defined in exactly one place.
   func decodeHTMLEntities(_ text: String) -> String {
-    var result = text
-    let entities: [(String, String)] = [
-      ("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
-      ("&quot;", "\""), ("&apos;", "'"), ("&#39;", "'"),
-      ("&rsquo;", "'"), ("&lsquo;", "'"), ("&rdquo;", "\""), ("&ldquo;", "\""),
-      ("&ndash;", "\u{2013}"), ("&mdash;", "\u{2014}"), ("&hellip;", "\u{2026}"),
-      ("&#160;", " "),
-    ]
-    for (entity, replacement) in entities {
-      result = result.replacingOccurrences(of: entity, with: replacement)
-    }
-    if let regex = Self.numericEntityRegex {
-      let nsString = result as NSString
-      let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
-      for match in matches.reversed() {
-        if match.numberOfRanges >= 2 {
-          let codeRange = match.range(at: 1)
-          if let code = Int(nsString.substring(with: codeRange)),
-             let scalar = Unicode.Scalar(code) {
-            let replacement = String(Character(scalar))
-            result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
-          }
-        }
-      }
-    }
-    return result
+    SRTParser.decodeHTMLEntities(text)
   }
 
   // MARK: - Seek
@@ -728,7 +542,6 @@ final class TranscriptCoordinator {
     transcriptText = ""
     transcriptSegments = []
     groupedSentences = []
-    wordTimingsData = nil
   }
 }
 

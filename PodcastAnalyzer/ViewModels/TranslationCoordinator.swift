@@ -56,7 +56,6 @@ final class TranslationCoordinator {
   @ObservationIgnored private weak var transcript: TranscriptCoordinator?
 
   @ObservationIgnored private let translationService = TranslationService.shared
-  @ObservationIgnored private let fileStorage = FileStorageManager.shared
   @ObservationIgnored private let subtitleSettings = SubtitleSettingsManager.shared
 
   // MARK: - Task Ownership
@@ -142,8 +141,8 @@ final class TranslationCoordinator {
     availableTranslationsTask?.cancel()
     availableTranslationsTask = Task { [weak self] in
       guard let self else { return }
-      let available = await self.fileStorage.listAvailableTranslations(
-        for: self.episode.title,
+      let available = TranscriptStore.shared.availableTranslationLanguages(
+        episodeTitle: self.episode.title,
         podcastTitle: self.podcastTitle
       )
       guard !Task.isCancelled else { return }

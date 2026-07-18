@@ -81,13 +81,10 @@ final class EpisodeListViewModel {
   /// throttle already applied in DownloadManager's URLSession delegate.
   private(set) var downloadStatesSnapshot: [String: DownloadState] = [:]
 
-  /// Episode keys that have a transcript `.srt` on disk, scanned once when the
-  /// Transcript filter is engaged (nil = not built / stale). The background
-  /// transcription pipeline writes the caption file but does NOT set the
-  /// model's `transcriptSource`/`captionPath`, so the filter must read disk
-  /// truth — the same `EpisodeStatusChecker.hasTranscript` the row badge uses —
-  /// or freshly transcribed episodes stay hidden until their screen is opened.
-  /// Cached so search keystrokes don't re-scan the filesystem.
+  /// Episode keys that have a transcript, scanned once when the Transcript
+  /// filter is engaged (nil = not built / stale) via the same
+  /// `EpisodeStatusChecker.hasTranscript` the row badge uses. Cached so search
+  /// keystrokes don't re-query `TranscriptStore` for every visible episode.
   @ObservationIgnored private var transcriptKeySnapshot: Set<String>?
 
   // MARK: - Cached Filtered Episodes

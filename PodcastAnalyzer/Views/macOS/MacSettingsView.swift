@@ -817,30 +817,12 @@ struct StorageSettingsTab: View {
     ImageCacheUtility.dataCacheTotalSize()
   }
 
-  private nonisolated static func enumerateDirectorySize(at subpath: String, in searchPath: FileManager.SearchPathDirectory) -> Int64 {
-    let fileManager = FileManager.default
-    let baseDir = fileManager.urls(for: searchPath, in: .userDomainMask)[0]
-    let targetDir = baseDir.appendingPathComponent(subpath)
-
-    guard let enumerator = fileManager.enumerator(at: targetDir, includingPropertiesForKeys: [.fileSizeKey])
-    else { return 0 }
-
-    var totalSize: Int64 = 0
-    for case let fileURL as URL in enumerator {
-      if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-        totalSize += Int64(size)
-      }
-    }
-    return totalSize
-  }
-
   private func calculateDownloadedAudioSize() async -> Int64 {
     await FileStorageManager.shared.calculateTotalAudioSize()
   }
 
   private func calculateTranscriptsSize() async -> Int64 {
-    // Reuse the same nonisolated helper for Captions directory
-    Self.enumerateDirectorySize(at: "Captions", in: .documentDirectory)
+    TranscriptStore.shared.totalStorageSize()
   }
 
   private func countAIAnalyses() -> Int {
@@ -902,18 +884,7 @@ struct StorageSettingsTab: View {
     clearingMessage = "transcripts"
 
     Task {
-      let descriptor = FetchDescriptor<EpisodeDownloadModel>(
-        predicate: #Predicate { $0.captionPath != nil }
-      )
-
-      if let episodesWithCaptions = try? modelContext.fetch(descriptor) {
-        for episode in episodesWithCaptions {
-          episode.captionPath = nil
-        }
-        try? modelContext.save()
-      }
-
-      await FileStorageManager.shared.clearAllCaptionFiles()
+      try? TranscriptStore.shared.deleteAll()
 
       isClearingData = false
       clearingMessage = ""

@@ -147,7 +147,6 @@ class EnhancedAudioManager: NSObject {
   private var playerEndedTask: Task<Void, Never>?
   private var playerStalledTask: Task<Void, Never>?
   private var artworkFetchTask: Task<Void, Never>?
-  private var captionLoadTask: Task<Void, Never>?
   private var durationLoadTask: Task<Void, Never>?
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "AudioManager")
 
@@ -979,27 +978,12 @@ private func handleAudioInterruption(_ notification: Notification) {
   // MARK: - Caption Management
 
   private func loadCaptions(episode: PlaybackEpisode) {
-    captionLoadTask?.cancel()
-    captionLoadTask = Task {
-      let fileStorage = FileStorageManager.shared
-
-      if await fileStorage.captionFileExists(for: episode.title, podcastTitle: episode.podcastTitle)
-      {
-        do {
-          let srtContent = try await fileStorage.loadCaptionFile(
-            for: episode.title,
-            podcastTitle: episode.podcastTitle
-          )
-          let segments = parseSRT(srtContent)
-
-          guard !Task.isCancelled else { return }
-          self.captionSegments = segments
-          logger.info("Loaded \(segments.count) caption segments")
-        } catch {
-          logger.error("Failed to load captions: \(error.localizedDescription, privacy: .public)")
-        }
-      }
-    }
+    guard let srtContent = TranscriptStore.shared.loadSRT(
+      episodeTitle: episode.title, podcastTitle: episode.podcastTitle
+    ) else { return }
+    let segments = parseSRT(srtContent)
+    captionSegments = segments
+    logger.info("Loaded \(segments.count) caption segments")
   }
 
   private func parseSRT(_ srtContent: String) -> [CaptionSegment] {
@@ -1585,8 +1569,6 @@ private func handleAudioInterruption(_ notification: Notification) {
     playerStalledTask = nil
     artworkFetchTask?.cancel()
     artworkFetchTask = nil
-    captionLoadTask?.cancel()
-    captionLoadTask = nil
     durationLoadTask?.cancel()
     durationLoadTask = nil
 

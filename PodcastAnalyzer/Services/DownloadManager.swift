@@ -685,10 +685,12 @@ final class DownloadManager {
       do {
         try await fileStorage.deleteAudioFile(for: episodeTitle, podcastTitle: podcastTitle)
 
-        // Also delete captions if they exist
-        if await fileStorage.captionFileExists(for: episodeTitle, podcastTitle: podcastTitle) {
-          try await fileStorage.deleteCaptionFile(for: episodeTitle, podcastTitle: podcastTitle)
-        }
+        // Transcript is intentionally NOT deleted here: it's a cheap SwiftData
+        // row independent of the audio file, and deleting it as a side effect
+        // of freeing disk space would silently break transcript search for
+        // episodes the auto-delete-played sweep cleans up on every app
+        // foreground. Explicit transcript deletion goes through
+        // TranscriptDownloadService.deleteTranscript / "Clear All Transcripts".
 
         inFlightProgress.removeValue(forKey: episodeKey)
         downloadStates[episodeKey] = .notDownloaded

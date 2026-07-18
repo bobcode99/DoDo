@@ -84,7 +84,6 @@ enum TranslationStatus: Equatable {
 actor TranslationService {
   static let shared = TranslationService()
 
-  private let fileStorage = FileStorageManager.shared
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "TranslationService")
 
   // Track active translations for cancellation
@@ -106,116 +105,46 @@ actor TranslationService {
 
   // MARK: - Storage Methods
 
-  /// Save translated segments as bilingual SRT file
+  /// Save translated segments, keyed by target language alongside the base transcript.
   func saveTranslatedSRT(
     segments: [TranscriptSegment],
     episodeTitle: String,
     podcastTitle: String,
     targetLanguage: String
   ) async throws {
-    var srtContent = ""
-
-    for segment in segments {
-      srtContent += "\(segment.id + 1)\n"
-      srtContent += "\(formatSRTTime(segment.startTime)) --> \(formatSRTTime(segment.endTime))\n"
-      srtContent += "\(segment.text)\n"
-      if let translated = segment.translatedText {
-        srtContent += "\(translated)\n"
-      }
-      srtContent += "\n"
+    try await MainActor.run {
+      try TranscriptStore.shared.saveTranslation(
+        segments, targetLanguage: targetLanguage, episodeTitle: episodeTitle, podcastTitle: podcastTitle
+      )
     }
-
-    _ = try await fileStorage.saveTranslatedCaptionFile(
-      content: srtContent,
-      episodeTitle: episodeTitle,
-      podcastTitle: podcastTitle,
-      targetLanguage: targetLanguage
-    )
-
-    self.logger.info("Saved translated SRT for \(episodeTitle) [\(targetLanguage)]")
+    self.logger.info("Saved translation for \(episodeTitle) [\(targetLanguage)]")
   }
 
-  /// Load existing translation and merge with segments
+  /// Load existing translation, merged onto the stored base segments.
   func loadExistingTranslation(
     segments: [TranscriptSegment],
     episodeTitle: String,
     podcastTitle: String,
     targetLanguage: String
   ) async -> [TranscriptSegment]? {
-    guard await fileStorage.translatedCaptionFileExists(
-      for: episodeTitle,
-      podcastTitle: podcastTitle,
-      targetLanguage: targetLanguage
-    ) else {
-      return nil
-    }
-
-    do {
-      let content = try await fileStorage.loadTranslatedCaptionFile(
-        for: episodeTitle,
-        podcastTitle: podcastTitle,
-        targetLanguage: targetLanguage
+    await MainActor.run {
+      TranscriptStore.shared.loadTranslation(
+        targetLanguage: targetLanguage, episodeTitle: episodeTitle, podcastTitle: podcastTitle
       )
-
-      return parseAndMergeBilingualSRT(content, into: segments)
-    } catch {
-      self.logger.error("Failed to load existing translation: \(error.localizedDescription, privacy: .public)")
-      return nil
     }
   }
 
-  /// Check if translated file exists
+  /// Check if a translation exists for this language
   func hasExistingTranslation(
     episodeTitle: String,
     podcastTitle: String,
     targetLanguage: String
   ) async -> Bool {
-    await fileStorage.translatedCaptionFileExists(
-      for: episodeTitle,
-      podcastTitle: podcastTitle,
-      targetLanguage: targetLanguage
-    )
-  }
-
-  /// Parse bilingual SRT and merge translations into segments
-  private func parseAndMergeBilingualSRT(
-    _ content: String,
-    into segments: [TranscriptSegment]
-  ) -> [TranscriptSegment] {
-    var result = segments
-
-    // Parse bilingual SRT format:
-    // 1
-    // 00:00:00,000 --> 00:00:05,000
-    // Original text
-    // Translated text
-    //
-    let blocks = content.components(separatedBy: "\n\n")
-
-    for block in blocks {
-      let lines = block.split(separator: "\n", omittingEmptySubsequences: false)
-      guard lines.count >= 4,
-        let indexNum = Int(lines[0])
-      else { continue }
-
-      // Line 0: Index
-      // Line 1: Timestamp
-      // Line 2: Original text
-      // Line 3: Translated text (if exists)
-
-      let segmentIndex = indexNum - 1
-      guard segmentIndex >= 0 && segmentIndex < result.count else { continue }
-
-      // The translated text is on line 3 (index 3)
-      if lines.count >= 4 {
-        let translatedText = String(lines[3])
-        if !translatedText.isEmpty {
-          result[segmentIndex].translatedText = translatedText
-        }
-      }
+    await MainActor.run {
+      TranscriptStore.shared.hasTranslation(
+        targetLanguage: targetLanguage, episodeTitle: episodeTitle, podcastTitle: podcastTitle
+      )
     }
-
-    return result
   }
 
   // MARK: - Cancellation
@@ -227,17 +156,6 @@ actor TranslationService {
       task.cancel()
       self.logger.info("Cancelled translation for: \(taskKey)")
     }
-  }
-
-  // MARK: - Helpers
-
-  /// Format TimeInterval to SRT timestamp format
-  private func formatSRTTime(_ time: TimeInterval) -> String {
-    let hours = Int(time) / 3600
-    let minutes = (Int(time) % 3600) / 60
-    let seconds = Int(time) % 60
-    let milliseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 1000)
-    return String(format: "%02d:%02d:%02d,%03d", hours, minutes, seconds, milliseconds)
   }
 }
 

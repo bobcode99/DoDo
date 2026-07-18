@@ -45,14 +45,14 @@ enum TranscriptState: Equatable {
 }
 
 /// Represents word-level timing information for accurate highlighting
-struct WordTiming: Equatable, Sendable {
+struct WordTiming: Equatable, Sendable, Codable {
   let word: String
   let startTime: TimeInterval
   let endTime: TimeInterval
 }
 
 /// Represents a single transcript segment with timing information
-struct TranscriptSegment: Identifiable, Equatable {
+struct TranscriptSegment: Identifiable, Equatable, Codable {
   let id: Int
   let startTime: TimeInterval
   let endTime: TimeInterval
@@ -320,7 +320,9 @@ final class EpisodeDetailViewModel {
   var savedDuration: TimeInterval { episodeModel?.duration ?? 0 }
   var lastPlaybackPosition: TimeInterval { episodeModel?.lastPlaybackPosition ?? 0 }
   var playbackProgress: Double { episodeModel?.progress ?? 0 }
-  var transcriptSource: String { episodeModel?.transcriptSource ?? "" }
+  var transcriptSource: String {
+    TranscriptStore.shared.source(episodeTitle: episode.title, podcastTitle: podcastTitle)
+  }
 
   var formattedDuration: String? {
     episode.formattedDuration

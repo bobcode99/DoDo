@@ -71,7 +71,6 @@ class TranscriptManager {
   static let shared = TranscriptManager()
 
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "TranscriptManager")
-  private let fileStorage = FileStorageManager.shared
 
   /// Set at launch so transcription can read each podcast's `transcriptionTerms`
   /// (the SpeechAnalyzer contextual-strings vocabulary) from SwiftData.
@@ -195,23 +194,18 @@ class TranscriptManager {
       }
     }
 
-    Task { [weak self] in
-      guard let self else { return }
-      let exists = await FileStorageManager.shared.captionFileExists(
-        for: episodeTitle, podcastTitle: podcastTitle)
-      if exists {
-        self.logger.info("Auto-transcript skipped — caption already exists: \(episodeTitle)")
-        return
-      }
-      self.queueTranscript(
-        episodeTitle: episodeTitle,
-        podcastTitle: podcastTitle,
-        audioPath: audioPath,
-        audioRemoteURL: audioRemoteURL,
-        language: language,
-        engine: engine
-      )
+    guard !TranscriptStore.shared.exists(episodeTitle: episodeTitle, podcastTitle: podcastTitle) else {
+      logger.info("Auto-transcript skipped — caption already exists: \(episodeTitle)")
+      return
     }
+    queueTranscript(
+      episodeTitle: episodeTitle,
+      podcastTitle: podcastTitle,
+      audioPath: audioPath,
+      audioRemoteURL: audioRemoteURL,
+      language: language,
+      engine: engine
+    )
   }
 
   /// Checks if a transcript is being generated for an episode. Every pending
@@ -531,10 +525,11 @@ class TranscriptManager {
           )
         }
 
-        _ = try await fileStorage.saveCaptionFile(
-          content: srtContent,
+        try TranscriptStore.shared.saveTranscript(
+          srtContent: srtContent,
           episodeTitle: job.episodeTitle,
-          podcastTitle: job.podcastTitle
+          podcastTitle: job.podcastTitle,
+          source: "local"
         )
 
       // MARK: Whisper path (WhisperKit)
@@ -603,10 +598,11 @@ class TranscriptManager {
           )
         }
 
-        _ = try await fileStorage.saveCaptionFile(
-          content: srtContent,
+        try TranscriptStore.shared.saveTranscript(
+          srtContent: srtContent,
           episodeTitle: job.episodeTitle,
-          podcastTitle: job.podcastTitle
+          podcastTitle: job.podcastTitle,
+          source: "local"
         )
 
       // MARK: Yap Server path
@@ -683,10 +679,11 @@ class TranscriptManager {
         activeJobs[job.id]?.status = .transcribing(progress: 1.0)
         yapConsecutiveFailures[job.podcastTitle] = 0
 
-        _ = try await fileStorage.saveCaptionFile(
-          content: srtContent,
+        try TranscriptStore.shared.saveTranscript(
+          srtContent: srtContent,
           episodeTitle: job.episodeTitle,
-          podcastTitle: job.podcastTitle
+          podcastTitle: job.podcastTitle,
+          source: "yapServer"
         )
       }
 

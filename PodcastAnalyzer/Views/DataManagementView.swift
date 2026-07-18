@@ -407,24 +407,7 @@ struct DataManagementView: View {
   }
 
   private func calculateTranscriptsSize() async -> Int64 {
-    await Task.detached(priority: .utility) {
-      let fileManager = FileManager.default
-      let documentsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-      let captionsDir = documentsDir.appendingPathComponent("Captions")
-
-      guard let enumerator = fileManager.enumerator(
-        at: captionsDir,
-        includingPropertiesForKeys: [.fileSizeKey]
-      ) else { return Int64(0) }
-
-      var totalSize: Int64 = 0
-      while let fileURL = enumerator.nextObject() as? URL {
-        if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-          totalSize += Int64(size)
-        }
-      }
-      return totalSize
-    }.value
+    TranscriptStore.shared.totalStorageSize()
   }
 
   private func countAIAnalyses() async -> Int {
@@ -488,25 +471,7 @@ struct DataManagementView: View {
     clearingMessage = "transcripts"
 
     Task {
-      // Clear files
-      await Task.detached(priority: .utility) {
-        let fileManager = FileManager.default
-        let documentsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let captionsDir = documentsDir.appendingPathComponent("Captions")
-        try? fileManager.removeItem(at: captionsDir)
-        try? fileManager.createDirectory(at: captionsDir, withIntermediateDirectories: true)
-      }.value
-
-      // Clear SwiftData records
-      let descriptor = FetchDescriptor<EpisodeDownloadModel>()
-      if let episodes = try? modelContext.fetch(descriptor) {
-        for episode in episodes {
-          if episode.captionPath != nil {
-            episode.captionPath = nil
-          }
-        }
-        try? modelContext.save()
-      }
+      try? TranscriptStore.shared.deleteAll()
       transcriptsSize = "0 KB"
       isClearingData = false
       clearingMessage = ""

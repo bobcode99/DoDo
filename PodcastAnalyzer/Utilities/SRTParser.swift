@@ -10,6 +10,64 @@ import Foundation
 /// Utility for parsing SRT subtitle files and extracting transcript text
 nonisolated struct SRTParser {
 
+    // Pre-compiled numeric HTML entity regex (e.g. &#39;), reused across calls.
+    private static let numericEntityRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: "&#(\\d+);", options: [])
+    }()
+
+    /// Decode common HTML entities that show up in RSS-sourced / host-provided
+    /// transcript text. Applied once at ingestion (`parseSegments`) so every
+    /// consumer of stored segments sees clean text without re-decoding.
+    static func decodeHTMLEntities(_ text: String) -> String {
+        var result = text
+        let entities: [(String, String)] = [
+            ("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+            ("&quot;", "\""), ("&apos;", "'"), ("&#39;", "'"),
+            ("&rsquo;", "'"), ("&lsquo;", "'"), ("&rdquo;", "\""), ("&ldquo;", "\""),
+            ("&ndash;", "\u{2013}"), ("&mdash;", "\u{2014}"), ("&hellip;", "\u{2026}"),
+            ("&#160;", " "),
+        ]
+        for (entity, replacement) in entities {
+            result = result.replacingOccurrences(of: entity, with: replacement)
+        }
+        if let regex = numericEntityRegex {
+            let nsString = result as NSString
+            let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
+            for match in matches.reversed() {
+                if match.numberOfRanges >= 2 {
+                    let codeRange = match.range(at: 1)
+                    if let code = Int(nsString.substring(with: codeRange)),
+                       let scalar = Unicode.Scalar(code) {
+                        let replacement = String(Character(scalar))
+                        result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    /// Serialize segments back to standard SRT text (inverse of `parseSegments`).
+    /// Used where an actual SRT string is needed (e.g. the MCP "srt" format).
+    static func serialize(segments: [TranscriptSegment]) -> String {
+        var lines: [String] = []
+        for (index, segment) in segments.enumerated() {
+            lines.append("\(index + 1)")
+            lines.append("\(formatTimestamp(segment.startTime)) --> \(formatTimestamp(segment.endTime))")
+            lines.append(segment.text)
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func formatTimestamp(_ time: TimeInterval) -> String {
+        let hours = Int(time) / 3600
+        let minutes = (Int(time) % 3600) / 60
+        let seconds = Int(time) % 60
+        let milliseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 1000)
+        return String(format: "%02d:%02d:%02d,%03d", hours, minutes, seconds, milliseconds)
+    }
+
     /// Parse SRT content and extract plain text transcript
     /// - Parameter srtContent: Raw SRT file content
     /// - Returns: Plain text transcript with all text concatenated
@@ -73,7 +131,7 @@ nonisolated struct SRTParser {
                         id: index,
                         startTime: start,
                         endTime: end,
-                        text: CJKTextUtils.joinTexts(currentText)
+                        text: decodeHTMLEntities(CJKTextUtils.joinTexts(currentText))
                     ))
                 }
                 // Reset for next segment
@@ -115,7 +173,7 @@ nonisolated struct SRTParser {
                 id: index,
                 startTime: start,
                 endTime: end,
-                text: currentText.joined(separator: " ")
+                text: decodeHTMLEntities(currentText.joined(separator: " "))
             ))
         }
 

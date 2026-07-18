@@ -298,7 +298,6 @@ final class BackupService {
                 autoDownloadEnabled: be.autoDownloadEnabled,
                 upNextDismissedAt: be.upNextDismissedAt
             )
-            m.transcriptSource = be.transcriptSource
             ctx.insert(m)
             summary.episodesInserted += 1
             return
@@ -318,9 +317,6 @@ final class BackupService {
         if e.notes == nil, let n = be.notes, !n.isEmpty { e.notes = n }
         if let dismissed = be.upNextDismissedAt {
             e.upNextDismissedAt = dismissed
-        }
-        if e.transcriptSource.isEmpty, !be.transcriptSource.isEmpty {
-            e.transcriptSource = be.transcriptSource
         }
         // AntennaPod-style: once auto-download is off, stays off.
         e.autoDownloadEnabled = e.autoDownloadEnabled && be.autoDownloadEnabled
@@ -480,7 +476,6 @@ extension BackupEpisode {
         self.isStarred = m.isStarred
         self.notes = m.notes
         self.upNextDismissedAt = m.upNextDismissedAt
-        self.transcriptSource = m.transcriptSource
         self.autoDownloadEnabled = m.autoDownloadEnabled
     }
 }

@@ -15,7 +15,7 @@ public enum TranscriptDownloadState: Equatable, Sendable {
   case notAvailable
   case available(url: String, type: String)
   case downloading(progress: Double)
-  case downloaded(localPath: String)
+  case downloaded
   case failed(error: String)
 
   public var isAvailable: Bool {
@@ -41,7 +41,6 @@ public actor TranscriptDownloadService {
 
   public static let shared = TranscriptDownloadService()
 
-  private let fileStorage = FileStorageManager.shared
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "TranscriptDownloadService")
 
   // Track active downloads
@@ -51,19 +50,18 @@ public actor TranscriptDownloadService {
 
   // MARK: - Public Methods
 
-  /// Download transcript from URL and save as SRT
+  /// Download transcript from URL, convert to SRT if needed, and store it.
   /// - Parameters:
   ///   - url: URL to the transcript file
   ///   - type: MIME type of the transcript (text/vtt, application/srt, etc.)
-  ///   - episodeTitle: Episode title for file naming
-  ///   - podcastTitle: Podcast title for file naming
-  /// - Returns: Local file URL of the saved SRT file
+  ///   - episodeTitle: Episode title
+  ///   - podcastTitle: Podcast title
   public func downloadTranscript(
     from url: URL,
     type: String,
     episodeTitle: String,
     podcastTitle: String
-  ) async throws -> URL {
+  ) async throws {
     let downloadKey = makeDownloadKey(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
 
     // Check if already downloading
@@ -113,21 +111,24 @@ public actor TranscriptDownloadService {
       }
     }
 
-    // 3. Save to local storage
-    let savedURL = try await fileStorage.saveCaptionFile(
-      content: srtContent,
-      episodeTitle: episodeTitle,
-      podcastTitle: podcastTitle
-    )
+    // 3. Save to structured storage (parsed once here, not re-parsed on every load)
+    try await MainActor.run {
+      try TranscriptStore.shared.saveTranscript(
+        srtContent: srtContent,
+        episodeTitle: episodeTitle,
+        podcastTitle: podcastTitle,
+        source: "rss"
+      )
+    }
 
-    logger.info("Saved transcript to: \(savedURL.lastPathComponent)")
-
-    return savedURL
+    logger.info("Saved RSS transcript for: \(episodeTitle)")
   }
 
   /// Check if a local transcript exists for an episode
   public func hasLocalTranscript(episodeTitle: String, podcastTitle: String) async -> Bool {
-    await fileStorage.captionFileExists(for: episodeTitle, podcastTitle: podcastTitle)
+    await MainActor.run {
+      TranscriptStore.shared.exists(episodeTitle: episodeTitle, podcastTitle: podcastTitle)
+    }
   }
 
   /// Get the download state for an episode
@@ -139,10 +140,7 @@ public actor TranscriptDownloadService {
   ) async -> TranscriptDownloadState {
     // Check if already downloaded
     if await hasLocalTranscript(episodeTitle: episodeTitle, podcastTitle: podcastTitle) {
-      let path = await fileStorage.captionFilePath(
-        for: episodeTitle, podcastTitle: podcastTitle
-      ).path
-      return .downloaded(localPath: path)
+      return .downloaded
     }
 
     // Check if currently downloading
@@ -161,7 +159,9 @@ public actor TranscriptDownloadService {
 
   /// Delete downloaded transcript
   public func deleteTranscript(episodeTitle: String, podcastTitle: String) async throws {
-    try await fileStorage.deleteCaptionFile(for: episodeTitle, podcastTitle: podcastTitle)
+    try await MainActor.run {
+      try TranscriptStore.shared.delete(episodeTitle: episodeTitle, podcastTitle: podcastTitle)
+    }
     logger.info("Deleted transcript for: \(podcastTitle) - \(episodeTitle)")
   }
 

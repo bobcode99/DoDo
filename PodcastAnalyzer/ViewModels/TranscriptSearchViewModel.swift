@@ -117,24 +117,12 @@ final class TranscriptSearchViewModel {
             let episodeTitle = episode.title
             let podcastTitle = podcast.title
 
-            guard await FileStorageManager.shared.captionFileExists(
-                for: episodeTitle,
-                podcastTitle: podcastTitle
-            ) else {
+            guard let segments = await MainActor.run(body: {
+                TranscriptStore.shared.loadSegments(episodeTitle: episodeTitle, podcastTitle: podcastTitle)
+            }) else {
                 continue
             }
 
-            let srtContent: String
-            do {
-                srtContent = try await FileStorageManager.shared.loadCaptionFile(
-                    for: episodeTitle,
-                    podcastTitle: podcastTitle
-                )
-            } catch {
-                continue
-            }
-
-            let segments = SRTParser.parseSegments(from: srtContent)
             let matchingSegments = segments.filter {
                 $0.text.localizedCaseInsensitiveContains(query)
             }

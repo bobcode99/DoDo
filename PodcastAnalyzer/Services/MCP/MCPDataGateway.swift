@@ -214,7 +214,7 @@ final class MCPDataGateway {
     guard let episode = model.podcastInfo.episodes.first(where: { $0.title == episodeTitle })
     else { throw MCPGatewayError.episodeNotFound(podcast: podcastTitle, episode: episodeTitle) }
     let download = try fetchDownload(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
-    let hasTranscriptFlag = await hasTranscript(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
+    let hasTranscriptFlag = hasTranscript(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
     return MCPEpisodeDetailDTO(
       title: episode.title,
       podcastTitle: podcastTitle,
@@ -242,12 +242,7 @@ final class MCPDataGateway {
     episodeTitle: String,
     format: String
   ) async throws -> MCPTranscriptDTO {
-    let srt: String
-    do {
-      srt = try await FileStorageManager.shared.loadCaptionFile(
-        for: episodeTitle, podcastTitle: podcastTitle
-      )
-    } catch {
+    guard let srt = TranscriptStore.shared.loadSRT(episodeTitle: episodeTitle, podcastTitle: podcastTitle) else {
       throw MCPGatewayError.transcriptNotFound(podcast: podcastTitle, episode: episodeTitle)
     }
     let normalized = format.lowercased() == "srt" ? "srt" : "plain"
@@ -332,7 +327,7 @@ final class MCPDataGateway {
     }
 
     // Already has a transcript on disk → no-op.
-    if await hasTranscript(podcastTitle: podcastTitle, episodeTitle: episodeTitle) {
+    if hasTranscript(podcastTitle: podcastTitle, episodeTitle: episodeTitle) {
       return MCPTranscriptJobDTO(
         status: "completed",
         progress: 1.0,
@@ -419,7 +414,7 @@ final class MCPDataGateway {
 
   private func mapEpisodeStub(_ episode: PodcastEpisodeInfo, podcastTitle: String) async -> MCPEpisodeStubDTO {
     let download = try? fetchDownload(podcastTitle: podcastTitle, episodeTitle: episode.title)
-    let hasTranscriptFlag = await hasTranscript(podcastTitle: podcastTitle, episodeTitle: episode.title)
+    let hasTranscriptFlag = hasTranscript(podcastTitle: podcastTitle, episodeTitle: episode.title)
     return MCPEpisodeStubDTO(
       title: episode.title,
       pubDate: episode.pubDate,
@@ -434,10 +429,8 @@ final class MCPDataGateway {
     )
   }
 
-  private func hasTranscript(podcastTitle: String, episodeTitle: String) async -> Bool {
-    await FileStorageManager.shared.captionFileExists(
-      for: episodeTitle, podcastTitle: podcastTitle
-    )
+  private func hasTranscript(podcastTitle: String, episodeTitle: String) -> Bool {
+    TranscriptStore.shared.exists(episodeTitle: episodeTitle, podcastTitle: podcastTitle)
   }
 
   private func hasAIAnalysis(podcastTitle: String, episodeTitle: String) -> Bool {
