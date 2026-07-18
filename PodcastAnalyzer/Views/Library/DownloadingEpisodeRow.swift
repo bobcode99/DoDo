@@ -12,17 +12,6 @@ import SwiftUI
 struct DownloadingEpisodeRow: View {
   let episode: DownloadingEpisode
 
-  private var statusText: String {
-    switch episode.state {
-    case .downloading(let progress):
-      return "\(Int(progress * 100))%"
-    case .finishing:
-      return "Finishing..."
-    default:
-      return ""
-    }
-  }
-
   var body: some View {
     HStack(spacing: 12) {
       CachedAsyncImage(url: URL(string: episode.imageURL ?? "")) { image in
@@ -50,19 +39,19 @@ struct DownloadingEpisodeRow: View {
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
-
-        ProgressView(value: episode.progress)
-          .progressViewStyle(.linear)
-          .tint(.blue)
-          .frame(height: 4)
       }
 
       Spacer()
 
-      Text(statusText)
-        .font(.caption)
-        .foregroundStyle(.blue)
-        .fontWeight(.medium)
+      // Apple-style ring, no numbers. Live-polls in-flight progress so the
+      // row stays current even between the parent's snapshot updates.
+      if case .finishing = episode.state {
+        ProgressView()
+          .scaleEffect(0.7)
+          .frame(width: 22, height: 22)
+      } else {
+        LiveDownloadProgressRing(episodeKey: episode.id, size: 22, lineWidth: 2.5, symbol: "arrow.down")
+      }
     }
     .padding(.vertical, 4)
   }

@@ -21,6 +21,9 @@ struct EpisodeStatusIcons: View {
   let downloadProgress: Double
   let isTranscribing: Bool
   let isCompact: Bool
+  /// When set, the downloading ring live-polls this episode's in-flight
+  /// progress instead of relying on `downloadProgress` snapshots.
+  let episodeKey: String?
 
   init(
     isStarred: Bool = false,
@@ -32,7 +35,8 @@ struct EpisodeStatusIcons: View {
     isDownloading: Bool = false,
     downloadProgress: Double = 0,
     isTranscribing: Bool = false,
-    isCompact: Bool = false
+    isCompact: Bool = false,
+    episodeKey: String? = nil
   ) {
     self.isStarred = isStarred
     self.isDownloaded = isDownloaded
@@ -44,6 +48,7 @@ struct EpisodeStatusIcons: View {
     self.downloadProgress = downloadProgress
     self.isTranscribing = isTranscribing
     self.isCompact = isCompact
+    self.episodeKey = episodeKey
   }
 
   private var hasAnyStatus: Bool {
@@ -53,7 +58,6 @@ struct EpisodeStatusIcons: View {
   // Icon sizes based on compact mode
   private var iconSize: CGFloat { isCompact ? 9 : 10 }
   private var spacing: CGFloat { isCompact ? 3 : 4 }
-  private var downloadIconSize: CGFloat { 6 }
   private var progressFrameSize: CGFloat { 14 }
   private var transcriptIconSize: CGFloat { isCompact ? 7 : 8 }
 
@@ -134,19 +138,16 @@ struct EpisodeStatusIcons: View {
       .foregroundStyle(color)
   }
 
+  @ViewBuilder
   private var downloadProgressView: some View {
-    ZStack {
-      Circle()
-        .stroke(Color.blue.opacity(0.3), lineWidth: 2)
-      Circle()
-        .trim(from: 0, to: downloadProgress)
-        .stroke(Color.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-        .rotationEffect(.degrees(-90))
-      Image(systemName: "arrow.down")
-        .font(.system(size: downloadIconSize, weight: .bold))
-        .foregroundStyle(.blue)
+    // Live ring when the caller supplies the episode key — keeps the ring
+    // current without the caller having to observe progress ticks. Falls back
+    // to the passed-in snapshot value otherwise.
+    if let episodeKey {
+      LiveDownloadProgressRing(episodeKey: episodeKey, size: progressFrameSize, symbol: "arrow.down")
+    } else {
+      DownloadProgressRing(progress: downloadProgress, size: progressFrameSize, symbol: "arrow.down")
     }
-    .frame(width: progressFrameSize, height: progressFrameSize)
   }
 
   private var transcriptProgressView: some View {

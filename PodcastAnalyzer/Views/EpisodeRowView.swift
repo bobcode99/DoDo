@@ -309,25 +309,15 @@ struct EpisodeRowView: View {
         isDisabled: episode.audioURL == nil
       )
 
-      // Download progress
-      if case .downloading(let progress) = downloadState {
-        HStack(spacing: 2) {
-          ProgressView().scaleEffect(0.4)
-          Text("\(Int(progress * 100))%").font(.system(size: 9))
-        }
-        .foregroundStyle(.orange)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .glassEffect(.regular.tint(.orange), in: .capsule)
+      // Download progress — live ring (Apple style, no numbers). The ring
+      // polls DownloadManager.inFlightProgress itself, so it stays current
+      // even between the parent's snapshot rebuilds.
+      if case .downloading = downloadState {
+        LiveDownloadProgressRing(episodeKey: episodeKey, size: 16, symbol: "arrow.down")
       } else if case .finishing = downloadState {
-        HStack(spacing: 2) {
-          ProgressView().scaleEffect(0.4)
-          Text("Saving").font(.system(size: 9))
-        }
-        .foregroundStyle(.blue)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .glassEffect(.regular.tint(.blue), in: .capsule)
+        ProgressView()
+          .scaleEffect(0.5)
+          .frame(width: 16, height: 16)
       }
 
       // Status indicators

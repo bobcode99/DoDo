@@ -11,17 +11,6 @@ struct ActiveDownloadRow: View {
   let episode: DownloadingEpisode
   let downloadManager: DownloadManager
 
-  private var statusText: String {
-    switch episode.state {
-    case .downloading(let progress):
-      return "\(Int(progress * 100))%"
-    case .finishing:
-      return "Saving..."
-    default:
-      return ""
-    }
-  }
-
   var body: some View {
     HStack(spacing: 12) {
       CachedAsyncImage(url: URL(string: episode.imageURL ?? "")) { image in
@@ -49,31 +38,25 @@ struct ActiveDownloadRow: View {
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
-
-        ProgressView(value: episode.progress)
-          .progressViewStyle(.linear)
-          .tint(.blue)
       }
 
       Spacer()
 
-      VStack(alignment: .trailing, spacing: 6) {
-        Text(statusText)
-          .font(.caption)
-          .foregroundStyle(.blue)
-          .fontWeight(.medium)
-
-        if case .downloading = episode.state {
-          Button("Cancel") {
-            downloadManager.cancelDownload(
-              episodeTitle: episode.episodeTitle,
-              podcastTitle: episode.podcastTitle
-            )
-          }
-          .font(.caption)
-          .foregroundStyle(.red)
-          .buttonStyle(.plain)
+      // Apple-style: tap the ring to cancel (stop symbol inside), no numbers.
+      if case .finishing = episode.state {
+        ProgressView()
+          .scaleEffect(0.7)
+          .frame(width: 22, height: 22)
+      } else {
+        Button {
+          downloadManager.cancelDownload(
+            episodeTitle: episode.episodeTitle,
+            podcastTitle: episode.podcastTitle
+          )
+        } label: {
+          LiveDownloadProgressRing(episodeKey: episode.id, size: 22, lineWidth: 2.5, symbol: "stop.fill")
         }
+        .buttonStyle(.plain)
       }
     }
     .padding(.vertical, 4)

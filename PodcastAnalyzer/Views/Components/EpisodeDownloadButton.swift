@@ -20,28 +20,18 @@ struct EpisodeDownloadButton: View {
                 }
                 .buttonStyle(.plain)
 
-            case .downloading(let progress):
+            case .downloading:
+                // Live ring polls in-flight progress itself — the computed
+                // downloadState only refreshes on state transitions, so a
+                // static ring here would freeze at 0%.
                 Button(action: { viewModel.cancelDownload() }) {
-                    HStack(spacing: 6) {
-                        // Circular progress indicator
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                                .frame(width: 16, height: 16)
-                            Circle()
-                                .trim(from: 0, to: CGFloat(progress))
-                                .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                                .frame(width: 16, height: 16)
-                                .rotationEffect(.degrees(-90))
-                            Image(systemName: "xmark")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        Text("\(Int(progress * 100))%")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.white)
-                    }
+                    LiveDownloadProgressRing(
+                        episodeTitle: viewModel.episode.title,
+                        podcastTitle: viewModel.podcastTitle,
+                        size: 16,
+                        color: .white,
+                        symbol: "xmark"
+                    )
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(Color.orange)

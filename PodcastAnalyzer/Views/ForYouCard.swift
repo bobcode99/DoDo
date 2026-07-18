@@ -62,7 +62,8 @@ struct ForYouCard: View {
             isDownloading: observer.isDownloading,
             downloadProgress: observer.downloadProgress,
             isTranscribing: observer.isTranscribing,
-            isCompact: true
+            isCompact: true,
+            episodeKey: observer.episodeKey
           )
         }
       }

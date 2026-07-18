@@ -379,8 +379,8 @@ private struct DownloadActionView: View {
 
     var body: some View {
         switch viewModel.downloadState {
-        case .downloading(let progress):
-            progressRow(progress: progress)
+        case .downloading:
+            progressRow
         case .finishing:
             finishingRow
         case .failed(let error):
@@ -395,19 +395,20 @@ private struct DownloadActionView: View {
         }
     }
 
-    private func progressRow(progress: Double) -> some View {
+    private var progressRow: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
+                // Live ring — viewModel.downloadState only changes on state
+                // transitions, so progress must be read live, not captured.
+                LiveDownloadProgressRing(
+                    episodeTitle: viewModel.episode.title,
+                    podcastTitle: viewModel.podcastTitle,
+                    size: 18,
+                    symbol: "arrow.down"
+                )
                 Text("Downloading…")
                     .font(.subheadline)
-                Spacer(minLength: 8)
-                Text("\(Int(progress * 100))%")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
             }
-            ProgressView(value: progress)
-                .progressViewStyle(.linear)
             Button("Cancel", role: .cancel) { viewModel.cancelDownload() }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
