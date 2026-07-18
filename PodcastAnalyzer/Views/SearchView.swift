@@ -45,21 +45,28 @@ struct PodcastSearchView: View {
                 .padding(.top, 8)
 
             // Search results
-            switch selectedTab {
-            case .transcripts:
-                transcriptResultsView
-            default:
-                if searchText.isEmpty {
-                    emptySearchView
-                } else if selectedTab == .applePodcasts {
-                    applePodcastsResultsView
-                } else {
-                    libraryResultsView
+            Group {
+                switch selectedTab {
+                case .transcripts:
+                    transcriptResultsView
+                default:
+                    if searchText.isEmpty {
+                        emptySearchView
+                    } else if selectedTab == .applePodcasts {
+                        applePodcastsResultsView
+                    } else {
+                        libraryResultsView
+                    }
                 }
             }
+            // Close the keyboard the moment any result row is tapped —
+            // otherwise it stays up across the navigation push. Simultaneous,
+            // so NavigationLinks/buttons still receive the tap.
+            .simultaneousGesture(TapGesture().onEnded { isSearchFocused = false })
         }
         .navigationTitle("Search")
         .searchable(text: $searchText, prompt: searchPrompt)
+        .searchFocused($isSearchFocused)
         .onSubmit(of: .search) {
             if selectedTab == .applePodcasts {
                 viewModel.searchText = searchText
@@ -462,9 +469,11 @@ struct LibraryPodcastRow: View {
     let podcastModel: PodcastInfoModel
 
     var body: some View {
-        NavigationLink {
-            EpisodeListView(podcastModel: podcastModel)
-        } label: {
+        // Value-based route: this list lives in a path-bound NavigationStack,
+        // and a view-destination NavigationLink push is invisible to the path —
+        // value links inside the pushed screen (transcript, AI insights) then
+        // silently do nothing.
+        NavigationLink(value: PodcastBrowseRoute(podcastModel: podcastModel)) {
             HStack(spacing: 12) {
                 // Artwork - using CachedAsyncImage for better performance
                 CachedArtworkImage(urlString: podcastModel.podcastInfo.imageURL, size: 56, cornerRadius: 8)
@@ -503,14 +512,13 @@ struct LibraryEpisodeRow: View {
     let onPlay: () -> Void
 
     var body: some View {
-        NavigationLink {
-            EpisodeDetailView(
-                episode: episode,
-                podcastTitle: podcastTitle,
-                fallbackImageURL: podcastImageURL,
-                podcastLanguage: podcastLanguage
-            )
-        } label: {
+        // Value-based route — see LibraryPodcastRow comment.
+        NavigationLink(value: EpisodeDetailRoute(
+            episode: episode,
+            podcastTitle: podcastTitle,
+            fallbackImageURL: podcastImageURL,
+            podcastLanguage: podcastLanguage
+        )) {
             HStack(spacing: 12) {
                 CachedArtworkImage(urlString: episode.imageURL ?? podcastImageURL, size: 56, cornerRadius: 8)
 

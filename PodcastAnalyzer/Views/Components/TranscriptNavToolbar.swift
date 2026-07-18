@@ -14,6 +14,7 @@ struct TranscriptNavToolbar: ToolbarContent {
     @Bindable var viewModel: EpisodeDetailViewModel
     @Binding var showSearchSheet: Bool
     @Binding var showCopySuccess: Bool
+    @Binding var showSRTImporter: Bool
 
     var onShowRegenerateConfirmation: () -> Void
 
@@ -74,6 +75,11 @@ struct TranscriptNavToolbar: ToolbarContent {
                 } label: {
                     Label("Share for DoDo", systemImage: "square.and.arrow.up.on.square")
                 }
+                Button {
+                    showSRTImporter = true
+                } label: {
+                    Label("Import Subtitles (.srt)", systemImage: "square.and.arrow.down")
+                }
             }
 
             Section("Copy") {
@@ -123,6 +129,7 @@ private struct TranscriptNavToolbarPreviewHost: View {
     )
     @State private var showSearchSheet = false
     @State private var showCopySuccess = false
+    @State private var showSRTImporter = false
 
     var body: some View {
         NavigationStack {
@@ -135,6 +142,7 @@ private struct TranscriptNavToolbarPreviewHost: View {
                         viewModel: viewModel,
                         showSearchSheet: $showSearchSheet,
                         showCopySuccess: $showCopySuccess,
+                        showSRTImporter: $showSRTImporter,
                         onShowRegenerateConfirmation: {}
                     )
                 }

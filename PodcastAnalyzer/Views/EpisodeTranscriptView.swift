@@ -17,6 +17,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EpisodeTranscriptView: View {
     @Bindable var viewModel: EpisodeDetailViewModel
@@ -29,6 +30,8 @@ struct EpisodeTranscriptView: View {
     @State private var showRegenerateConfirmation = false
     @State private var showSearchSheet = false
     @State private var showCopySuccess = false
+    @State private var showSRTImporter = false
+    @State private var srtImportError: String?
 
     /// Search query cached for the lifetime of this view so reopening the
     /// search sheet recalls the last text. Cleared on view deinit (it's
@@ -171,8 +174,30 @@ struct EpisodeTranscriptView: View {
                 viewModel: viewModel,
                 showSearchSheet: $showSearchSheet,
                 showCopySuccess: $showCopySuccess,
+                showSRTImporter: $showSRTImporter,
                 onShowRegenerateConfirmation: onShowRegenerateConfirmation
             )
+        }
+        // SRT files often carry no specific UTType (public.data), so accept
+        // broadly and validate by parsing instead of by content type.
+        .fileImporter(isPresented: $showSRTImporter, allowedContentTypes: [.item]) { result in
+            switch result {
+            case .success(let url):
+                importSRT(from: url)
+            case .failure(let error):
+                srtImportError = error.localizedDescription
+            }
+        }
+        .alert(
+            "Import Failed",
+            isPresented: Binding(
+                get: { srtImportError != nil },
+                set: { if !$0 { srtImportError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(srtImportError ?? "")
         }
         .onChange(of: showRegenerateConfirmation) { _, isShowing in
             if isShowing {
@@ -323,4 +348,30 @@ struct EpisodeTranscriptView: View {
             .padding()
     }
 
+    // MARK: - SRT Import
+
+    /// Imports a user-picked .srt file as this episode's transcript.
+    /// Validates by parsing — an unparseable file must not overwrite an
+    /// existing transcript with an empty one.
+    private func importSRT(from url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+
+        guard let content = try? String(contentsOf: url, encoding: .utf8),
+              !SRTParser.parseSegments(from: content).isEmpty else {
+            srtImportError = "Couldn't read subtitles from “\(url.lastPathComponent)”. Make sure it's a valid SRT file."
+            return
+        }
+        do {
+            try TranscriptStore.shared.saveTranscript(
+                srtContent: content,
+                episodeTitle: viewModel.episode.title,
+                podcastTitle: viewModel.podcastTitle,
+                source: "imported"
+            )
+            viewModel.transcript.checkTranscriptStatus()
+        } catch {
+            srtImportError = error.localizedDescription
+        }
+    }
 }
