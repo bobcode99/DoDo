@@ -59,10 +59,10 @@ struct PodcastSearchView: View {
                     }
                 }
             }
-            // Close the keyboard the moment any result row is tapped —
-            // otherwise it stays up across the navigation push. Simultaneous,
-            // so NavigationLinks/buttons still receive the tap.
-            .simultaneousGesture(TapGesture().onEnded { isSearchFocused = false })
+            // Close the keyboard when a result row pushes a screen. Done in
+            // onDisappear (not a tap gesture — a simultaneous TapGesture on a
+            // List swallows row selection and kills navigation entirely).
+            .onDisappear { isSearchFocused = false }
         }
         .navigationTitle("Search")
         .searchable(text: $searchText, prompt: searchPrompt)
