@@ -7,21 +7,16 @@
 
 import SwiftData
 import SwiftUI
-
-
-// MARK: - Search Tab Enum
-
-enum SearchTab: String, CaseIterable {
-    case applePodcasts = "Apple Podcasts"
-    case library = "Library"
-    case transcripts = "Transcripts"
-}
+#if os(iOS)
+import UIKit
+#endif
 
 // MARK: - Main Search View
 
 struct PodcastSearchView: View {
     @State private var viewModel = PodcastSearchViewModel()
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.tabNavigationCoordinator) private var tabCoordinator
     @Query(filter: #Predicate<PodcastInfoModel> { $0.isSubscribed == true })
     private var subscribedPodcasts: [PodcastInfoModel]
 
@@ -45,28 +40,31 @@ struct PodcastSearchView: View {
                 .padding(.top, 8)
 
             // Search results
-            Group {
-                switch selectedTab {
-                case .transcripts:
-                    transcriptResultsView
-                default:
-                    if searchText.isEmpty {
-                        emptySearchView
-                    } else if selectedTab == .applePodcasts {
-                        applePodcastsResultsView
-                    } else {
-                        libraryResultsView
-                    }
+            switch selectedTab {
+            case .transcripts:
+                transcriptResultsView
+            default:
+                if searchText.isEmpty {
+                    emptySearchView
+                } else if selectedTab == .applePodcasts {
+                    applePodcastsResultsView
+                } else {
+                    libraryResultsView
                 }
             }
-            // Close the keyboard when a result row pushes a screen. Done in
-            // onDisappear (not a tap gesture — a simultaneous TapGesture on a
-            // List swallows row selection and kills navigation entirely).
-            .onDisappear { isSearchFocused = false }
         }
         .navigationTitle("Search")
         .searchable(text: $searchText, prompt: searchPrompt)
         .searchFocused($isSearchFocused)
+        // Hide the keyboard when a tapped result pushes onto this tab's
+        // NavigationPath. Dropping the focus binding alone doesn't reliably
+        // resign the search field mid-push, so also resign the first
+        // responder directly.
+        .onChange(of: tabCoordinator?.searchRouter.path.count ?? 0) { oldCount, newCount in
+            if newCount > oldCount {
+                dismissKeyboard()
+            }
+        }
         .onSubmit(of: .search) {
             if selectedTab == .applePodcasts {
                 viewModel.searchText = searchText
@@ -309,6 +307,15 @@ struct PodcastSearchView: View {
 
     // MARK: - Helper Methods
 
+    private func dismissKeyboard() {
+        isSearchFocused = false
+        #if os(iOS)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
+        #endif
+    }
+
     private func isSubscribed(_ podcast: Podcast) -> Bool {
         subscribedPodcasts.contains { $0.podcastInfo.title == podcast.collectionName }
     }
@@ -399,196 +406,6 @@ struct PodcastSearchView: View {
             }
         }
         filteredEpisodes = episodeResults
-    }
-}
-
-// MARK: - Apple Podcast Row
-
-struct ApplePodcastRow: View {
-    let podcast: Podcast
-    let isSubscribed: Bool
-    let onSubscribe: () -> Void
-
-    @State private var isSubscribing = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Artwork - using CachedAsyncImage for better performance
-            CachedArtworkImage(urlString: podcast.artworkUrl100, size: 56, cornerRadius: 8)
-
-            // Info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(podcast.collectionName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-
-                Text("Show · \(podcast.artistName)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            // Subscribe button or checkmark
-            if isSubscribed {
-                Image(systemName: "checkmark")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.green)
-            } else if isSubscribing {
-                ProgressView()
-                    .scaleEffect(0.8)
-            } else {
-                Button("Subscribe", systemImage: "plus") {
-                    isSubscribing = true
-                    onSubscribe()
-                    // Reset after a delay (subscription will update via @Query)
-                    Task {
-                        try? await Task.sleep(for: .seconds(2))
-                        isSubscribing = false
-                    }
-                }
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .foregroundStyle(.blue)
-                .buttonStyle(.plain)
-            }
-
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-}
-
-// MARK: - Library Podcast Row
-
-struct LibraryPodcastRow: View {
-    let podcastModel: PodcastInfoModel
-
-    var body: some View {
-        // Value-based route: this list lives in a path-bound NavigationStack,
-        // and a view-destination NavigationLink push is invisible to the path —
-        // value links inside the pushed screen (transcript, AI insights) then
-        // silently do nothing.
-        NavigationLink(value: PodcastBrowseRoute(podcastModel: podcastModel)) {
-            HStack(spacing: 12) {
-                // Artwork - using CachedAsyncImage for better performance
-                CachedArtworkImage(urlString: podcastModel.podcastInfo.imageURL, size: 56, cornerRadius: 8)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(podcastModel.podcastInfo.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-
-                    Text("Show · \(podcastModel.podcastInfo.episodes.count) episodes")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "checkmark")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-            }
-            .padding(.vertical, 4)
-        }
-        .contentShape(Rectangle())
-    }
-}
-
-// MARK: - Library Episode Row
-
-struct LibraryEpisodeRow: View {
-    let episode: PodcastEpisodeInfo
-    let podcastTitle: String
-    let podcastImageURL: String
-    let podcastLanguage: String
-    let onPlay: () -> Void
-
-    var body: some View {
-        // Value-based route — see LibraryPodcastRow comment.
-        NavigationLink(value: EpisodeDetailRoute(
-            episode: episode,
-            podcastTitle: podcastTitle,
-            fallbackImageURL: podcastImageURL,
-            podcastLanguage: podcastLanguage
-        )) {
-            HStack(spacing: 12) {
-                CachedArtworkImage(urlString: episode.imageURL ?? podcastImageURL, size: 56, cornerRadius: 8)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) {
-                        if let date = episode.pubDate {
-                            Text(date.formatted(date: .abbreviated, time: .omitted))
-                        }
-                        if let duration = episode.formattedDuration {
-                            Text("·")
-                            Text(duration)
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                    Text(episode.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                if episode.audioURL != nil {
-                    Button(action: onPlay) {
-                        Image(systemName: "play.fill")
-                            .font(.title3)
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Color.purple)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.vertical, 4)
-        }
-        .contentShape(Rectangle())
-    }
-}
-
-// MARK: - Search Tab Button
-
-struct SearchTabButton: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            tabLabel
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private var tabLabel: some View {
-        let base = Text(title)
-            .font(.subheadline)
-            .fontWeight(isSelected ? .semibold : .regular)
-            .foregroundStyle(isSelected ? .primary : .secondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-
-        if isSelected {
-            base.glassEffect(Glass.regular.interactive(), in: .rect(cornerRadius: 8))
-        } else {
-            base
-        }
     }
 }
 
