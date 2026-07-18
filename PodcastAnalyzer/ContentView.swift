@@ -67,11 +67,7 @@ struct iOSContentView: View {
         }
       }
 
-      // Regular tab, NOT Tab(role: .search): the tab-bar-hosted search field
-      // orphans its keyboard when a result pushes onto the NavigationStack —
-      // no dismissal API (isPresented, dismissSearch, endEditing) can resign
-      // it afterwards. Nav-bar search dismisses normally on push.
-      Tab("Search", systemImage: "magnifyingglass") {
+      Tab(role: .search) {
         NavigationStack(path: $coordinator.searchRouter.path) {
           PodcastSearchView()
             .navigationDestinations()

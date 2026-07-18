@@ -3,19 +3,19 @@
 //  PodcastAnalyzer
 //
 //  Search result rows for the Library tab: a subscribed podcast and a
-//  matching episode. Both push value-based routes — this list lives in a
-//  path-bound NavigationStack, and a view-destination NavigationLink push
-//  is invisible to the path, which breaks value links (transcript, AI
-//  insights) inside the pushed screen.
+//  matching episode. Rows are plain buttons — the parent decides how to
+//  navigate (SearchView dismisses the tab-bar search keyboard before
+//  pushing; see PodcastSearchView.navigate).
 //
 
 import SwiftUI
 
 struct LibraryPodcastRow: View {
     let podcastModel: PodcastInfoModel
+    let onOpen: () -> Void
 
     var body: some View {
-        NavigationLink(value: PodcastBrowseRoute(podcastModel: podcastModel)) {
+        Button(action: onOpen) {
             HStack(spacing: 12) {
                 CachedArtworkImage(urlString: podcastModel.podcastInfo.imageURL, size: 56, cornerRadius: 8)
 
@@ -36,10 +36,15 @@ struct LibraryPodcastRow: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
     }
 }
 
@@ -49,14 +54,10 @@ struct LibraryEpisodeRow: View {
     let podcastImageURL: String
     let podcastLanguage: String
     let onPlay: () -> Void
+    let onOpen: () -> Void
 
     var body: some View {
-        NavigationLink(value: EpisodeDetailRoute(
-            episode: episode,
-            podcastTitle: podcastTitle,
-            fallbackImageURL: podcastImageURL,
-            podcastLanguage: podcastLanguage
-        )) {
+        Button(action: onOpen) {
             HStack(spacing: 12) {
                 CachedArtworkImage(urlString: episode.imageURL ?? podcastImageURL, size: 56, cornerRadius: 8)
 
@@ -92,9 +93,14 @@ struct LibraryEpisodeRow: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
     }
 }

@@ -55,21 +55,7 @@ struct PodcastSearchView: View {
 
         }
         .navigationTitle("Search")
-        #if os(iOS)
-        // navigationBarDrawer placement keeps the field out of the tab bar:
-        // the iOS 26 tab-bar-hosted search field orphans its keyboard on a
-        // NavigationStack push (nothing — isPresented, dismissSearch,
-        // endEditing — can resign it afterwards). Nav-bar placement gets the
-        // stock behavior back: pushing a screen hides the field and keyboard.
-        .searchable(
-            text: $searchText,
-            isPresented: $searchPresented,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: searchPrompt
-        )
-        #else
         .searchable(text: $searchText, isPresented: $searchPresented, prompt: searchPrompt)
-        #endif
         // Hide the keyboard when a tapped result pushes onto this tab's
         // NavigationPath. Deactivating the search presentation is the only
         // thing that reliably dismisses the search field's keyboard —
@@ -194,24 +180,32 @@ struct PodcastSearchView: View {
             } else {
                 List {
                     ForEach(viewModel.podcasts, id: \.collectionId) { podcast in
-                        NavigationLink(value: PodcastBrowseRoute(
-                            podcastName: podcast.collectionName,
-                            artworkURL: podcast.artworkUrl100 ?? "",
-                            artistName: podcast.artistName,
-                            collectionId: String(podcast.collectionId),
-                            applePodcastURL: nil
-                        )) {
-                            ApplePodcastRow(
-                                podcast: podcast,
-                                isSubscribed: isSubscribed(podcast),
-                                onSubscribe: { subscribeToPodcast(podcast) }
-                            )
+                        Button {
+                            navigate(PodcastBrowseRoute(
+                                podcastName: podcast.collectionName,
+                                artworkURL: podcast.artworkUrl100 ?? "",
+                                artistName: podcast.artistName,
+                                collectionId: String(podcast.collectionId),
+                                applePodcastURL: nil
+                            ))
+                        } label: {
+                            HStack {
+                                ApplePodcastRow(
+                                    podcast: podcast,
+                                    isSubscribed: isSubscribed(podcast),
+                                    onSubscribe: { subscribeToPodcast(podcast) }
+                                )
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
                 }
                 .listStyle(.plain)
-                .scrollDismissesKeyboard(.immediately)
+
             }
         }
     }
@@ -233,7 +227,9 @@ struct PodcastSearchView: View {
                     if !filteredPodcasts.isEmpty {
                         Section {
                             ForEach(filteredPodcasts) { podcastModel in
-                                LibraryPodcastRow(podcastModel: podcastModel)
+                                LibraryPodcastRow(podcastModel: podcastModel) {
+                                    navigate(PodcastBrowseRoute(podcastModel: podcastModel))
+                                }
                             }
                         }
                     }
@@ -249,6 +245,14 @@ struct PodcastSearchView: View {
                                     podcastLanguage: item.podcastLanguage,
                                     onPlay: {
                                       playEpisode(item.episode, podcastTitle: item.podcastTitle, imageURL: item.podcastImageURL)
+                                    },
+                                    onOpen: {
+                                        navigate(EpisodeDetailRoute(
+                                            episode: item.episode,
+                                            podcastTitle: item.podcastTitle,
+                                            fallbackImageURL: item.podcastImageURL,
+                                            podcastLanguage: item.podcastLanguage
+                                        ))
                                     }
                                 )
                             }
@@ -256,7 +260,7 @@ struct PodcastSearchView: View {
                     }
                 }
                 .listStyle(.plain)
-                .scrollDismissesKeyboard(.immediately)
+
             }
         }
     }
@@ -304,7 +308,7 @@ struct PodcastSearchView: View {
                     }
                 }
                 .listStyle(.plain)
-                .scrollDismissesKeyboard(.immediately)
+
             }
         }
     }
@@ -332,6 +336,32 @@ struct PodcastSearchView: View {
                 window.endEditing(true)
             }
         }
+        #endif
+    }
+
+    /// Dismisses the keyboard first, then pushes after a beat. The tab-bar
+    /// search field (Tab role .search) orphans its keyboard if it is still
+    /// first responder when a push starts — nothing can dismiss it afterwards.
+    /// Resigning while the field is still frontmost works normally, so order
+    /// matters: dismiss, let it land, then navigate.
+    /// Pushes a result's route. When the tab-bar search field (Tab role
+    /// .search) is active, the keyboard must be dismissed BEFORE the push:
+    /// pushing while the field is first responder orphans the keyboard
+    /// (nothing can dismiss it afterwards), and pushing during the search
+    /// collapse animation gets silently dropped by the NavigationStack. So:
+    /// dismiss, wait out the collapse, then push. Verified in simulator.
+    private func navigate(_ route: any Hashable) {
+        #if os(iOS)
+        if searchPresented {
+            dismissKeyboard()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                tabCoordinator?.searchRouter.push(route)
+            }
+        } else {
+            tabCoordinator?.searchRouter.push(route)
+        }
+        #else
+        tabCoordinator?.searchRouter.push(route)
         #endif
     }
 
