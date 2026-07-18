@@ -142,10 +142,24 @@ struct PodcastAnalyzerApp: App {
     #endif
   }
 
+  /// Set after a ".dodotranscript" file import attempt; drives the result alert.
+  @State private var transcriptImportMessage: String?
+
   var body: some Scene {
     WindowGroup {
       ContentView()
         .environment(\.locale, languageManager.locale)
+        .alert(
+          "Transcript Import",
+          isPresented: Binding(
+            get: { transcriptImportMessage != nil },
+            set: { if !$0 { transcriptImportMessage = nil } }
+          )
+        ) {
+          Button("OK", role: .cancel) {}
+        } message: {
+          Text(transcriptImportMessage ?? "")
+        }
         .task {
           // Critical: initialize playback state and sync manager first
           if PlaybackStateCoordinator.shared == nil {
@@ -304,6 +318,21 @@ struct PodcastAnalyzerApp: App {
 
   private func handleIncomingURL(_ url: URL) {
     logger.info("Received URL: \(url.absoluteString)")
+
+    // ".dodotranscript" file from another DoDo install (AirDrop, WhatsApp…).
+    if url.pathExtension == TranscriptStore.shareFileExtension {
+      let accessing = url.startAccessingSecurityScopedResource()
+      defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+      do {
+        let data = try Data(contentsOf: url)
+        let (podcast, episode) = try TranscriptStore.shared.importShareFile(data: data)
+        transcriptImportMessage = "Transcript for “\(episode)” (\(podcast)) imported."
+      } catch {
+        logger.error("Transcript import failed: \(error.localizedDescription, privacy: .public)")
+        transcriptImportMessage = "Couldn't import transcript: \(error.localizedDescription)"
+      }
+      return
+    }
 
     // Handle widget deep links
     if url.scheme == "podcastanalyzer" {

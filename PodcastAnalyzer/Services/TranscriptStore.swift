@@ -158,6 +158,92 @@ final class TranscriptStore {
     return Set(Self.decodeTranslations(model.translationsJSON).keys)
   }
 
+  // MARK: - Sharing
+
+  /// Portable transcript file (".dodotranscript") exchanged between DoDo
+  /// installs. Carries the stored JSON columns verbatim — no re-encoding —
+  /// so import reproduces the exact transcript (word timings + translations
+  /// included) without regenerating.
+  struct TranscriptExportFile: Codable {
+    var version: Int = 1
+    var podcastTitle: String
+    var episodeTitle: String
+    var source: String
+    var segmentsJSON: String
+    var wordTimingsJSON: String?
+    var translationsJSON: String?
+    var generatedAt: Date
+  }
+
+  static let shareFileExtension = "dodotranscript"
+
+  /// Writes a temp ".dodotranscript" file for the share sheet. Nil if the
+  /// episode has no transcript.
+  func exportShareFile(episodeTitle: String, podcastTitle: String) -> URL? {
+    guard let model = fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle) else { return nil }
+    let payload = TranscriptExportFile(
+      podcastTitle: podcastTitle,
+      episodeTitle: episodeTitle,
+      source: model.source,
+      segmentsJSON: model.segmentsJSON,
+      wordTimingsJSON: model.wordTimingsJSON,
+      translationsJSON: model.translationsJSON,
+      generatedAt: model.generatedAt
+    )
+    guard let data = try? JSONEncoder().encode(payload) else { return nil }
+    return writeTempFile(data: data, episodeTitle: episodeTitle, ext: Self.shareFileExtension)
+  }
+
+  /// Writes a temp ".srt" file for sharing to non-DoDo apps (WhatsApp, mail…).
+  func exportSRTFile(episodeTitle: String, podcastTitle: String) -> URL? {
+    guard let srt = loadSRT(episodeTitle: episodeTitle, podcastTitle: podcastTitle),
+          let data = srt.data(using: .utf8) else { return nil }
+    return writeTempFile(data: data, episodeTitle: episodeTitle, ext: "srt")
+  }
+
+  /// Imports a ".dodotranscript" file received from another install, upserting
+  /// the row keyed by the sender's podcast/episode titles (same composite key
+  /// both apps derive from the RSS feed). Returns the episode it landed on.
+  @discardableResult
+  func importShareFile(data: Data) throws -> (podcastTitle: String, episodeTitle: String) {
+    let payload = try JSONDecoder().decode(TranscriptExportFile.self, from: data)
+    guard let context else { throw CocoaError(.fileReadUnknown) }
+
+    let model: EpisodeTranscriptModel
+    if let existing = fetch(episodeTitle: payload.episodeTitle, podcastTitle: payload.podcastTitle) {
+      model = existing
+    } else {
+      model = EpisodeTranscriptModel(
+        episodeId: makeId(episodeTitle: payload.episodeTitle, podcastTitle: payload.podcastTitle))
+      context.insert(model)
+    }
+    model.segmentsJSON = payload.segmentsJSON
+    model.wordTimingsJSON = payload.wordTimingsJSON
+    model.translationsJSON = payload.translationsJSON
+    model.source = payload.source
+    model.generatedAt = payload.generatedAt
+    model.plainText = Self.decodeSegments(payload.segmentsJSON).map(\.text).joined(separator: " ")
+    try context.save()
+    return (payload.podcastTitle, payload.episodeTitle)
+  }
+
+  private func writeTempFile(data: Data, episodeTitle: String, ext: String) -> URL? {
+    let safeName = episodeTitle
+      .components(separatedBy: CharacterSet.alphanumerics.inverted)
+      .filter { !$0.isEmpty }
+      .joined(separator: "_")
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent(safeName.isEmpty ? "transcript" : safeName)
+      .appendingPathExtension(ext)
+    do {
+      try data.write(to: url, options: .atomic)
+      return url
+    } catch {
+      logger.error("Failed to write share file: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
+  }
+
   // MARK: - Delete
 
   func delete(episodeTitle: String, podcastTitle: String) throws {

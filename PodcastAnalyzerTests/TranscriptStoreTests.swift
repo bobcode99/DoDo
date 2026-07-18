@@ -108,6 +108,20 @@ struct TranscriptStoreTests {
         )
         #expect(!store.hasTranslation(targetLanguage: "fr", episodeTitle: "Ep 1", podcastTitle: "Show"))
 
+        // Share round-trip: export → delete → import restores the transcript
+        // (same container reused — separate containers per test crash SwiftData
+        // here, see file header).
+        let shareURL = try #require(store.exportShareFile(episodeTitle: "Ep 1", podcastTitle: "Show"))
+        #expect(shareURL.pathExtension == TranscriptStore.shareFileExtension)
+        let shareData = try Data(contentsOf: shareURL)
+        try store.delete(episodeTitle: "Ep 1", podcastTitle: "Show")
+        let imported = try store.importShareFile(data: shareData)
+        #expect(imported.podcastTitle == "Show")
+        #expect(imported.episodeTitle == "Ep 1")
+        let importedSegments = store.loadSegments(episodeTitle: "Ep 1", podcastTitle: "Show")
+        #expect(importedSegments?.count == 2)
+        #expect(importedSegments?.first?.text == "Hello world.")
+
         // Delete removes just the targeted episode; deleteAll clears everything.
         try store.saveTranscript(
             srtContent: Self.sampleSRT, episodeTitle: "Ep 2", podcastTitle: "Show B", source: "local"

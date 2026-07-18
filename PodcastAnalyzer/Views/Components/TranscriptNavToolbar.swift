@@ -55,6 +55,27 @@ struct TranscriptNavToolbar: ToolbarContent {
                 )
             }
 
+            Section("Share") {
+                Button {
+                    if let url = TranscriptStore.shared.exportSRTFile(
+                        episodeTitle: viewModel.episode.title, podcastTitle: viewModel.podcastTitle
+                    ) {
+                        PlatformShareSheet.share(url: url)
+                    }
+                } label: {
+                    Label("Share as Subtitles (.srt)", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    if let url = TranscriptStore.shared.exportShareFile(
+                        episodeTitle: viewModel.episode.title, podcastTitle: viewModel.podcastTitle
+                    ) {
+                        PlatformShareSheet.share(url: url)
+                    }
+                } label: {
+                    Label("Share for DoDo", systemImage: "square.and.arrow.up.on.square")
+                }
+            }
+
             Section("Copy") {
                 Button {
                     viewModel.transcript.copyTranscriptToClipboard()
