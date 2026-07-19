@@ -23,11 +23,22 @@ struct AnalysisView: View {
     Dictionary(podcasts.map { ($0.title, $0) }, uniquingKeysWith: { first, _ in first })
   }
 
+  /// Rows that actually carry content — same rule the episode-row sparkles
+  /// badge uses (EpisodeStatusChecker.hasAIAnalysis). Q&A-only rows are legit
+  /// (the card shows a Q&A badge). Rows with neither come from a Q&A save
+  /// whose encode failed or a partially-synced CloudKit record, and would
+  /// list an episode that visibly "has no analysis".
+  private var contentAnalyses: [EpisodeAIAnalysis] {
+    analyses.filter {
+      $0.hasAnalysis || !($0.qaHistoryJSON ?? "").isEmpty
+    }
+  }
+
   private var filteredAnalyses: [EpisodeAIAnalysis] {
     let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return analyses }
+    guard !trimmed.isEmpty else { return contentAnalyses }
     let needle = trimmed.lowercased()
-    return analyses.filter {
+    return contentAnalyses.filter {
       $0.episodeTitle.lowercased().contains(needle)
         || $0.podcastTitle.lowercased().contains(needle)
     }
@@ -35,7 +46,7 @@ struct AnalysisView: View {
 
   var body: some View {
     Group {
-      if analyses.isEmpty {
+      if contentAnalyses.isEmpty {
         ContentUnavailableView {
           Label("No Analyses Yet", systemImage: Constants.analysisIconName)
         } description: {
