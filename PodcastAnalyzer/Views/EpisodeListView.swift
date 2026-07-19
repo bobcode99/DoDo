@@ -325,7 +325,7 @@ struct EpisodeListView: View {
     guard let model = podcastModel else { return }
 
     // Just flip the isSubscribed flag
-    model.isSubscribed = true
+    model.setSubscribed(true)
 
     do {
       try modelContext.save()
@@ -338,7 +338,7 @@ struct EpisodeListView: View {
     guard let model = podcastModel else { return }
 
     // Flip the isSubscribed flag to false
-    model.isSubscribed = false
+    model.setSubscribed(false)
 
     do {
       try modelContext.save()

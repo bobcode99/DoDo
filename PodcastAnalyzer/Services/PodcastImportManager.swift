@@ -108,7 +108,7 @@ class PodcastImportManager {
         
         if let existing {
             if existing.isSubscribed { return .skipped }
-            existing.isSubscribed = true
+            existing.setSubscribed(true)
             return .success
         }
 
@@ -119,7 +119,7 @@ class PodcastImportManager {
         let existingByTitle = try context.fetch(FetchDescriptor<PodcastInfoModel>(predicate: titlePredicate)).first
 
         if let existingByTitle {
-            existingByTitle.isSubscribed = true
+            existingByTitle.setSubscribed(true)
             return .success
         }
 

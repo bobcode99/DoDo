@@ -147,7 +147,7 @@ class PlaybackStateCoordinator {
       if model.isCompleted && update.duration > 0 {
         let progressRatio = update.position / update.duration
         if progressRatio < 0.9 {
-          model.isCompleted = false
+          model.setCompleted(false)
           logger.info(
             "Reset completed status for: \(update.episodeTitle) (replay detected at \(Int(progressRatio * 100))%)"
           )
@@ -157,7 +157,7 @@ class PlaybackStateCoordinator {
       // Mark as completed if within 30 seconds of end
       let wasCompleted = model.isCompleted
       if update.duration > 0 && (update.duration - update.position) < 30 {
-        model.isCompleted = true
+        model.setCompleted(true)
       }
 
       // Notify when completion state changes so UI (e.g. Up Next) can refresh

@@ -177,6 +177,8 @@ final class PlaybackProgressSyncCoordinator {
     local.lastPlaybackPosition = remote.lastPlaybackPosition
     if remote.duration > 0 { local.duration = remote.duration }
     local.playCount = remote.playCount
+    // Direct assignment on purpose — applying a remote change through
+    // setCompleted() would force-push it right back to CloudKit.
     local.isCompleted = remote.isCompleted
     // Reassign after isCompleted: its didSet stamps `lastPlayedDate = Date()`
     // on a false→true transition, which would otherwise clobber this with

@@ -582,7 +582,7 @@ final class HomeViewModel {
     )
 
     if let model = try? context.fetch(descriptor).first {
-      model.isCompleted = true
+      model.setCompleted(true)
       model.lastPlaybackPosition = 0
       try? context.save()
     } else {
@@ -776,7 +776,7 @@ final class HomeViewModel {
         if let existingByRSS = try? context.fetch(FetchDescriptor<PodcastInfoModel>(
           predicate: #Predicate { $0.rssUrl == feedUrl }
         )).first {
-          existingByRSS.isSubscribed = true
+          existingByRSS.setSubscribed(true)
           existingByRSS.applyPodcastInfo(podcastInfo)
           existingByRSS.lastUpdated = Date()
           try context.save()
@@ -789,7 +789,7 @@ final class HomeViewModel {
         if let existingByTitle = try? context.fetch(FetchDescriptor<PodcastInfoModel>(
           predicate: #Predicate { $0.title == title }
         )).first {
-          existingByTitle.isSubscribed = true
+          existingByTitle.setSubscribed(true)
           existingByTitle.applyPodcastInfo(podcastInfo)
           existingByTitle.lastUpdated = Date()
           try context.save()
@@ -1028,7 +1028,7 @@ final class HomeViewModel {
     )
 
     if let model = try? context.fetch(descriptor).first {
-      model.isCompleted.toggle()
+      model.setCompleted(!model.isCompleted)
       model.lastPlaybackPosition = 0
       try? context.save()
     } else {

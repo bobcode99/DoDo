@@ -37,15 +37,21 @@ class PodcastInfoModel {
   /// at each call site: subscribe/unsubscribe is toggled directly on this
   /// property from ~8 places (PodcastSubscriptionViewModel, HomeViewModel,
   /// SearchView, EpisodeListView, PodcastContextMenu). Centralizing means
-  /// every future call site gets sync for free. Doesn't fire during `init` —
-  /// the two call sites that construct an already-subscribed model
-  /// (PodcastImportManager, SubscriptionSyncCoordinator's own silent
-  /// resubscribe) push explicitly right after insert.
-  var isSubscribed: Bool = false {
-    didSet {
-      guard isSubscribed != oldValue else { return }
-      SubscriptionSyncCoordinator.shared.sync(from: self)
-    }
+  /// Mutate through `setSubscribed(_:)`, never directly: SwiftData quietly
+  /// ignores property observers on managed @Model instances, so a `didSet`
+  /// here never fires for fetched models and subscribe/unsubscribe changes
+  /// silently skip iCloud. Call sites that construct an already-subscribed
+  /// model (import, silent resubscribe) call
+  /// `SubscriptionSyncCoordinator.sync(from:)` explicitly after insert.
+  var isSubscribed: Bool = false
+
+  /// The single funnel for subscribe/unsubscribe on an existing model —
+  /// flips the flag and mirrors the change to the CloudKit store.
+  @MainActor
+  func setSubscribed(_ subscribed: Bool) {
+    guard subscribed != isSubscribed else { return }
+    isSubscribed = subscribed
+    SubscriptionSyncCoordinator.shared.sync(from: self)
   }
 
   // MARK: - Queryable Properties (Swift 6 Predicate Compatibility)

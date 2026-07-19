@@ -129,7 +129,7 @@ struct PodcastContextMenu: ViewModifier {
   }
 
   private func unsubscribePodcast() {
-    podcast.isSubscribed = false
+    podcast.setSubscribed(false)
     do {
       try modelContext.save()
       onUnsubscribed?()

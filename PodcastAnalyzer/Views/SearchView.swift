@@ -381,13 +381,13 @@ struct PodcastSearchView: View {
                 if let existingByRSS = try? modelContext.fetch(FetchDescriptor<PodcastInfoModel>(
                     predicate: #Predicate { $0.rssUrl == feedUrl }
                 )).first {
-                    existingByRSS.isSubscribed = true
+                    existingByRSS.setSubscribed(true)
                     existingByRSS.applyPodcastInfo(podcastInfo)
                     existingByRSS.lastUpdated = Date.now
                 } else if let existingByTitle = try? modelContext.fetch(FetchDescriptor<PodcastInfoModel>(
                     predicate: #Predicate { $0.title == title }
                 )).first {
-                    existingByTitle.isSubscribed = true
+                    existingByTitle.setSubscribed(true)
                     existingByTitle.applyPodcastInfo(podcastInfo)
                     existingByTitle.lastUpdated = Date.now
                 } else {

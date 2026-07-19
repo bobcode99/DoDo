@@ -207,7 +207,7 @@ struct TrendingEpisodeContextMenu: View {
       predicate: #Predicate { $0.id == key }
     )
     if let model = try? modelContext.fetch(descriptor).first {
-      model.isCompleted.toggle()
+      model.setCompleted(!model.isCompleted)
     } else {
       let model = EpisodeDownloadModel(
         episodeTitle: episodeTitle,

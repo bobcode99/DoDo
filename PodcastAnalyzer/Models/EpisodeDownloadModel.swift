@@ -39,23 +39,13 @@ class EpisodeDownloadModel {
   // guard (`guard let lastPlayed = model.lastPlayedDate ...`) skipped them
   // forever, no matter how old.
   //
-  // Also pushes to iCloud here rather than at each call site: "mark played" /
-  // "mark unplayed" are toggled directly on this property from ~8 places
-  // (HomeViewModel, EpisodeListViewModel, EpisodeDetailViewModel,
-  // LibraryEpisodeActions, TrendingEpisodeContextMenu) and only the automatic
-  // playback-position pipeline (PlaybackStateCoordinator) synced — manual
-  // toggles were silently local-only. Centralizing here means every future
-  // call site gets sync for free instead of needing to remember it.
-  var isCompleted: Bool = false {
-    didSet {
-      guard isCompleted != oldValue else { return }
-      if isCompleted {
-        lastPlayedDate = Date()
-      }
-      progressUpdatedAt = Date()
-      PlaybackProgressSyncCoordinator.shared.push(from: self, force: true)
-    }
-  }
+  // Mutate through `setCompleted(_:)`, never directly: SwiftData quietly
+  // ignores property observers on managed @Model instances (proven by
+  // PlaybackProgressSyncTests.didSetIgnoredOnManagedModel), so a `didSet`
+  // here never fires for fetched models — the date stamps and the iCloud
+  // push silently don't happen. The two direct-assignment exceptions are
+  // remote-merge (must not echo a push) and backup restore.
+  var isCompleted: Bool = false
   var lastPlayedDate: Date?
   var playCount: Int = 0
 
@@ -132,6 +122,22 @@ class EpisodeDownloadModel {
     if isCompleted, self.lastPlayedDate == nil {
       self.lastPlayedDate = Date()
     }
+  }
+
+  /// The single funnel for played/unplayed changes. Stamps `lastPlayedDate`
+  /// (so the auto-delete sweep's grace window works) and `progressUpdatedAt`,
+  /// then force-pushes to iCloud so "mark played" syncs across devices.
+  /// Exists because a `didSet` on the property never fires for managed
+  /// instances — see the comment on `isCompleted`.
+  @MainActor
+  func setCompleted(_ completed: Bool) {
+    guard completed != isCompleted else { return }
+    isCompleted = completed
+    if completed {
+      lastPlayedDate = Date()
+    }
+    progressUpdatedAt = Date()
+    PlaybackProgressSyncCoordinator.shared.push(from: self, force: true)
   }
 
   /// Progress percentage (0.0 to 1.0)

@@ -118,7 +118,7 @@ final class SubscriptionSyncCoordinator {
       let title = podcastInfo.title
       let titleDescriptor = FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.title == title })
       if let existingByTitle = try context.fetch(titleDescriptor).first {
-        existingByTitle.isSubscribed = true
+        existingByTitle.setSubscribed(true)
       } else {
         let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date(), isSubscribed: true)
         context.insert(model)

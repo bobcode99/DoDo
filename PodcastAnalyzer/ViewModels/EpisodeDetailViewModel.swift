@@ -366,7 +366,7 @@ final class EpisodeDetailViewModel {
       if model.isCompleted {
         // Reset position for completed episodes (user wants to replay)
         model.lastPlaybackPosition = 0
-        model.isCompleted = false
+        model.setCompleted(false)
         try? modelContext?.save()
         startTime = 0
 
@@ -525,7 +525,7 @@ final class EpisodeDetailViewModel {
 
     // Mark as completed if near the end (within 30 seconds)
     if model.duration > 0 && position >= model.duration - 30 {
-      model.isCompleted = true
+      model.setCompleted(true)
     }
 
     do {
@@ -684,7 +684,7 @@ final class EpisodeDetailViewModel {
       logger.warning("Cannot toggle played: no episode model available")
       return
     }
-    model.isCompleted.toggle()
+    model.setCompleted(!model.isCompleted)
     model.lastPlaybackPosition = 0
 
     do {

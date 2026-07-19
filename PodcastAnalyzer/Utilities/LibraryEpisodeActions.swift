@@ -54,7 +54,7 @@ enum LibraryEpisodeActions {
     createIfMissing: Bool = false
   ) {
     if let model = episodeModels[episode.id] {
-      model.isCompleted.toggle()
+      model.setCompleted(!model.isCompleted)
       model.lastPlaybackPosition = 0
       try? context.save()
     } else if createIfMissing, let audioURL = episode.episodeInfo.audioURL {
@@ -65,8 +65,8 @@ enum LibraryEpisodeActions {
         imageURL: episode.imageURL ?? "",
         pubDate: episode.episodeInfo.pubDate
       )
-      model.isCompleted = true
       context.insert(model)
+      model.setCompleted(true)
       try? context.save()
       episodeModels[episode.id] = model
     }

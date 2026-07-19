@@ -253,7 +253,7 @@ final class ExpandedPlayerViewModel {
 
     // Persist to SwiftData
     guard let model = getOrCreateEpisodeModel() else { return }
-    model.isCompleted = isCompleted
+    model.setCompleted(isCompleted)
     if !isCompleted {
       model.lastPlaybackPosition = 0
     }

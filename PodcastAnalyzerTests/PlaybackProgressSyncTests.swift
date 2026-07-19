@@ -17,6 +17,44 @@ import Testing
 @Suite("Playback progress sync")
 struct PlaybackProgressSyncTests {
 
+    // MARK: - Completion funnel
+
+    /// SwiftData quietly ignores property observers on managed @Model
+    /// instances (verified: a `didSet` on `isCompleted` never fired for a
+    /// fetched model), which is why played-state changes must go through
+    /// `setCompleted(_:)`. This test pins both facts: direct assignment
+    /// stamps nothing, the funnel stamps everything.
+    @Test("setCompleted stamps dates; direct assignment does not")
+    @MainActor
+    func setCompletedIsTheOnlyWorkingFunnel() throws {
+        let schema = Schema([EpisodeDownloadModel.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let context = container.mainContext
+
+        let model = EpisodeDownloadModel(episodeTitle: "Ep", podcastTitle: "Show", audioURL: "")
+        context.insert(model)
+        try context.save()
+
+        let id = model.id
+        let fetched = try #require(try context.fetch(
+            FetchDescriptor<EpisodeDownloadModel>(predicate: #Predicate { $0.id == id })
+        ).first)
+
+        // Direct assignment: observers are ignored on managed instances, so
+        // no dates get stamped. If this ever starts failing, SwiftData began
+        // honoring observers and the funnel could move back into a didSet.
+        fetched.isCompleted = true
+        #expect(fetched.lastPlayedDate == nil)
+        fetched.isCompleted = false
+
+        // The funnel stamps both dates.
+        fetched.setCompleted(true)
+        #expect(fetched.isCompleted)
+        #expect(fetched.lastPlayedDate != nil)
+        #expect(fetched.progressUpdatedAt != nil)
+    }
+
     // MARK: - Throttle logic
 
     @Test("First push is never throttled")
