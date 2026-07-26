@@ -169,6 +169,11 @@ struct EpisodeTranscriptView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .overlay {
+            if viewModel.isDiarizing {
+                DiarizationProgressOverlay()
+            }
+        }
         .toolbar {
             TranscriptNavToolbar(
                 viewModel: viewModel,
@@ -258,6 +263,17 @@ struct EpisodeTranscriptView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Transcript copied to clipboard")
+        }
+        .alert(
+            "Speakers",
+            isPresented: Binding(
+                get: { viewModel.diarizationMessage != nil },
+                set: { if !$0 { viewModel.diarizationMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.diarizationMessage ?? "")
         }
     }
 
@@ -373,5 +389,33 @@ struct EpisodeTranscriptView: View {
         } catch {
             srtImportError = error.localizedDescription
         }
+    }
+}
+
+// MARK: - Diarization Progress
+
+/// Blocking, indeterminate progress cover shown while speaker identification
+/// runs. The work is off-main, so this spinner actually animates and the rest
+/// of the app stays responsive underneath the scrim.
+private struct DiarizationProgressOverlay: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.35).ignoresSafeArea()
+            VStack(spacing: 14) {
+                ProgressView()
+                    .controlSize(.large)
+                Text("Identifying speakers…")
+                    .font(.headline)
+                // Honest expectation-setting: first run also pulls the model.
+                Text("Runs on-device. The first time also downloads a ~100 MB model, so this can take a minute.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(24)
+            .frame(maxWidth: 320)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .transition(.opacity)
     }
 }

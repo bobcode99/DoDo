@@ -97,6 +97,19 @@ struct TranscriptNavToolbar: ToolbarContent {
                 }
             }
 
+            Section("Speakers") {
+                Button {
+                    viewModel.diarize()
+                } label: {
+                    Label(
+                        viewModel.isDiarizing ? "Identifying Speakers…" : "Identify Speakers",
+                        systemImage: "person.wave.2"
+                    )
+                }
+                // Needs the downloaded file — the on-device engine reads audio directly.
+                .disabled(viewModel.isDiarizing || !viewModel.hasLocalAudio)
+            }
+
             Button(role: .destructive) {
                 onShowRegenerateConfirmation()
             } label: {

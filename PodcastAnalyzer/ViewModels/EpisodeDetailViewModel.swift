@@ -60,6 +60,10 @@ struct TranscriptSegment: Identifiable, Equatable, Codable {
   var translatedText: String?
   /// Word-level timing for accurate highlighting (from Speech framework)
   var wordTimings: [WordTiming]?
+  /// Speaker cluster index for this line, fused from the diarization timeline
+  /// at load time (max time overlap). Derived — never persisted into
+  /// `segmentsJSON`; the source of truth is `EpisodeTranscriptModel.speakerTurnsJSON`.
+  var speakerId: Int?
 
   /// Formatted start time string (MM:SS or HH:MM:SS)
   var formattedStartTime: String {
@@ -279,6 +283,39 @@ final class EpisodeDetailViewModel {
       return path
     }
     return nil
+  }
+
+  // MARK: - Speaker Diarization (trigger only — no transcript UI yet)
+
+  /// True while a diarization pass runs. Drives the toolbar button's disabled
+  /// + "Identifying…" state.
+  var isDiarizing = false
+
+  /// One-shot result/error surfaced as an alert. Nil when nothing to show.
+  var diarizationMessage: String?
+
+  /// Runs on-device speaker diarization over the downloaded audio and persists
+  /// the turns (+ default roster) via TranscriptStore. Requires local audio —
+  /// the engine reads the file directly. No transcript rendering yet; this just
+  /// proves the engine end-to-end and stores the timeline for later fusion.
+  func diarize() {
+    guard !isDiarizing, let path = localAudioPath else { return }
+    isDiarizing = true
+    diarizationMessage = nil
+    Task { [weak self] in
+      guard let self else { return }
+      do {
+        let output = try await DiarizationService().diarize(
+          audioURL: URL(fileURLWithPath: path))
+        try TranscriptStore.shared.saveDiarization(
+          turns: output.turns, episodeTitle: episode.title, podcastTitle: podcastTitle)
+        diarizationMessage =
+          "Identified \(output.speakerCount) speaker(s) across \(output.turns.count) turns."
+      } catch {
+        diarizationMessage = "Diarization failed: \(error.localizedDescription)"
+      }
+      isDiarizing = false
+    }
   }
 
   // MARK: - Playback State

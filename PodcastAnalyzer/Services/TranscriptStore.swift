@@ -107,7 +107,54 @@ final class TranscriptStore {
        let timingsData = try? JSONDecoder().decode(TranscriptData.self, from: data) {
       segments = Self.mergingWordTimings(timingsData, into: segments)
     }
+    // Fuse the diarization timeline onto each line by max overlap. Derived at
+    // read time so re-diarizing never rewrites segmentsJSON.
+    let turns = Self.decodeTurns(model.speakerTurnsJSON)
+    if !turns.isEmpty {
+      for index in segments.indices {
+        segments[index].speakerId = SpeakerDiarization.speaker(
+          forStart: segments[index].startTime, end: segments[index].endTime, turns: turns)
+      }
+    }
     return segments
+  }
+
+  // MARK: - Diarization (speaker layer)
+
+  /// Stores a diarization timeline for an episode and seeds a default unnamed
+  /// roster. Independent of the transcript text — safe to call before or after
+  /// transcription exists.
+  func saveDiarization(
+    turns: [SpeakerTurn], episodeTitle: String, podcastTitle: String
+  ) throws {
+    guard let context else { return }
+    let model: EpisodeTranscriptModel
+    if let existing = fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle) {
+      model = existing
+    } else {
+      model = EpisodeTranscriptModel(episodeId: makeId(episodeTitle: episodeTitle, podcastTitle: podcastTitle))
+      context.insert(model)
+    }
+    model.speakerTurnsJSON = Self.encodeTurns(turns)
+    model.speakerRosterJSON = Self.encodeRoster(SpeakerDiarization.defaultRoster(from: turns))
+    do {
+      try context.save()
+    } catch {
+      logger.error("Failed to save diarization: \(error.localizedDescription, privacy: .public)")
+      throw error
+    }
+  }
+
+  func loadSpeakerTurns(episodeTitle: String, podcastTitle: String) -> [SpeakerTurn] {
+    Self.decodeTurns(fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle)?.speakerTurnsJSON)
+  }
+
+  func loadRoster(episodeTitle: String, podcastTitle: String) -> [SpeakerLabel] {
+    Self.decodeRoster(fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle)?.speakerRosterJSON)
+  }
+
+  func hasDiarization(episodeTitle: String, podcastTitle: String) -> Bool {
+    !loadSpeakerTurns(episodeTitle: episodeTitle, podcastTitle: podcastTitle).isEmpty
   }
 
   /// Reconstitutes standard SRT text — needed where an actual SRT string is
@@ -177,6 +224,9 @@ final class TranscriptStore {
     var segmentsJSON: String
     var wordTimingsJSON: String?
     var translationsJSON: String?
+    // Optional so v1 files (no speaker layer) still decode as nil.
+    var speakerTurnsJSON: String?
+    var speakerRosterJSON: String?
     var generatedAt: Date
   }
 
@@ -193,6 +243,8 @@ final class TranscriptStore {
       segmentsJSON: model.segmentsJSON,
       wordTimingsJSON: model.wordTimingsJSON,
       translationsJSON: model.translationsJSON,
+      speakerTurnsJSON: model.speakerTurnsJSON,
+      speakerRosterJSON: model.speakerRosterJSON,
       generatedAt: model.generatedAt
     )
     guard let data = try? JSONEncoder().encode(payload) else { return nil }
@@ -225,6 +277,8 @@ final class TranscriptStore {
     model.segmentsJSON = payload.segmentsJSON
     model.wordTimingsJSON = payload.wordTimingsJSON
     model.translationsJSON = payload.translationsJSON
+    model.speakerTurnsJSON = payload.speakerTurnsJSON
+    model.speakerRosterJSON = payload.speakerRosterJSON
     model.source = payload.source
     model.generatedAt = payload.generatedAt
     model.plainText = Self.decodeSegments(payload.segmentsJSON).map(\.text).joined(separator: " ")
@@ -299,6 +353,28 @@ final class TranscriptStore {
     guard let json, let data = json.data(using: .utf8),
           let dict = try? JSONDecoder().decode([String: [String]].self, from: data) else { return [:] }
     return dict
+  }
+
+  private static func encodeTurns(_ turns: [SpeakerTurn]) -> String? {
+    guard let data = try? JSONEncoder().encode(turns) else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
+  private static func decodeTurns(_ json: String?) -> [SpeakerTurn] {
+    guard let json, let data = json.data(using: .utf8),
+          let turns = try? JSONDecoder().decode([SpeakerTurn].self, from: data) else { return [] }
+    return turns
+  }
+
+  private static func encodeRoster(_ roster: [SpeakerLabel]) -> String? {
+    guard let data = try? JSONEncoder().encode(roster) else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
+  private static func decodeRoster(_ json: String?) -> [SpeakerLabel] {
+    guard let json, let data = json.data(using: .utf8),
+          let roster = try? JSONDecoder().decode([SpeakerLabel].self, from: data) else { return [] }
+    return roster
   }
 
   private static func mergingWordTimings(

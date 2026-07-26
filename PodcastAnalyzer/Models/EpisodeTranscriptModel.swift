@@ -40,6 +40,17 @@ final class EpisodeTranscriptModel {
   /// keyed by the old indices would silently misalign.
   var translationsJSON: String?
 
+  /// JSON-encoded `[SpeakerTurn]` — the diarization timeline (who speaks when),
+  /// engine-agnostic and independent of text segmentation. Nil until an episode
+  /// is diarized. Deliberately NOT cleared when the transcript is regenerated:
+  /// same audio, same speaker timeline, so re-transcribing keeps diarization
+  /// and re-diarizing keeps the transcript.
+  var speakerTurnsJSON: String?
+
+  /// JSON-encoded `[SpeakerLabel]` — cluster index → user-facing label/color/
+  /// voiceprint. Phase 1 stores the default unnamed roster; naming fills it in.
+  var speakerRosterJSON: String?
+
   /// Denormalized full-text mirror (segments joined), enabling future
   /// `#Predicate` full-text search without decoding `segmentsJSON`.
   var plainText: String = ""

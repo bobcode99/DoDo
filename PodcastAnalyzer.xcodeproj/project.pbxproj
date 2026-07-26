@@ -19,6 +19,7 @@
 		AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000022ED303EC000ABAA0 /* WhisperKit */; };
 		AABB0003000000000000AABB /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002000000000000AABB /* MCP */; };
 		ACDDA2642FD871880075A140 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
+		ACE75D463015FE8B00A00417 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = ACE75D453015FE8B00A00417 /* FluidAudio */; };
 		CCDD0003000000000000CCDD /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = CCDD0002000000000000CCDD /* Hummingbird */; };
 /* End PBXBuildFile section */
 
@@ -154,6 +155,7 @@
 				154AA7D72F50161700848582 /* Nuke in Frameworks */,
 				155164762ED374440015567A /* ZMarkupParser in Frameworks */,
 				158240912ED303EC000ABA90 /* FeedKit in Frameworks */,
+				ACE75D463015FE8B00A00417 /* FluidAudio in Frameworks */,
 				158240932ED303EC000ABA90 /* XMLKit in Frameworks */,
 				AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */,
 				AABB0003000000000000AABB /* MCP in Frameworks */,
@@ -273,6 +275,7 @@
 				BB0000032F4F0001000NUKE0 /* NukeUI */,
 				AABB0002000000000000AABB /* MCP */,
 				CCDD0002000000000000CCDD /* Hummingbird */,
+				ACE75D453015FE8B00A00417 /* FluidAudio */,
 			);
 			productName = PodcastAnalyzer;
 			productReference = 15ED5EED2EC44BC6001B6CD7 /* DoDo.app */;
@@ -385,6 +388,7 @@
 				BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */,
 				AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */,
 				CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */,
+				ACE75D443013C0D200A00417 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 15ED5EEE2EC44BC6001B6CD7 /* Products */;
@@ -1076,6 +1080,14 @@
 				minimumVersion = 0.12.1;
 			};
 		};
+		ACE75D443013C0D200A00417 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		BB0000012F4F0001000NUKE0 /* XCRemoteSwiftPackageReference "Nuke" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kean/Nuke.git";
@@ -1119,6 +1131,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AABB0001000000000000AABB /* XCRemoteSwiftPackageReference "swift-sdk" */;
 			productName = MCP;
+		};
+		ACE75D453015FE8B00A00417 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ACE75D443013C0D200A00417 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 		BB0000022F4F0001000NUKE0 /* Nuke */ = {
 			isa = XCSwiftPackageProductDependency;
