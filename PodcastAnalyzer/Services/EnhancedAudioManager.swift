@@ -595,6 +595,18 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func seek(to time: TimeInterval) {
+    // No player yet (episode restored from saved state, not started): there's
+    // no AVPlayerItem to seek. Move the pending start position instead —
+    // resume()/play() use `currentTime` as their startTime — so skip and scrub
+    // work before the first play tap instead of silently no-op'ing on nil.
+    guard player != nil else {
+      let cap = pendingSeekCap
+      currentTime = cap > 0 ? min(max(time, 0), cap) : max(time, 0)
+      updateNowPlayingCurrentTime()
+      savePlaybackState()
+      postPlaybackPositionUpdate(forceSync: true)
+      return
+    }
     let beforeTime = currentTime
     logger.info("seek(to:) requested target=\(String(format: "%.3f", time))s currentBefore=\(String(format: "%.3f", beforeTime))s")
     let cmTime = CMTime(seconds: time, preferredTimescale: 600)
@@ -631,9 +643,17 @@ private func handleAudioInterruption(_ notification: Notification) {
     return TimeInterval(saved > 0 ? saved : 15)
   }
 
+  /// Upper bound for a seek target. Before playback starts `duration` is 0
+  /// (no loaded item), so fall back to the restored episode's known duration —
+  /// otherwise skip-forward would clamp every target to 0.
+  private var pendingSeekCap: TimeInterval {
+    duration > 0 ? duration : TimeInterval(currentEpisode?.duration ?? 0)
+  }
+
   func skipForward(seconds: TimeInterval? = nil) {
     let s = seconds ?? skipForwardInterval
-    let newTime = min(currentTime + s, duration)
+    let cap = pendingSeekCap
+    let newTime = cap > 0 ? min(currentTime + s, cap) : currentTime + s
     seek(to: newTime)
   }
 
