@@ -67,6 +67,9 @@ struct SmoothScrubber: View {
             range: 0...effectiveDuration,
             onEditingChanged: handleEditingChanged
         )
+        // The track is only a couple of points tall; give it a finger-sized
+        // row to land in (UISlider centers the track in its bounds).
+        .frame(height: 44)
         #else
         Slider(
             value: $scrubTime,
@@ -85,8 +88,16 @@ struct SmoothScrubber: View {
             // next release isn't gated by an obsolete target.
             pendingSeekTarget = nil
         } else {
-            pendingSeekTarget = scrubTime
-            onSeek(scrubTime / effectiveDuration)
+            let target = scrubTime
+            pendingSeekTarget = target
+            onSeek(target / effectiveDuration)
+            // Safety valve: if the seek never lands near the target (clamped
+            // seek, or the episode advanced), drop the guard so the thumb
+            // doesn't stay frozen at a position the player left behind.
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                if pendingSeekTarget == target { pendingSeekTarget = nil }
+            }
         }
     }
 }
@@ -98,7 +109,7 @@ private struct ThumblessSlider: UIViewRepresentable {
     let onEditingChanged: (Bool) -> Void
 
     func makeUIView(context: Context) -> UISlider {
-        let slider = UISlider()
+        let slider = TrackTapSlider()
         slider.setThumbImage(Self.thumbImage(diameter: 12), for: .normal)
         slider.setThumbImage(Self.thumbImage(diameter: 16), for: .highlighted)
         slider.minimumTrackTintColor = .label
@@ -147,6 +158,28 @@ private struct ThumblessSlider: UIViewRepresentable {
             )
             c.setFillColor(UIColor.white.cgColor)
             c.fillEllipse(in: CGRect(x: pad, y: pad, width: diameter, height: diameter))
+        }
+    }
+
+    /// UISlider only starts a drag when the touch lands on the thumb, which is
+    /// a 12pt target on a full-width track — most grabs miss. This jumps the
+    /// value to wherever the track was touched and drags on from there.
+    private final class TrackTapSlider: UISlider {
+        override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+            let track = trackRect(forBounds: bounds)
+            let thumb = thumbRect(forBounds: bounds, trackRect: track, value: value)
+            let point = touch.location(in: self)
+            // Touch already on (or near) the thumb — keep UIKit's grab so the
+            // thumb doesn't teleport under the finger.
+            if !thumb.insetBy(dx: -16, dy: -16).contains(point) {
+                let usable = track.width - thumb.width
+                if usable > 0 {
+                    let fraction = min(max((point.x - track.minX - thumb.width / 2) / usable, 0), 1)
+                    value = minimumValue + Float(fraction) * (maximumValue - minimumValue)
+                    sendActions(for: .valueChanged)
+                }
+            }
+            return super.beginTracking(touch, with: event)
         }
     }
 

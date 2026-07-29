@@ -69,7 +69,13 @@ final class ExpandedPlayerViewModel {
   var episodeTitle: String { audioManager.currentEpisode?.title ?? "" }
   var podcastTitle: String { audioManager.currentEpisode?.podcastTitle ?? "" }
   var currentTime: TimeInterval { audioManager.currentTime }
-  var duration: TimeInterval { audioManager.duration > 0 ? audioManager.duration : 1 }
+  /// Player duration, falling back to the episode's declared length so the
+  /// scrubber has a real scale before the AVPlayer exists (restored episodes
+  /// have a saved position but no player until the first play).
+  var duration: TimeInterval {
+    if audioManager.duration > 0 { return audioManager.duration }
+    return TimeInterval(audioManager.currentEpisode?.duration ?? 0)
+  }
   var playbackSpeed: Float { audioManager.playbackRate }
   var sleepTimerOption: SleepTimerOption { audioManager.sleepTimerOption }
   var sleepTimerRemaining: TimeInterval { audioManager.sleepTimerRemaining }
