@@ -30,9 +30,11 @@ struct TrendingEpisodeContextMenu: View {
       ?? episode.episode.artworkUrl160
       ?? episode.podcastArtworkUrl
   }
+  private static let isoFormatter = ISO8601DateFormatter()
+
   private var releaseDate: Date? {
     guard let raw = episode.episode.releaseDate else { return nil }
-    return ISO8601DateFormatter().date(from: raw)
+    return Self.isoFormatter.date(from: raw)
   }
 
   private var episodeKey: String {

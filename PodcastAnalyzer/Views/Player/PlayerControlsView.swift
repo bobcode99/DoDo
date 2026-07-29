@@ -14,7 +14,7 @@ struct PlayerControlsView: View {
         case compact
     }
 
-    var viewModel: ExpandedPlayerViewModel
+    let viewModel: ExpandedPlayerViewModel
     var style: Style = .expanded
 
     @AppStorage("skipForwardInterval") private var skipForwardInterval: Int = 30

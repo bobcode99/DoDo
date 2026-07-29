@@ -149,7 +149,7 @@ struct TranscriptSearchSheet: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 let lookup = sentenceLookup
-                ForEach(Array(viewModel.transcript.searchMatchIds.enumerated()), id: \.offset) { index, sentenceID in
+                ForEach(Array(viewModel.transcript.searchMatchIds.enumerated()), id: \.element) { index, sentenceID in
                     if let sentence = lookup[sentenceID] {
                         TranscriptSearchResultRow(
                             sentence: sentence,
