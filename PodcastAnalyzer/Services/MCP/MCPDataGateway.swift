@@ -128,6 +128,11 @@ nonisolated enum MCPGatewayError: Error, CustomStringConvertible {
 /// `ModelContext.mainContext` and `TranscriptManager.shared` are MainActor-bound.
 @MainActor
 final class MCPDataGateway {
+  /// Ceilings enforced on client-supplied `limit` arguments. Kept in sync with
+  /// the numbers the tool schemas advertise in `MCPTools.allTools`.
+  static let maxEpisodeLimit = 500
+  static let maxSearchHits = 100
+
   private let container: ModelContainer
   private var modelContext: ModelContext { container.mainContext }
 
@@ -198,7 +203,10 @@ final class MCPDataGateway {
     }
     episodes.sort { ($0.pubDate ?? .distantPast) > ($1.pubDate ?? .distantPast) }
     let start = max(0, offset ?? 0)
-    let end = min(episodes.count, start + max(1, limit ?? 50))
+    // Clamped to the ceiling the tool schema advertises — a client asking for
+    // 100_000 episodes shouldn't get a response no LLM can read.
+    let requested = min(Self.maxEpisodeLimit, max(1, limit ?? 50))
+    let end = min(episodes.count, start + requested)
     guard start < end else { return [] }
     var stubs: [MCPEpisodeStubDTO] = []
     for episode in episodes[start..<end] {
@@ -289,7 +297,7 @@ final class MCPDataGateway {
 
     let vm = TranscriptSearchViewModel()
     await vm.performSearch(query: trimmed, podcasts: podcasts)
-    let cap = max(1, limit ?? 20)
+    let cap = min(Self.maxSearchHits, max(1, limit ?? 20))
 
     var hits: [MCPSearchHitDTO] = []
     for result in vm.results.prefix(cap) {

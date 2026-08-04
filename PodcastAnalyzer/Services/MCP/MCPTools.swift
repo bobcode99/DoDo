@@ -23,7 +23,8 @@ nonisolated enum MCPTools {
     Tool(
       name: "list_subscribed_podcasts",
       description: "Lists every podcast the user has subscribed to in this app, with metadata such as title, language, description, image URL, and episode count.",
-      inputSchema: objectSchema(properties: [:], required: [])
+      inputSchema: objectSchema(properties: [:], required: []),
+      annotations: .init(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false)
     ),
     Tool(
       name: "get_podcast",
@@ -33,7 +34,8 @@ nonisolated enum MCPTools {
           "podcast_title": stringSchema("Exact podcast title as returned by list_subscribed_podcasts.")
         ],
         required: ["podcast_title"]
-      )
+      ),
+      annotations: .init(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false)
     ),
     Tool(
       name: "list_episodes",
@@ -46,7 +48,8 @@ nonisolated enum MCPTools {
           "since": stringSchema("ISO-8601 datetime; only episodes published on or after this date are returned."),
         ],
         required: ["podcast_title"]
-      )
+      ),
+      annotations: .init(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false)
     ),
     Tool(
       name: "get_episode",
@@ -57,7 +60,8 @@ nonisolated enum MCPTools {
           "episode_title": stringSchema("Exact episode title."),
         ],
         required: ["podcast_title", "episode_title"]
-      )
+      ),
+      annotations: .init(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false)
     ),
     Tool(
       name: "get_transcript",
@@ -69,7 +73,8 @@ nonisolated enum MCPTools {
           "format": enumSchema(["plain", "srt"], description: "Output format. 'plain' (default) strips timestamps; 'srt' preserves them."),
         ],
         required: ["podcast_title", "episode_title"]
-      )
+      ),
+      annotations: .init(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false)
     ),
     Tool(
       name: "get_ai_analysis",
@@ -80,7 +85,8 @@ nonisolated enum MCPTools {
           "episode_title": stringSchema("Exact episode title."),
         ],
         required: ["podcast_title", "episode_title"]
-      )
+      ),
+      annotations: .init(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false)
     ),
     Tool(
       name: "search_transcripts",
@@ -88,10 +94,11 @@ nonisolated enum MCPTools {
       inputSchema: objectSchema(
         properties: [
           "query": stringSchema("Free-text search query."),
-          "limit": intSchema("Maximum hits to return. Default 20."),
+          "limit": intSchema("Maximum hits to return. Default 20, max 100."),
         ],
         required: ["query"]
-      )
+      ),
+      annotations: .init(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false)
     ),
     Tool(
       name: "generate_transcript",
@@ -107,7 +114,8 @@ nonisolated enum MCPTools {
           "language": stringSchema("Optional BCP-47 language code (e.g. 'en', 'zh-Hant'). Defaults to the podcast's language."),
         ],
         required: ["podcast_title", "episode_title"]
-      )
+      ),
+      annotations: .init(readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true)
     ),
   ]
 
