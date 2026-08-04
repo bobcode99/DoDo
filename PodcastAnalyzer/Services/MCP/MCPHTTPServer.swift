@@ -45,14 +45,16 @@ final class MCPHTTPServer {
   func start(gateway: MCPDataGateway) async throws {
     guard serverTask == nil else { return }
 
-    // 1. Build the validation pipeline: localhost-only + JSON Accept + content-type
-    //    + protocol-version + bearer-token.
+    // 1. Build the validation pipeline. Origin and bearer token come first so an
+    //    unauthenticated caller learns nothing about the protocol versions or
+    //    content types we accept — and so a real auth failure isn't masked by a
+    //    400 from a later validator.
     let pipeline = StandardValidationPipeline(validators: [
       OriginValidator.localhost(),
+      MCPBearerTokenValidator(expectedToken: bearerToken),
       AcceptHeaderValidator(mode: .jsonOnly),
       ContentTypeValidator(),
       ProtocolVersionValidator(),
-      MCPBearerTokenValidator(expectedToken: bearerToken),
     ])
     let transport = StatelessHTTPServerTransport(validationPipeline: pipeline)
     self.transport = transport
@@ -87,24 +89,33 @@ final class MCPHTTPServer {
       healthz.respond()
     }
 
+    // 4. Run inside a Task, but don't return until the socket is actually bound.
+    //    `app.run()` reports a bind failure (port already in use) by throwing
+    //    from inside the Task, so without this handshake a busy port left the
+    //    caller believing the server was up.
+    let ready = ReadyOnce()
     let app = Application(
       router: router,
       configuration: ApplicationConfiguration(
         address: .hostname("127.0.0.1", port: port),
         serverName: "PodcastAnalyzer-MCP"
-      )
+      ),
+      onServerRunning: { _ in ready.succeed() }
     )
 
-    // 4. Run inside a Task. Cancellation triggers ServiceGroup graceful shutdown.
+    // Cancellation triggers ServiceGroup graceful shutdown.
     self.serverTask = Task { [logger] in
       do {
         try await app.run()
       } catch {
+        ready.fail(error)
         if !(error is CancellationError) {
           logger.error("Hummingbird server exited: \(error.localizedDescription, privacy: .public)")
         }
       }
     }
+
+    try await ready.wait()
   }
 
   func stop() async {
@@ -119,6 +130,50 @@ final class MCPHTTPServer {
   }
 
   var isRunning: Bool { serverTask != nil }
+}
+
+// MARK: - Bind handshake
+
+/// One-shot bridge from Hummingbird's `onServerRunning` callback (or a throwing
+/// `run()`) back to `start()`, so the caller learns whether the port bound.
+/// Settles once; later calls are ignored.
+///
+/// `nonisolated` because the project defaults to MainActor isolation, and
+/// Hummingbird calls `onServerRunning` from its own event loop.
+private nonisolated final class ReadyOnce: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Void, Error>?
+  private var outcome: Result<Void, Error>?
+
+  func wait() async throws {
+    try await withCheckedThrowingContinuation { continuation in
+      lock.lock()
+      if let outcome {
+        // Already settled before anyone started waiting.
+        lock.unlock()
+        continuation.resume(with: outcome)
+        return
+      }
+      self.continuation = continuation
+      lock.unlock()
+    }
+  }
+
+  func succeed() { settle(.success(())) }
+  func fail(_ error: Error) { settle(.failure(error)) }
+
+  private func settle(_ result: Result<Void, Error>) {
+    lock.lock()
+    guard outcome == nil else {
+      lock.unlock()
+      return
+    }
+    outcome = result
+    let waiter = continuation
+    continuation = nil
+    lock.unlock()
+    waiter?.resume(with: result)
+  }
 }
 
 // MARK: - Hummingbird ↔ MCP request bridge

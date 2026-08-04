@@ -36,8 +36,11 @@ enum MCPTokenStore {
   }
 
   /// Writes the token to Keychain, replacing any existing value.
+  /// Returns the underlying `OSStatus` so callers can report *why* a write failed
+  /// — a token the user copied out of Settings but that never reached the
+  /// Keychain would silently stop working on the next launch.
   @discardableResult
-  static func save(_ token: String) -> Bool {
+  static func save(_ token: String) -> OSStatus {
     let baseQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
@@ -48,33 +51,57 @@ enum MCPTokenStore {
       kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
     ]
     let updateStatus = SecItemUpdate(baseQuery as CFDictionary, attributes as CFDictionary)
-    if updateStatus == errSecSuccess { return true }
+    if updateStatus == errSecSuccess { return updateStatus }
     if updateStatus == errSecItemNotFound {
       var addQuery = baseQuery
       addQuery.merge(attributes) { _, new in new }
-      let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-      return addStatus == errSecSuccess
+      return SecItemAdd(addQuery as CFDictionary, nil)
     }
-    return false
+    return updateStatus
   }
 
   /// Generates and persists a fresh 32-byte base64url token.
-  @discardableResult
-  static func regenerate() -> String {
+  /// Throws when the Keychain write fails: returning an unpersisted token would
+  /// have the user configure their MCP client with a value the server forgets
+  /// on relaunch.
+  static func regenerate() throws -> String {
     var bytes = [UInt8](repeating: 0, count: 32)
-    _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    let randomStatus = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    guard randomStatus == errSecSuccess else {
+      // `bytes` is still all zeros here, which would install a trivially
+      // guessable bearer token on a listening socket. Refuse instead.
+      throw MCPTokenStoreError.entropyUnavailable(randomStatus)
+    }
     let token = Data(bytes).base64EncodedString()
       .replacingOccurrences(of: "+", with: "-")
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "=", with: "")
-    save(token)
+    let saveStatus = save(token)
+    guard saveStatus == errSecSuccess else {
+      throw MCPTokenStoreError.keychainWriteFailed(saveStatus)
+    }
     return token
   }
 
   /// Returns the existing token, generating one on first use.
-  static func loadOrCreate() -> String {
+  static func loadOrCreate() throws -> String {
     if let existing = load() { return existing }
-    return regenerate()
+    return try regenerate()
+  }
+}
+
+/// Why the MCP server has no usable bearer token.
+enum MCPTokenStoreError: LocalizedError {
+  case entropyUnavailable(OSStatus)
+  case keychainWriteFailed(OSStatus)
+
+  var errorDescription: String? {
+    switch self {
+    case .entropyUnavailable(let status):
+      return "Could not generate a secure token (SecRandomCopyBytes: \(status))."
+    case .keychainWriteFailed(let status):
+      return "Could not save the token to the Keychain (OSStatus \(status))."
+    }
   }
 }
 

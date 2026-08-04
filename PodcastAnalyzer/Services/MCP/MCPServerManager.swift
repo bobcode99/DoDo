@@ -78,7 +78,9 @@ final class MCPServerManager {
     }
     self.enabled = defaults.bool(forKey: Self.keyEnabled)
     self.port = defaults.integer(forKey: Self.keyPort)
-    self.bearerToken = MCPTokenStore.loadOrCreate()
+    // An empty token is not a usable one — `start()` refuses to listen with it
+    // rather than accepting `Authorization: Bearer ` from anyone.
+    self.bearerToken = (try? MCPTokenStore.loadOrCreate()) ?? ""
   }
 
   // MARK: - Bootstrap (called from App init)
@@ -104,8 +106,13 @@ final class MCPServerManager {
   /// Generates a new bearer token and replaces the current one.
   /// Restarts the server so the new token takes effect immediately.
   func regenerateToken() {
-    let new = MCPTokenStore.regenerate()
-    bearerToken = new
+    do {
+      bearerToken = try MCPTokenStore.regenerate()
+    } catch {
+      logger.error("Token regeneration failed: \(error.localizedDescription, privacy: .public)")
+      status = .error(error.localizedDescription)
+      return
+    }
     if enabled { reconcile(forceRestart: true) }
   }
 
@@ -141,6 +148,11 @@ final class MCPServerManager {
   private func start() async {
     guard let container = modelContainer else {
       status = .error("Model container not initialized")
+      return
+    }
+    // Without a token every request would authenticate, so don't open the port.
+    guard !bearerToken.isEmpty else {
+      status = .error("No auth token available — regenerate it in Settings")
       return
     }
     let gateway = MCPDataGateway(modelContainer: container)
