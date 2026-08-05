@@ -44,7 +44,7 @@ struct SettingsView: View {
               VStack(alignment: .leading, spacing: 2) {
                 Text("Background Sync")
                 if let lastSync = syncManager.lastSyncDate {
-                  Text("Last: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                  Text("Last: \(Formatters.formatDate(lastSync, time: .shortened))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 }

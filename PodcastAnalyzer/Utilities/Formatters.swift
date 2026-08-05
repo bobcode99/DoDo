@@ -37,10 +37,34 @@ nonisolated enum Formatters {
     }
   }
 
+  /// The locale the app is actually displaying in.
+  ///
+  /// `Locale.current` and `Date.formatted()` resolve against the *device*
+  /// language and ignore both SwiftUI's `\.locale` and the in-app language
+  /// picker — so dates kept rendering in the system language after a switch.
+  /// Reading this inside a view body also registers observation on
+  /// `LanguageManager.appLanguage`, so those views re-render on a change.
+  @MainActor
+  static var appLocale: Locale { LanguageManager.shared.locale }
+
+  /// Absolute date text in the app's chosen language.
+  @MainActor
+  static func formatDate(
+    _ date: Date,
+    date dateStyle: Date.FormatStyle.DateStyle = .abbreviated,
+    time timeStyle: Date.FormatStyle.TimeStyle = .omitted
+  ) -> String {
+    date.formatted(Date.FormatStyle(date: dateStyle, time: timeStyle).locale(appLocale))
+  }
+
   /// Format a relative date using compact units. Chinese locales use native
   /// suffixes like "1天前" and "2小時前" instead of English abbreviations.
-  static func formatRelativeDate(_ date: Date, relativeTo referenceDate: Date = Date()) -> String {
-    let locale = Locale.current
+  /// Pass `Formatters.appLocale` to follow the in-app language picker.
+  static func formatRelativeDate(
+    _ date: Date,
+    relativeTo referenceDate: Date = Date(),
+    locale: Locale = .current
+  ) -> String {
     let languageCode = locale.language.languageCode?.identifier ?? "en"
     let localeIdentifier = locale.identifier.lowercased()
 

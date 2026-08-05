@@ -62,7 +62,7 @@ struct AnalysisResultCardView: View {
           .font(.caption)
           .foregroundStyle(.secondary)
 
-        Text(result.timestamp.formatted(date: .abbreviated, time: .shortened))
+        Text(Formatters.formatDate(result.timestamp, time: .shortened))
           .font(.caption)
           .foregroundStyle(.secondary)
       }

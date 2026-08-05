@@ -46,7 +46,7 @@ struct TranscriptNavToolbar: ToolbarContent {
             Section {
                 if let date = viewModel.transcript.cachedTranscriptDate {
                     Label(
-                        "Generated \(date.formatted(date: .abbreviated, time: .shortened))",
+                        "Generated \(Formatters.formatDate(date, time: .shortened))",
                         systemImage: "clock"
                     )
                 }

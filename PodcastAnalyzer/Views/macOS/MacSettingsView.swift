@@ -252,7 +252,7 @@ struct SyncSettingsTab: View {
 
           if let lastSync = syncManager.lastSyncDate {
             LabeledContent("Last Sync") {
-              Text(lastSync.formatted(date: .abbreviated, time: .shortened))
+              Text(Formatters.formatDate(lastSync, time: .shortened))
                 .foregroundStyle(.secondary)
             }
           }

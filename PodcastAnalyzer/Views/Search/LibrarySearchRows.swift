@@ -64,7 +64,7 @@ struct LibraryEpisodeRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         if let date = episode.pubDate {
-                            Text(date.formatted(date: .abbreviated, time: .omitted))
+                            Text(Formatters.formatDate(date))
                         }
                         if let duration = episode.formattedDuration {
                             Text("·")

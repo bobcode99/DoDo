@@ -243,7 +243,7 @@ final class EpisodeDetailViewModel {
   var title: String { episode.title }
 
   var pubDateString: String? {
-    episode.pubDate?.formatted(date: .long, time: .omitted)
+    episode.pubDate.map { Formatters.formatDate($0, date: .long) }
   }
 
   var imageURLString: String {

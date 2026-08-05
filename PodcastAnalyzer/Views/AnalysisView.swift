@@ -179,7 +179,7 @@ private struct AnalysisRowCard: View {
             .lineLimit(3)
         }
         HStack(spacing: 10) {
-          Label(analysis.updatedAt.formatted(date: .abbreviated, time: .omitted),
+          Label(Formatters.formatDate(analysis.updatedAt),
                 systemImage: "clock")
             .font(.caption2)
             .foregroundStyle(.secondary)

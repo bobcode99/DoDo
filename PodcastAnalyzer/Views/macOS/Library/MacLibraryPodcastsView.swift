@@ -81,7 +81,7 @@ struct MacPodcastGridCell: View {
       .lazy
       .compactMap(\.pubDate)
       .max() else { return nil }
-    return Formatters.formatRelativeDate(date)
+    return Formatters.formatRelativeDate(date, locale: Formatters.appLocale)
   }
 
   var body: some View {

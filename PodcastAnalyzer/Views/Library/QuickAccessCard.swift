@@ -95,7 +95,7 @@ struct PodcastGridCell: View {
 
   private var latestEpisodeDate: String? {
     guard let date = item.latestEpisodeDate else { return nil }
-    return Formatters.formatRelativeDate(date)
+    return Formatters.formatRelativeDate(date, locale: Formatters.appLocale)
   }
 
   /// Downsample to a grid-cell-sized thumbnail instead of decoding the full-res

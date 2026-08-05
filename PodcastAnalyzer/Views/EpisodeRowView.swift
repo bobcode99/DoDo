@@ -261,7 +261,7 @@ struct EpisodeRowView: View {
     if Calendar.current.isDateInToday(date) {
       return Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
     } else {
-      return date.formatted(date: .abbreviated, time: .omitted)
+      return Formatters.formatDate(date)
     }
   }
 

@@ -290,7 +290,7 @@ struct QuestionAnswerTabView: View {
           Text(result.model)
             .font(.caption2)
             .foregroundStyle(.secondary)
-          Text(result.timestamp.formatted(date: .abbreviated, time: .shortened))
+          Text(Formatters.formatDate(result.timestamp, time: .shortened))
             .font(.caption2)
             .foregroundStyle(.secondary)
         }
