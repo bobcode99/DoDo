@@ -103,7 +103,9 @@ struct EpisodeListView: View {
   private var navigationTitle: String {
     switch source {
     case .model(let model):
-      return model.podcastInfo.title
+      // Denormalized mirror — avoids decoding the episodes blob on every body
+      // pass just to read the title.
+      return model.title
     case .browse(_, let name, _, _, _):
       return name
     }

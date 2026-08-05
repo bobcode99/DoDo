@@ -98,9 +98,13 @@ struct PodcastBrowseRoute: Hashable, Identifiable {
   init(podcastModel: PodcastInfoModel, initialFilter: EpisodeFilter = .all) {
     self.podcastModel = podcastModel
     self.collectionId = nil
-    self.podcastName = podcastModel.podcastInfo.title
+    // Read the denormalized mirrors, never `podcastInfo.*`: this init runs for
+    // every visible grid cell on each Library render (and again on back-nav),
+    // and touching `podcastInfo` faults+decodes the entire episodes blob on the
+    // main thread — the source of the library⇆episodeList navigation lag.
+    self.podcastName = podcastModel.title
     self.artistName = ""
-    self.artworkURL = podcastModel.podcastInfo.imageURL
+    self.artworkURL = podcastModel.imageURL
     self.applePodcastURL = nil
     self.initialFilter = initialFilter
   }
