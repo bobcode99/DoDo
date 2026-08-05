@@ -37,6 +37,6 @@ struct PlayerBottomActionsView: View {
             }
             .accessibilityLabel(queueCount > 0 ? "Queue, \(queueCount) items" : "Queue")
         }
-        .padding(.horizontal, 40)
+        .padding(.horizontal, 32)
     }
 }

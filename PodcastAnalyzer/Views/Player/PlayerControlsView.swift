@@ -31,22 +31,26 @@ struct PlayerControlsView: View {
 
     // MARK: - Expanded
 
+    // Sized so the whole row fits inside the player's 32pt gutters on the
+    // narrowest iPhone (393pt): 52 + 22 + 74 + 22 + 52 transport, plus two 44pt
+    // menus, leaves real space for the flanking Spacers instead of collapsing
+    // them and letting the glass circles crowd the transport.
     private var expandedBody: some View {
         HStack(spacing: 0) {
             speedMenu
 
-            Spacer()
+            Spacer(minLength: 8)
 
             transportRow(
-                playSize: 72, skipSize: 32,
-                spacing: 28, playFrame: 80, skipFrame: 60
+                playSize: 68, skipSize: 30,
+                spacing: 22, playFrame: 74, skipFrame: 52
             )
 
-            Spacer()
+            Spacer(minLength: 8)
 
             sleepTimerMenu
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 32)
     }
 
     // MARK: - Compact
@@ -78,12 +82,12 @@ struct PlayerControlsView: View {
             Text(Formatters.formatSpeed(viewModel.playbackSpeed))
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.primary)
-                .frame(width: 48, height: 48)
+                .frame(width: 44, height: 44)
                 .glassEffect(.regular, in: .circle)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .frame(width: 56, height: 56)
+        .frame(width: 44, height: 44)
         .contentShape(Rectangle())
         .accessibilityLabel("Playback speed \(Formatters.formatSpeed(viewModel.playbackSpeed))")
     }
@@ -164,9 +168,9 @@ struct PlayerControlsView: View {
                         .foregroundStyle(.primary)
                 }
             }
-            .frame(width: 48, height: 48)
+            .frame(width: 44, height: 44)
             .glassEffect(viewModel.isSleepTimerActive ? .regular.tint(.white.opacity(0.35)) : .regular, in: .circle)
-            .frame(width: 56, height: 56)
+            .frame(width: 44, height: 44)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)

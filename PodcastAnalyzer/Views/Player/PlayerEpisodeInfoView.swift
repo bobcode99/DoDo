@@ -6,14 +6,27 @@ struct PlayerEpisodeInfoView: View {
     let onNavigateToPodcast: () -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(alignment: .center, spacing: 16) {
-                VStack(alignment: .center, spacing: 4) {
+        // Left-aligned title block with the overflow menu on the trailing edge —
+        // the arrangement Apple Podcasts and Spotify both use. The old centered
+        // column needed a 44pt leading pad to fake optical centering against the
+        // menu button, which broke as soon as the title wrapped or the width
+        // changed.
+        VStack(alignment: .leading, spacing: 6) {
+            if let date = viewModel.episodeDate {
+                Text(Formatters.formatDate(date))
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+            }
+
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
                     MarqueeText(
                         text: viewModel.episodeTitle,
                         font: .title3,
                         fontWeight: .bold,
-                        alignment: .center
+                        alignment: .leading
                     )
                     .foregroundStyle(.primary)
 
@@ -22,10 +35,12 @@ struct PlayerEpisodeInfoView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+                    .buttonStyle(.plain)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.leading, 44)
+
+                Spacer(minLength: 0)
 
                 Menu {
                     Section {
@@ -78,20 +93,14 @@ struct PlayerEpisodeInfoView: View {
                         .font(.system(size: 28))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.secondary)
-                        .frame(width: 48, height: 48)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
-                .frame(width: 48, height: 48)
-            }
-            .padding(.horizontal, 20)
-
-            if let date = viewModel.episodeDate {
-                Text(date.formatted(date: .abbreviated, time: .omitted))
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+                .frame(width: 44, height: 44)
+                .accessibilityLabel("More options")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 32)
     }
 }

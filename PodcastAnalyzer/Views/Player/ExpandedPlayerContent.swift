@@ -11,34 +11,41 @@ struct ExpandedPlayerContent: View {
 
     var body: some View {
         ScrollView {
+            // One 32pt gutter for every row (the pieces used to mix 20/24/32/40,
+            // so nothing lined up vertically), and the transport sits tight under
+            // the scrubber it controls — the grouping Apple Podcasts and Spotify
+            // both use — with the volume and secondary actions pushed further out.
             VStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    PlayerArtworkView(imageURL: viewModel.imageURL, isPlaying: viewModel.isPlaying)
-                        .padding(.top, 16)
-                    PlayerEpisodeInfoView(
-                        viewModel: viewModel,
-                        onNavigateToEpisodeDetail: onNavigateToEpisodeDetail,
-                        onNavigateToPodcast: onNavigateToPodcast
-                    )
-                    .padding(.top, 24)
-                }
+                PlayerArtworkView(imageURL: viewModel.imageURL, isPlaying: viewModel.isPlaying)
+                    .padding(.top, 12)
 
-                Spacer(minLength: 20)
+                Spacer(minLength: 28)
 
-                VStack(spacing: 32) {
+                PlayerEpisodeInfoView(
+                    viewModel: viewModel,
+                    onNavigateToEpisodeDetail: onNavigateToEpisodeDetail,
+                    onNavigateToPodcast: onNavigateToPodcast
+                )
+
+                Spacer(minLength: 24)
+
+                VStack(spacing: 20) {
                     PlayerScrubberBar(viewModel: viewModel)
                     PlayerControlsView(viewModel: viewModel)
-                    PlayerVolumeRow()
                 }
 
-                Spacer(minLength: 32)
+                Spacer(minLength: 28)
+
+                PlayerVolumeRow()
+
+                Spacer(minLength: 28)
 
                 PlayerBottomActionsView(
                     queueCount: viewModel.queue.count,
                     onNavigateToEpisodeDetail: onNavigateToEpisodeDetail,
                     onOpenQueue: onOpenQueue
                 )
-                .padding(.bottom, 40)
+                .padding(.bottom, 32)
             }
             .frame(maxWidth: 440)
             .frame(maxWidth: .infinity)
