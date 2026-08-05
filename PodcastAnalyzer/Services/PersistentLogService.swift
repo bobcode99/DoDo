@@ -8,6 +8,9 @@
 
 import Foundation
 import OSLog
+#if os(iOS)
+import UIKit
+#endif
 
 @MainActor
 final class PersistentLogService {
@@ -39,13 +42,30 @@ final class PersistentLogService {
     let log = logger
 
     exportTask?.cancel()
-    exportTask = Task.detached(priority: .utility) {
-      do {
-        try PersistentLogService.exportLogs(subsystems: subsystems, logsDirectory: logsDir, logger: log)
-        PersistentLogService.cleanupOldLogs(logsDirectory: logsDir, keeping: 7, logger: log)
-      } catch {
-        log.error("Failed to export logs: \(error.localizedDescription, privacy: .public)")
+    exportTask = Task { @MainActor in
+      // iOS suspends the process seconds after .background; without a
+      // background task assertion the export below is killed mid-read/write
+      // and the log file silently never lands. Hold an assertion (kept alive
+      // by awaiting the detached work) until the write finishes.
+      #if os(iOS)
+      var bgTask: UIBackgroundTaskIdentifier = .invalid
+      bgTask = UIApplication.shared.beginBackgroundTask(withName: "LogExport") {
+        UIApplication.shared.endBackgroundTask(bgTask)
+        bgTask = .invalid
       }
+      defer {
+        if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) }
+      }
+      #endif
+
+      await Task.detached(priority: .utility) {
+        do {
+          try PersistentLogService.exportLogs(subsystems: subsystems, logsDirectory: logsDir, logger: log)
+          PersistentLogService.cleanupOldLogs(logsDirectory: logsDir, keeping: 7, logger: log)
+        } catch {
+          log.error("Failed to export logs: \(error.localizedDescription, privacy: .public)")
+        }
+      }.value
     }
   }
 
@@ -62,12 +82,14 @@ final class PersistentLogService {
     let oneDayAgo = Date().addingTimeInterval(-24 * 60 * 60)
     let position = store.position(date: oneDayAgo)
 
-    let entries = try store.getEntries(at: position)
+    // Filter in the store rather than in Swift so it doesn't decode every
+    // system-framework entry the process emitted just to throw them away.
+    let predicate = subsystems.count == 1
+      ? NSPredicate(format: "subsystem == %@", subsystems[0])
+      : NSPredicate(format: "subsystem IN %@", subsystems)
+    let entries = try store.getEntries(at: position, matching: predicate)
 
-    // Filter to our app's subsystems
-    let appEntries = entries.compactMap { $0 as? OSLogEntryLog }.filter { entry in
-      subsystems.contains(entry.subsystem)
-    }
+    let appEntries = entries.compactMap { $0 as? OSLogEntryLog }
 
     guard !appEntries.isEmpty else {
       logger.info("No app log entries found in the last 24 hours — skipping export")
