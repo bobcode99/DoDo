@@ -394,31 +394,6 @@ final class ExpandedPlayerViewModel {
 
   // MARK: - Transcript
 
-  /// Current segment based on playback time
-  var currentSegmentId: Int? {
-    let time = currentTime
-    return transcriptSegments.first { segment in
-      time >= segment.startTime && time <= segment.endTime
-    }?.id
-  }
-
-  /// Current segment text for display
-  var currentSegmentText: String? {
-    guard let id = currentSegmentId else { return nil }
-    return transcriptSegments.first { $0.id == id }?.text
-  }
-
-  /// Filtered segments based on search query
-  var filteredTranscriptSegments: [TranscriptSegment] {
-    guard !transcriptSearchQuery.isEmpty else {
-      return transcriptSegments
-    }
-    let query = transcriptSearchQuery
-    return transcriptSegments.filter { segment in
-      segment.text.localizedStandardContains(query)
-    }
-  }
-
   private func loadTranscript() {
     guard let episode = audioManager.currentEpisode else {
       hasTranscript = false

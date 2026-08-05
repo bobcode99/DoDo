@@ -1461,9 +1461,6 @@ private func handleAudioInterruption(_ notification: Notification) {
           self.postPlaybackPositionUpdate()
           self.updateWidgetPlaybackData()
         }
-
-        // Check for widget toggle playback request
-        self.checkWidgetTogglePlayback()
       }
     }
   }

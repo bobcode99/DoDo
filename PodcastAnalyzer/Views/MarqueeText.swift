@@ -19,7 +19,7 @@ struct MarqueeText: View {
     var alignment: HorizontalAlignment = .leading
 
     @State private var intrinsicWidth: CGFloat = 0
-    @State private var startDate = Date()
+    @State private var offset: CGFloat = 0
 
     var body: some View {
         baseText
@@ -45,9 +45,6 @@ struct MarqueeText: View {
                         }
                     )
             )
-            .onChange(of: text) { _, _ in
-                startDate = Date()
-            }
     }
 
     private var baseText: Text {
@@ -64,23 +61,28 @@ struct MarqueeText: View {
         if needsScroll {
             let total = intrinsicWidth + spacing
             let scrollDuration = max(0.1, Double(total / velocity))
-            let cycle = pauseDuration + scrollDuration
-            TimelineView(.animation) { timeline in
-                let elapsed = timeline.date.timeIntervalSince(startDate)
-                let localTime = elapsed.truncatingRemainder(dividingBy: cycle)
-                let phase: CGFloat = {
-                    if localTime < pauseDuration { return 0 }
-                    let progress = (localTime - pauseDuration) / scrollDuration
-                    return CGFloat(progress) * total
-                }()
-                HStack(spacing: spacing) {
-                    baseText.lineLimit(1).fixedSize()
-                    baseText.lineLimit(1).fixedSize()
-                }
-                .offset(x: -phase)
-                .frame(width: width, height: height, alignment: .leading)
+            HStack(spacing: spacing) {
+                baseText.lineLimit(1).fixedSize()
+                baseText.lineLimit(1).fixedSize()
             }
+            .offset(x: offset)
+            .frame(width: width, height: height, alignment: .leading)
             .clipped()
+            // One `withAnimation` per cycle instead of a `TimelineView(.animation)`
+            // that re-evaluated this body every display frame (120Hz on ProMotion)
+            // for as long as the view was on screen. The render server interpolates
+            // the offset; SwiftUI only runs the body twice a cycle.
+            .task(id: "\(text)|\(total)|\(width)") {
+                while !Task.isCancelled {
+                    offset = 0
+                    try? await Task.sleep(for: .seconds(pauseDuration))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.linear(duration: scrollDuration)) {
+                        offset = -total
+                    }
+                    try? await Task.sleep(for: .seconds(scrollDuration))
+                }
+            }
         } else {
             baseText
                 .lineLimit(1)

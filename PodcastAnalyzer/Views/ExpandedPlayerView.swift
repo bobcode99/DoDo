@@ -41,9 +41,17 @@ struct ExpandedPlayerView: View {
                         )
                     }
                 }
-                .blur(radius: showQueue ? 3 : 0)
 
+                // Dim rather than blur. `.blur` is installed unconditionally even
+                // at radius 0, which forced the whole player subtree — artwork
+                // shadow, glass controls, scrubber — into an offscreen buffer that
+                // re-rasterized on every playback tick.
                 if showQueue {
+                    Color.black.opacity(0.25)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+
                     QueueOverlay(
                         queue: viewModel.queue,
                         onPlayItem: { index in
