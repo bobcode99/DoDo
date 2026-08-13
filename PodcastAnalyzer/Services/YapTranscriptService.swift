@@ -46,6 +46,31 @@ actor YapTranscriptService {
 
     private struct SubmitResponse: Decodable { let id: String }
 
+    /// Drops the `timestamp` query parameter from a remote audio URL.
+    ///
+    /// Podcast CDNs (SoundOn, Firstory, Podtrac, …) hang a per-request
+    /// `timestamp` tracking value off the enclosure URL. It changes on every
+    /// fetch, so handing it to the yap server makes each submission look like a
+    /// different asset, and hosts that validate it reject a stale one outright.
+    ///
+    /// Only `timestamp` is removed — other query items can be required for the
+    /// CDN to serve the file at all, so the query string is otherwise preserved
+    /// (and dropped entirely only when nothing else remains).
+    ///
+    /// Uses `percentEncodedQueryItems`, not `queryItems`: the latter decodes on
+    /// read and re-encodes more permissively on write, turning a signature like
+    /// `sig=a%2Bb%2Fc` into `sig=a+b/c` — a different value, which breaks the
+    /// signed URLs these CDNs hand out. The encoded form round-trips verbatim.
+    nonisolated static func strippingTimestamp(_ raw: String) -> String {
+        guard var components = URLComponents(string: raw),
+              let items = components.percentEncodedQueryItems,
+              items.contains(where: { $0.name == "timestamp" })
+        else { return raw }
+        let kept = items.filter { $0.name != "timestamp" }
+        components.percentEncodedQueryItems = kept.isEmpty ? nil : kept
+        return components.url?.absoluteString ?? raw
+    }
+
     /// Hits `GET /health` and `GET /backends` to confirm the yap server is
     /// reachable and that the configured API key (when present) is accepted.
     /// `/health` is auth-free; `/backends` is auth-gated, so a 401 here is a
@@ -198,9 +223,14 @@ actor YapTranscriptService {
     ) async throws -> String {
         let url = baseURL.appending(path: "transcriptions")
 
+        let submittedURL = Self.strippingTimestamp(remoteURL)
+        if submittedURL != remoteURL {
+            logger.info("[YapServer] stripped timestamp param from remote audio URL")
+        }
+
         let resolvedLocale = locale.map { normalizeLocale($0) }
         var body: [String: Any] = [
-            "url": remoteURL,
+            "url": submittedURL,
             "format": "srt",
             "max_length": maxLength(for: locale)
         ]
