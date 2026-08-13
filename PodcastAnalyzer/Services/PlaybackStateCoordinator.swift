@@ -105,7 +105,11 @@ class PlaybackStateCoordinator {
     }
   }
 
-  private func savePlaybackPosition(update: PlaybackPositionUpdate) {
+  /// Internal (not private) so tests can drive the persistence step directly
+  /// instead of posting `.playbackPositionDidUpdate`, which every live
+  /// coordinator in the process — including the host app's, backed by the real
+  /// store — would also act on.
+  func savePlaybackPosition(update: PlaybackPositionUpdate) {
     guard let context = modelContext else { return }
 
     let id = makeEpisodeId(podcastTitle: update.podcastTitle, episodeTitle: update.episodeTitle)

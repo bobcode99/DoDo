@@ -26,7 +26,6 @@
       }
     },
     {
-      "parallelizable" : true,
       "target" : {
         "containerPath" : "container:PodcastAnalyzer.xcodeproj",
         "identifier" : "15ED5F052EC44BC9001B6CD7",

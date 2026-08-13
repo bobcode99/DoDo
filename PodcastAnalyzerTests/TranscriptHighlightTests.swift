@@ -76,11 +76,20 @@ struct TranscriptHighlightTests {
         #expect(sentences.activeID(at: 25) == 20)
     }
 
-    @Test("Time past the last sentence keeps it highlighted (last-started)")
+    @Test("Just past the last sentence keeps it highlighted, then the grace window expires")
     func pastEndStillHighlightsLast() {
-        let sentences = threeSentences()
+        let sentences = threeSentences()  // last sentence ends at 30
         #expect(sentences.activeID(at: 30) == 20)
-        #expect(sentences.activeID(at: 999) == 20)
+        #expect(sentences.activeID(at: 34.999) == 20, "inside the 5s grace window")
+
+        // Past the grace window the audio is untranscribed outro / credits /
+        // trailing ads, so the highlight clears instead of pinning the last
+        // sentence lit for the rest of the episode.
+        #expect(sentences.activeID(at: 35.001) == nil)
+        #expect(sentences.activeID(at: 999) == nil)
+
+        // The window is a parameter, so a caller can widen or disable it.
+        #expect(sentences.activeID(at: 999, pastEndGrace: .infinity) == 20)
     }
 
     @Test("Gap between sentences holds the previous sentence (last-started)")
@@ -112,7 +121,10 @@ struct TranscriptHighlightTests {
         let sentences = starts.enumerated().map { i, s in
             TranscriptSentence(id: i, segments: [seg(i, start: s, end: s + 1)])
         }
-        let oracle = sentences.last { $0.startTime <= time }?.id
+        // The oracle models the same past-end grace the binary search applies:
+        // the last sentence ends at 101, so anything past 106 clears.
+        let pastEnd = sentences.last.map { time > $0.endTime + 5 } ?? true
+        let oracle = pastEnd ? nil : sentences.last { $0.startTime <= time }?.id
         #expect(sentences.activeID(at: time) == oracle)
     }
 
