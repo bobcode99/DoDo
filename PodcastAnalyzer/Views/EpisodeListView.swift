@@ -166,12 +166,17 @@ struct EpisodeListView: View {
       // Initialize ViewModel and refresh in a single task to prevent race conditions
       self.podcastModel = podcastModel
       if viewModel == nil {
+        // Let the push animation land before constructing the view model. Its
+        // init decodes the whole `podcastInfo` episode blob on the main actor,
+        // and `.task` fires as the view appears — so without this the freeze
+        // lands inside the transition. `episodeLoadingView` covers the gap.
+        try? await Task.sleep(for: .milliseconds(300))
         let vm = EpisodeListViewModel(podcastModel: podcastModel, initialFilter: initialFilter)
         vm.setModelContext(modelContext)
         viewModel = vm
       }
       await viewModel?.refreshPodcast()
-      await lookupApplePodcastURL(title: podcastModel.podcastInfo.title)
+      await lookupApplePodcastURL(title: podcastModel.title)
     }
   }
 
@@ -276,7 +281,7 @@ struct EpisodeListView: View {
       self.viewModel = vm
 
       if applePodcastURL == nil {
-        await lookupApplePodcastURL(title: existing.podcastInfo.title)
+        await lookupApplePodcastURL(title: existing.title)
       }
 
       isLoadingRSS = false
@@ -382,6 +387,10 @@ struct EpisodeListView: View {
             downloadManager: downloadManager,
             episodeModel: viewModel.episodeModels[key],
             precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
+            precomputedHasTranscript: viewModel.transcriptKeys.contains(key),
+            precomputedHasAIAnalysis: episode.audioURL.map {
+              viewModel.aiAnalysisAudioURLs.contains($0)
+            } ?? false,
             showArtwork: showEpisodeArtwork,
             onToggleStar: {
               viewModel.toggleStar(for: episode)

@@ -92,29 +92,35 @@ struct AnalysisView: View {
   /// Episode artwork URL, with podcast-level fallback. When the podcast is
   /// still subscribed we look up the episode's own image; otherwise we fall
   /// back to the podcast art (or nil, which yields the placeholder).
+  // Each of these runs per analysis row. Bind `podcastInfo` once and pass the
+  // decoded value down — reading it repeatedly re-materializes the podcast's
+  // whole episode array each time. `imageURL` comes from the mirror, so the
+  // artwork path needs no decode at all.
   private func artworkURL(for analysis: EpisodeAIAnalysis) -> String? {
     let podcast = podcastByTitle[analysis.podcastTitle]
-    let enriched = enrichedEpisode(for: analysis, podcast: podcast)
-    return enriched.imageURL ?? podcast?.podcastInfo.imageURL
+    let enriched = enrichedEpisode(for: analysis, info: podcast?.podcastInfo)
+    return enriched.imageURL ?? podcast?.imageURL
   }
 
   private func route(for analysis: EpisodeAIAnalysis) -> EpisodeAIAnalysisRoute {
     let podcast = podcastByTitle[analysis.podcastTitle]
+    let info = podcast?.podcastInfo
     return EpisodeAIAnalysisRoute(
-      episode: enrichedEpisode(for: analysis, podcast: podcast),
+      episode: enrichedEpisode(for: analysis, info: info),
       podcastTitle: analysis.podcastTitle,
-      fallbackImageURL: podcast?.podcastInfo.imageURL,
-      podcastLanguage: podcast?.podcastInfo.language
+      fallbackImageURL: podcast?.imageURL,
+      podcastLanguage: info?.language
     )
   }
 
   private func episodeDetailRoute(for analysis: EpisodeAIAnalysis) -> EpisodeDetailRoute {
     let podcast = podcastByTitle[analysis.podcastTitle]
+    let info = podcast?.podcastInfo
     return EpisodeDetailRoute(
-      episode: enrichedEpisode(for: analysis, podcast: podcast),
+      episode: enrichedEpisode(for: analysis, info: info),
       podcastTitle: analysis.podcastTitle,
-      fallbackImageURL: podcast?.podcastInfo.imageURL,
-      podcastLanguage: podcast?.podcastInfo.language
+      fallbackImageURL: podcast?.imageURL,
+      podcastLanguage: info?.language
     )
   }
 
@@ -124,10 +130,10 @@ struct AnalysisView: View {
   /// from the feed — without this, EpisodeDetailView's summary is blank.
   private func enrichedEpisode(
     for analysis: EpisodeAIAnalysis,
-    podcast: PodcastInfoModel?
+    info: PodcastInfo?
   ) -> PodcastEpisodeInfo {
     let storedAudioURL = analysis.episodeAudioURL.isEmpty ? nil : analysis.episodeAudioURL
-    if let episodes = podcast?.podcastInfo.episodes,
+    if let episodes = info?.episodes,
        let match = episodes.first(where: { episode in
          if let storedAudioURL, let url = episode.audioURL, url == storedAudioURL {
            return true

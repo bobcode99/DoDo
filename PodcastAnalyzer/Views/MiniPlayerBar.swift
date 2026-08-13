@@ -229,9 +229,11 @@ struct MiniPlayerBar: View {
     // Collect all playable episodes (those with audio URLs) from all podcasts
     var playableEpisodes: [(episode: PodcastEpisodeInfo, audioURL: String, podcastTitle: String, podcastImageURL: String)] = []
     for podcast in podcasts {
-      let podcastTitle = podcast.podcastInfo.title
-      let podcastImageURL = podcast.podcastInfo.imageURL
-      for episode in podcast.podcastInfo.episodes {
+      // One decode per podcast, not three.
+      let info = podcast.podcastInfo
+      let podcastTitle = info.title
+      let podcastImageURL = info.imageURL
+      for episode in info.episodes {
         // Only include episodes with valid audio URLs
         if let audioURL = episode.audioURL, !audioURL.isEmpty {
           playableEpisodes.append((episode, audioURL, podcastTitle, podcastImageURL))

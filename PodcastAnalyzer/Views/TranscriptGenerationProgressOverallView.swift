@@ -354,22 +354,31 @@ private struct TranscriptJobEpisodeDestination: View {
     _podcasts = Query(filter: #Predicate<PodcastInfoModel> { $0.title == title })
   }
 
+  /// Binds `podcastInfo` once — it used to be read six times in `body`, and
+  /// each read re-materializes the podcast's whole episode array.
+  private var resolved: (info: PodcastInfo, episode: PodcastEpisodeInfo)? {
+    guard let podcast = podcasts.first else { return nil }
+    let info = podcast.podcastInfo
+    guard let episode = info.episodes.first(where: { $0.title == route.episodeTitle })
+    else { return nil }
+    return (info, episode)
+  }
+
   var body: some View {
-    if let podcast = podcasts.first,
-       let episode = podcast.podcastInfo.episodes.first(where: { $0.title == route.episodeTitle }) {
-      let lang = podcast.podcastInfo.language.isEmpty ? "en" : podcast.podcastInfo.language
+    if let (info, episode) = resolved {
+      let lang = info.language.isEmpty ? "en" : info.language
       #if os(macOS)
       MacEpisodeDetailView(
         episode: episode,
-        podcastTitle: podcast.podcastInfo.title,
-        fallbackImageURL: podcast.podcastInfo.imageURL,
+        podcastTitle: info.title,
+        fallbackImageURL: info.imageURL,
         podcastLanguage: lang
       )
       #else
       EpisodeDetailView(
         episode: episode,
-        podcastTitle: podcast.podcastInfo.title,
-        fallbackImageURL: podcast.podcastInfo.imageURL,
+        podcastTitle: info.title,
+        fallbackImageURL: info.imageURL,
         podcastLanguage: lang
       )
       #endif

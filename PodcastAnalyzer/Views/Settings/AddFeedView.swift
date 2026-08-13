@@ -16,7 +16,7 @@ struct FeedRowView: View {
   var body: some View {
     HStack(spacing: 12) {
       // Podcast artwork
-      if let urlString = feed.podcastInfo.imageURL.isEmpty ? nil : feed.podcastInfo.imageURL,
+      if let urlString = feed.imageURL.isEmpty ? nil : feed.imageURL,
         let url = URL(string: urlString)
       {
         AsyncImage(url: url) { phase in
@@ -48,12 +48,12 @@ struct FeedRowView: View {
       }
 
       VStack(alignment: .leading, spacing: 4) {
-        Text(feed.podcastInfo.title)
+        Text(feed.title)
           .font(.body)
           .fontWeight(.medium)
           .lineLimit(1)
 
-        Text("\(feed.podcastInfo.episodes.count) episodes")
+        Text("\(feed.episodeCount) episodes")
           .font(.caption)
           .foregroundStyle(.secondary)
       }

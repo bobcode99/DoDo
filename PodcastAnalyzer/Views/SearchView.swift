@@ -314,7 +314,7 @@ struct PodcastSearchView: View {
     }
 
     private var podcastTitles: [String] {
-        subscribedPodcasts.map { $0.podcastInfo.title }.sorted()
+        subscribedPodcasts.map(\.title).sorted()
     }
 
     private var searchPrompt: LocalizedStringKey {
@@ -366,7 +366,7 @@ struct PodcastSearchView: View {
     }
 
     private func isSubscribed(_ podcast: Podcast) -> Bool {
-        subscribedPodcasts.contains { $0.podcastInfo.title == podcast.collectionName }
+        subscribedPodcasts.contains { $0.title == podcast.collectionName }
     }
 
     private func subscribeToPodcast(_ podcast: Podcast) {
@@ -436,21 +436,26 @@ struct PodcastSearchView: View {
         }
 
         filteredPodcasts = subscribedPodcasts.filter { podcast in
-            podcast.podcastInfo.title.localizedStandardContains(query)
+            podcast.title.localizedStandardContains(query)
         }
 
         var episodeResults: [(episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String)] = []
         for podcast in subscribedPodcasts {
-            let matchingEpisodes = podcast.podcastInfo.episodes.filter { episode in
+            // Bind the blob once per podcast. Reading `podcast.podcastInfo`
+            // re-materializes the whole episode array every time, and this ran
+            // per keystroke — previously once for the episode list plus three
+            // more times for every *match*.
+            let info = podcast.podcastInfo
+            let matchingEpisodes = info.episodes.filter { episode in
                 episode.title.localizedStandardContains(query) ||
                 (episode.podcastEpisodeDescription?.localizedStandardContains(query) ?? false)
             }
             for episode in matchingEpisodes {
                 episodeResults.append((
                     episode: episode,
-                    podcastTitle: podcast.podcastInfo.title,
-                    podcastImageURL: podcast.podcastInfo.imageURL,
-                    podcastLanguage: podcast.podcastInfo.language
+                    podcastTitle: info.title,
+                    podcastImageURL: info.imageURL,
+                    podcastLanguage: info.language
                 ))
             }
         }

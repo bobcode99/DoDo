@@ -36,7 +36,7 @@ struct PodcastContextMenu: ViewModifier {
         }
 
         Button {
-          PlatformClipboard.string = podcast.podcastInfo.rssUrl
+          PlatformClipboard.string = podcast.rssUrl
         } label: {
           Label("Copy RSS URL", systemImage: "doc.on.doc")
         }
@@ -65,10 +65,14 @@ struct PodcastContextMenu: ViewModifier {
               podcast.autoDownloadSetting = setting.rawValue
               try? modelContext.save()
             } label: {
-              Label(
-                setting.displayName,
-                systemImage: podcast.autoDownloadSetting == setting.rawValue ? "checkmark" : ""
-              )
+              // Branch rather than passing "" as the systemImage: Label always
+              // builds an Image(systemName:), so the empty string is a real
+              // lookup that SF Symbols logs as a miss on every unselected row.
+              if podcast.autoDownloadSetting == setting.rawValue {
+                Label(setting.displayName, systemImage: "checkmark")
+              } else {
+                Text(setting.displayName)
+              }
             }
           }
         } label: {
@@ -112,14 +116,17 @@ struct PodcastContextMenu: ViewModifier {
         }
         Button("Cancel", role: .cancel) {}
       } message: {
-        Text("Are you sure you want to unsubscribe from \"\(podcast.podcastInfo.title)\"? Downloaded episodes will remain available.")
+        // `podcast.title`, not `podcast.podcastInfo.title`: this message closure is
+        // non-escaping, so it is built on every render of every grid cell — and
+        // reading the blob there decodes the whole episode array each time.
+        Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? Downloaded episodes will remain available.")
       }
   }
 
   private func refreshPodcast() async {
     let rssService = PodcastRssService()
     do {
-      let updatedPodcast = try await rssService.fetchPodcast(from: podcast.podcastInfo.rssUrl)
+      let updatedPodcast = try await rssService.fetchPodcast(from: podcast.rssUrl)
       podcast.applyPodcastInfo(updatedPodcast)
       podcast.lastUpdated = Date()
       try modelContext.save()

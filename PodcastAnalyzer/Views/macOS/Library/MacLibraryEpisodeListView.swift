@@ -37,7 +37,7 @@ struct MacLibraryEpisodeListView: View {
           MacLibraryEpisodeListRow(
             episode: episode,
             podcastModel: podcastInfoModelList.first {
-              $0.podcastInfo.title == episode.podcastTitle
+              $0.title == episode.podcastTitle
             },
             onToggleStar: {
               LibraryEpisodeActions.toggleStar(

@@ -119,6 +119,7 @@ struct LibraryView: View {
       await viewModel.refreshAllPodcasts()
     }
     .onAppear {
+      let isFirstLoad = !viewModel.isLoaded
       viewModel.setModelContext(modelContext)
       applyPodcastsIfChanged(subscribedPodcasts)
       // Re-fetch saved/starred episodes so stars set from Home/Search/Trending
@@ -126,6 +127,13 @@ struct LibraryView: View {
       // transition and throttled, so popping back from a sub-page doesn't run
       // SwiftData fetches mid-animation — that contention was the visible
       // hitch when navigating back into this tab.
+      //
+      // Skipped on the very first appearance: `setModelContext` has just
+      // kicked off the full load, and re-running saved/downloaded 350ms later
+      // duplicated every fetch and its observable writes. The device log showed
+      // each section loading twice, ~370ms apart, on the first Home → Library
+      // switch.
+      guard !isFirstLoad else { return }
       let now = Date()
       guard now.timeIntervalSince(lastAppearRefresh) > 2 else { return }
       lastAppearRefresh = now
@@ -134,13 +142,6 @@ struct LibraryView: View {
         await viewModel.refreshSavedEpisodes()
         await viewModel.refreshDownloadedEpisodes()
       }
-    }
-    .task {
-      // Only run the initial load if it hasn't already been kicked off by setModelContext.
-      // Without this guard, every tab re-appearance triggers a full refresh.
-      guard !viewModel.isLoaded else { return }
-      await viewModel.refreshSavedEpisodes()
-      await viewModel.refreshDownloadedEpisodes()
     }
     .task {
       // Modernized notification observers using async sequences

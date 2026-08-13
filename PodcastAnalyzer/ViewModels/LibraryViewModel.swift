@@ -193,7 +193,7 @@ final class LibraryViewModel {
       let podcast = podcastTitleMap[title]
       return DownloadedPodcastGroup(
         title: title,
-        imageURL: podcast?.podcastInfo.imageURL ?? imageByTitle[title],
+        imageURL: podcast?.imageURL ?? imageByTitle[title],
         podcast: podcast,
         downloadCount: count
       )
@@ -388,7 +388,7 @@ final class LibraryViewModel {
       }
       if isActive {
         if let (podcastTitle, episodeTitle) = parseDownloadEpisodeKey(episodeKey) {
-          let imageURL = podcastTitleMap[podcastTitle]?.podcastInfo.imageURL
+          let imageURL = podcastTitleMap[podcastTitle]?.imageURL
           let progressValue: Double
           if case .finishing = state {
             progressValue = 1.0
@@ -509,8 +509,9 @@ final class LibraryViewModel {
         updatedModel = existingModel
       } else {
         // Find the episode from allPodcasts using O(1) lookup
-        guard let podcast = podcastTitleMap[podcastTitle],
-              let episode = podcast.podcastInfo.episodes.first(where: { $0.title == episodeTitle }),
+        guard let podcast = podcastTitleMap[podcastTitle] else { return }
+        let info = podcast.podcastInfo
+        guard let episode = info.episodes.first(where: { $0.title == episodeTitle }),
               let audioURL = episode.audioURL else { return }
 
         let model = EpisodeDownloadModel(
@@ -519,7 +520,7 @@ final class LibraryViewModel {
           audioURL: audioURL,
           localAudioPath: localPath,
           downloadedDate: Date(),
-          imageURL: episode.imageURL ?? podcast.podcastInfo.imageURL,
+          imageURL: episode.imageURL ?? info.imageURL,
           pubDate: episode.pubDate
         )
         if let attrs = try? FileManager.default.attributesOfItem(atPath: localPath),
@@ -1226,21 +1227,25 @@ final class LibraryViewModel {
     if let (podcastTitle, episodeTitle) = parseEpisodeKey(model.id) {
       // Verify parsed titles match stored titles (catches mis-parsing due to | in episode titles)
       if podcastTitle == model.podcastTitle && episodeTitle == model.episodeTitle {
-        // Try to find full podcast info for richer data using O(1) lookup
-        if let podcast = podcastTitleMap[podcastTitle],
-           let episode = podcast.podcastInfo.episodes.first(where: { $0.title == episodeTitle }) {
-          return LibraryEpisode(
-            id: model.id,
-            podcastTitle: podcastTitle,
-            imageURL: episode.imageURL ?? podcast.podcastInfo.imageURL,
-            language: podcast.podcastInfo.language,
-            episodeInfo: episode,
-            isStarred: model.isStarred,
-            isDownloaded: Self.hasLocalAudioFile(model.localAudioPath),
-            isCompleted: model.isCompleted,
-            lastPlaybackPosition: model.lastPlaybackPosition,
-            savedDuration: model.duration
-          )
+        // Try to find full podcast info for richer data using O(1) lookup.
+        // `info` is bound once: this runs per episode, and each read of
+        // `podcast.podcastInfo` re-materializes the whole episode array.
+        if let podcast = podcastTitleMap[podcastTitle] {
+          let info = podcast.podcastInfo
+          if let episode = info.episodes.first(where: { $0.title == episodeTitle }) {
+            return LibraryEpisode(
+              id: model.id,
+              podcastTitle: podcastTitle,
+              imageURL: episode.imageURL ?? info.imageURL,
+              language: info.language,
+              episodeInfo: episode,
+              isStarred: model.isStarred,
+              isDownloaded: Self.hasLocalAudioFile(model.localAudioPath),
+              isCompleted: model.isCompleted,
+              lastPlaybackPosition: model.lastPlaybackPosition,
+              savedDuration: model.duration
+            )
+          }
         }
       }
     }
@@ -1299,22 +1304,25 @@ final class LibraryViewModel {
       return createFallbackLibraryEpisode(from: model)
     }
 
-    // Find the podcast using O(1) lookup
-    if let podcast = podcastTitleMap[podcastTitle],
-       let episode = podcast.podcastInfo.episodes.first(where: { $0.title == episodeTitle }) {
-      // Found the full episode info
-      return LibraryEpisode(
-        id: model.id,
-        podcastTitle: podcastTitle,
-        imageURL: episode.imageURL ?? podcast.podcastInfo.imageURL,
-        language: podcast.podcastInfo.language,
-        episodeInfo: episode,
-        isStarred: model.isStarred,
-        isDownloaded: Self.hasLocalAudioFile(model.localAudioPath),
-        isCompleted: model.isCompleted,
-        lastPlaybackPosition: model.lastPlaybackPosition,
-        savedDuration: model.duration
-      )
+    // Find the podcast using O(1) lookup. `info` is bound once — this runs per
+    // episode, and each `podcast.podcastInfo` read re-materializes the array.
+    if let podcast = podcastTitleMap[podcastTitle] {
+      let info = podcast.podcastInfo
+      if let episode = info.episodes.first(where: { $0.title == episodeTitle }) {
+        // Found the full episode info
+        return LibraryEpisode(
+          id: model.id,
+          podcastTitle: podcastTitle,
+          imageURL: episode.imageURL ?? info.imageURL,
+          language: info.language,
+          episodeInfo: episode,
+          isStarred: model.isStarred,
+          isDownloaded: Self.hasLocalAudioFile(model.localAudioPath),
+          isCompleted: model.isCompleted,
+          lastPlaybackPosition: model.lastPlaybackPosition,
+          savedDuration: model.duration
+        )
+      }
     }
 
     // Fallback: use the stored data from EpisodeDownloadModel

@@ -350,7 +350,7 @@ final class SettingsViewModel {
     }
 
     // Check for duplicates
-    guard !podcastInfoModelList.contains(where: { $0.podcastInfo.rssUrl == trimmedLink }) else {
+    guard !podcastInfoModelList.contains(where: { $0.rssUrl == trimmedLink }) else {
       errorMessage = "This feed is already added"
       successMessage = ""
       return
@@ -425,7 +425,7 @@ final class SettingsViewModel {
       try modelContext.save()
       podcastInfoModelList.removeAll { $0.id == podcastInfoModel.id }
       errorMessage = ""
-      self.logger.info("Feed deleted: \(podcastInfoModel.podcastInfo.title)")
+      self.logger.info("Feed deleted: \(podcastInfoModel.title)")
     } catch {
       errorMessage = "Failed to delete feed: \(error.localizedDescription)"
       self.logger.error("Failed to delete feed: \(error.localizedDescription, privacy: .public)")

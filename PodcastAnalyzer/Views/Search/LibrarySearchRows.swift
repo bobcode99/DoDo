@@ -17,15 +17,15 @@ struct LibraryPodcastRow: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 12) {
-                CachedArtworkImage(urlString: podcastModel.podcastInfo.imageURL, size: 56, cornerRadius: 8)
+                CachedArtworkImage(urlString: podcastModel.imageURL, size: 56, cornerRadius: 8)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(podcastModel.podcastInfo.title)
+                    Text(podcastModel.title)
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(1)
 
-                    Text("Show · \(podcastModel.podcastInfo.episodes.count) episodes")
+                    Text("Show · \(podcastModel.episodeCount) episodes")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

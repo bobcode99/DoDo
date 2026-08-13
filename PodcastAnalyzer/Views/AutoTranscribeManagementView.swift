@@ -34,7 +34,7 @@ struct AutoTranscribeManagementView: View {
   private func filtered(_ podcasts: [PodcastInfoModel]) -> [PodcastInfoModel] {
     let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !needle.isEmpty else { return podcasts }
-    return podcasts.filter { $0.podcastInfo.title.lowercased().contains(needle) }
+    return podcasts.filter { $0.title.lowercased().contains(needle) }
   }
 
   var body: some View {
@@ -113,7 +113,7 @@ struct AutoTranscribeManagementView: View {
 
   @ViewBuilder
   private func row(for podcast: PodcastInfoModel) -> some View {
-    let title = podcast.podcastInfo.title
+    let title = podcast.title
     let enabled = podcast.autoTranscribeNewEpisodes
     let pending = activeCount(for: title)
 
@@ -126,7 +126,7 @@ struct AutoTranscribeManagementView: View {
         Text(title)
           .font(.body)
           .lineLimit(1)
-        Text(subtitle(enabled: enabled, pending: pending, episodes: podcast.podcastInfo.episodes.count))
+        Text(subtitle(enabled: enabled, pending: pending, episodes: podcast.episodeCount))
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)

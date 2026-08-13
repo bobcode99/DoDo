@@ -214,7 +214,7 @@ struct MacSearchView: View {
   // MARK: - Helper Methods
 
   private func isSubscribed(_ podcast: Podcast) -> Bool {
-    subscribedPodcasts.contains { $0.podcastInfo.title == podcast.collectionName }
+    subscribedPodcasts.contains { $0.title == podcast.collectionName }
   }
 
   private func subscribeToPodcast(_ podcast: Podcast) {
@@ -238,7 +238,7 @@ struct MacSearchView: View {
   private func filterLibraryPodcasts() -> [PodcastInfoModel] {
     let query = searchText
     return subscribedPodcasts.filter { podcast in
-      podcast.podcastInfo.title.localizedStandardContains(query)
+      podcast.title.localizedStandardContains(query)
     }
   }
 
@@ -247,19 +247,22 @@ struct MacSearchView: View {
     var results: [(uniqueId: String, episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String)] = []
 
     for podcast in subscribedPodcasts {
-      let matchingEpisodes = podcast.podcastInfo.episodes.filter { episode in
+      // Bind the blob once per podcast — this runs per keystroke, and it was
+      // being re-read four times for every match.
+      let info = podcast.podcastInfo
+      let matchingEpisodes = info.episodes.filter { episode in
         episode.title.localizedStandardContains(query) ||
         (episode.podcastEpisodeDescription?.localizedStandardContains(query) ?? false)
       }
 
       for episode in matchingEpisodes {
-        let uniqueId = "\(podcast.podcastInfo.title)\u{1F}\(episode.title)"
+        let uniqueId = "\(info.title)\u{1F}\(episode.title)"
         results.append((
           uniqueId: uniqueId,
           episode: episode,
-          podcastTitle: podcast.podcastInfo.title,
-          podcastImageURL: podcast.podcastInfo.imageURL,
-          podcastLanguage: podcast.podcastInfo.language
+          podcastTitle: info.title,
+          podcastImageURL: info.imageURL,
+          podcastLanguage: info.language
         ))
       }
     }

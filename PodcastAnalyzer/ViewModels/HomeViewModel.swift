@@ -404,11 +404,13 @@ final class HomeViewModel {
     var inputs: [EpisodeInput] = []
 
     for podcastModel in podcastInfoModelList {
-      let podcastTitle = podcastModel.podcastInfo.title
+      // One decode per podcast; the fields below are read per episode.
+      let info = podcastModel.podcastInfo
+      let podcastTitle = info.title
       var unstartedCount = 0
       let maxUnstarted = 10
 
-      for episode in podcastModel.podcastInfo.episodes {
+      for episode in info.episodes {
         let key = Self.makeEpisodeKey(podcastTitle: podcastTitle, episodeTitle: episode.title)
         let model = modelsByKey[key]
 
@@ -423,8 +425,8 @@ final class HomeViewModel {
         let libraryEpisode = LibraryEpisode(
           id: key,
           podcastTitle: podcastTitle,
-          imageURL: episode.imageURL ?? podcastModel.podcastInfo.imageURL,
-          language: podcastModel.podcastInfo.language,
+          imageURL: episode.imageURL ?? info.imageURL,
+          language: info.language,
           episodeInfo: episode,
           isStarred: model?.isStarred ?? false,
           isDownloaded: Self.hasLocalAudioFile(model?.localAudioPath),
@@ -754,7 +756,7 @@ final class HomeViewModel {
 
   /// Check if a podcast is already subscribed by name
   func isAlreadySubscribed(_ podcast: AppleRSSPodcast) -> Bool {
-    podcastInfoModelList.contains { $0.podcastInfo.title == podcast.name }
+    podcastInfoModelList.contains { $0.title == podcast.name }
   }
 
   // MARK: - Subscribe to Podcast
@@ -858,8 +860,9 @@ final class HomeViewModel {
       // episodes — no brittle title-string matching.
       var candidates: [(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)] = []
       for podcastModel in podcastInfoModelList {
-        for episode in podcastModel.podcastInfo.episodes.prefix(5) {
-          let key = Self.makeEpisodeKey(podcastTitle: podcastModel.podcastInfo.title, episodeTitle: episode.title)
+        let info = podcastModel.podcastInfo
+        for episode in info.episodes.prefix(5) {
+          let key = Self.makeEpisodeKey(podcastTitle: info.title, episodeTitle: episode.title)
           if modelsByKey[key]?.isCompleted != true {
             candidates.append((episode, podcastModel))
           }
@@ -870,7 +873,7 @@ final class HomeViewModel {
 
       let availableEpisodes = limited.map {
         (title: $0.episode.title,
-         podcastTitle: $0.podcast.podcastInfo.title,
+         podcastTitle: $0.podcast.title,
          description: $0.episode.podcastEpisodeDescription ?? "")
       }
 
@@ -904,13 +907,14 @@ final class HomeViewModel {
       let index = number - 1  // the model is shown a 1-based list
       guard candidates.indices.contains(index), seen.insert(index).inserted else { continue }
       let (episode, podcastModel) = candidates[index]
-      let key = makeEpisodeKey(podcastTitle: podcastModel.podcastInfo.title, episodeTitle: episode.title)
+      let info = podcastModel.podcastInfo
+      let key = makeEpisodeKey(podcastTitle: info.title, episodeTitle: episode.title)
       let model = modelsByKey[key]
       resolved.append(LibraryEpisode(
         id: key,
-        podcastTitle: podcastModel.podcastInfo.title,
-        imageURL: episode.imageURL ?? podcastModel.podcastInfo.imageURL,
-        language: podcastModel.podcastInfo.language,
+        podcastTitle: info.title,
+        imageURL: episode.imageURL ?? info.imageURL,
+        language: info.language,
         episodeInfo: episode,
         isStarred: model?.isStarred ?? false,
         isDownloaded: hasLocalAudioFile(model?.localAudioPath),
@@ -986,7 +990,7 @@ final class HomeViewModel {
   // MARK: - Find Podcast Model
 
   func findPodcastModel(for podcastTitle: String) -> PodcastInfoModel? {
-    podcastInfoModelList.first { $0.podcastInfo.title == podcastTitle }
+    podcastInfoModelList.first { $0.title == podcastTitle }
   }
 
   // MARK: - Star/Unstar Episode

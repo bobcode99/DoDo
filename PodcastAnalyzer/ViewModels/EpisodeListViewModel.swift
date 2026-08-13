@@ -23,7 +23,17 @@ private let viewModelLogger = Logger(subsystem: "com.podcast.analyzer", category
 @Observable
 final class EpisodeListViewModel {
   var episodeModels: [String: EpisodeDownloadModel] = [:] {
-    didSet { recomputeFilteredEpisodes() }
+    // Only three filters read `episodeModels`, so only they can change membership
+    // when it mutates. Recomputing unconditionally meant a star/played toggle on
+    // an episode with no model yet (ensureModel inserts into this dict) re-filtered
+    // and re-sorted the entire feed synchronously, while UIKit was still animating
+    // the ellipsis menu away.
+    didSet {
+      switch selectedFilter {
+      case .unplayed, .played, .starred: recomputeFilteredEpisodes()
+      case .all, .downloaded, .transcript, .custom: break
+      }
+    }
   }
 
   #if DEBUG
@@ -32,7 +42,7 @@ final class EpisodeListViewModel {
   var selectedFilter: EpisodeFilter = .all {
     didSet {
       isShowingAllEpisodes = false  // collapse back to the window for the new set
-      transcriptKeySnapshot = nil   // re-scan transcript presence when the chip is (re)selected
+      statusSnapshotsBuilt = false  // re-scan transcript presence when the chip is (re)selected
       recomputeFilteredEpisodes()
     }
   }
@@ -81,11 +91,19 @@ final class EpisodeListViewModel {
   /// throttle already applied in DownloadManager's URLSession delegate.
   private(set) var downloadStatesSnapshot: [String: DownloadState] = [:]
 
-  /// Episode keys that have a transcript, scanned once when the Transcript
-  /// filter is engaged (nil = not built / stale) via the same
-  /// `EpisodeStatusChecker.hasTranscript` the row badge uses. Cached so search
-  /// keystrokes don't re-query `TranscriptStore` for every visible episode.
-  @ObservationIgnored private var transcriptKeySnapshot: Set<String>?
+  /// Episode keys with a stored transcript, and audio URLs with a stored AI
+  /// analysis — both for *this* podcast, each built with a single fetch.
+  ///
+  /// These replace `EpisodeStatusChecker.hasTranscript` / `.hasAIAnalysis(in:)`
+  /// being called per row. Both of those are SwiftData fetches (not the file
+  /// checks their old comments claimed), so the previous shape cost two fetches
+  /// for every row that appeared — twenty of them on the main thread during a
+  /// push — and one fetch *per episode* when the Transcript filter was engaged.
+  private(set) var transcriptKeys: Set<String> = []
+  private(set) var aiAnalysisAudioURLs: Set<String> = []
+
+  /// nil = not built / stale. Rebuilt on demand by `refreshStatusSnapshots`.
+  @ObservationIgnored private var statusSnapshotsBuilt = false
 
   // MARK: - Cached Filtered Episodes
 
@@ -120,21 +138,53 @@ final class EpisodeListViewModel {
     !isShowingAllEpisodes && filteredEpisodes.count > Self.initialEpisodeDisplayCount
   }
 
-  /// Episode keys with a transcript `.srt` on disk. Scanned once per Transcript-
-  /// filter engagement via the same `EpisodeStatusChecker` the row badge uses,
-  /// then cached so repeated recomputes (e.g. search keystrokes) don't re-hit
-  /// the filesystem.
-  // ponytail: O(N) fileExists once per engagement; swap to a single directory
-  // scan if a feed ever has enough episodes to make this drag.
-  private func episodeKeysWithTranscript() -> Set<String> {
-    if let cached = transcriptKeySnapshot { return cached }
-    var keys: Set<String> = []
-    for episode in podcastInfo.episodes {
-      let checker = EpisodeStatusChecker(episode: episode, podcastTitle: podcastInfo.title)
-      if checker.hasTranscript { keys.insert(makeEpisodeKey(episode)) }
+  /// Rebuild both status sets with one fetch each, scoped to this podcast.
+  /// Idempotent — `statusSnapshotsBuilt` gates repeat work; callers that know
+  /// the data moved (feed refresh, finished transcript) reset it first.
+  func refreshStatusSnapshots() {
+    guard let context = modelContext, !statusSnapshotsBuilt else { return }
+    statusSnapshotsBuilt = true
+
+    // EpisodeTranscriptModel is keyed only by `episodeId`, which is
+    // "<podcastTitle>\u{1F}<episodeTitle>" — so a prefix match scopes it to
+    // this podcast.
+    let keyPrefix = podcastInfo.title + EpisodeKeyUtils.delimiter
+    let transcriptDescriptor = FetchDescriptor<EpisodeTranscriptModel>(
+      predicate: #Predicate { $0.episodeId.starts(with: keyPrefix) }
+    )
+    do {
+      transcriptKeys = Set(try context.fetch(transcriptDescriptor).map(\.episodeId))
+    } catch {
+      // Don't swallow this: a predicate the store rejects would silently mean
+      // "no episode has a transcript" rather than an obvious failure.
+      viewModelLogger.error(
+        "Transcript key fetch failed: \(error.localizedDescription, privacy: .public)")
+      transcriptKeys = []
     }
-    transcriptKeySnapshot = keys
-    return keys
+
+    // `hasAnalysis` is computed, so it can't go in the predicate — fetch this
+    // podcast's rows and apply the same test EpisodeStatusChecker used.
+    let title = podcastInfo.title
+    let analysisDescriptor = FetchDescriptor<EpisodeAIAnalysis>(
+      predicate: #Predicate { $0.podcastTitle == title }
+    )
+    let analyses = (try? context.fetch(analysisDescriptor)) ?? []
+    aiAnalysisAudioURLs = Set(
+      analyses
+        .filter { $0.hasAnalysis || !($0.qaHistoryJSON ?? "").isEmpty }
+        .map(\.episodeAudioURL)
+    )
+  }
+
+  /// Force the next `refreshStatusSnapshots()` to re-fetch.
+  func invalidateStatusSnapshots() {
+    statusSnapshotsBuilt = false
+    refreshStatusSnapshots()
+  }
+
+  private func episodeKeysWithTranscript() -> Set<String> {
+    refreshStatusSnapshots()
+    return transcriptKeys
   }
 
   private func recomputeFilteredEpisodes() {
@@ -332,6 +382,7 @@ final class EpisodeListViewModel {
   func setModelContext(_ context: ModelContext) {
     self.modelContext = context
     loadEpisodeModels()
+    refreshStatusSnapshots()
     setupDownloadCompletionObserver()
   }
 
@@ -507,7 +558,7 @@ final class EpisodeListViewModel {
         updatedFrom: updatedPodcast, preservedKeys: preservedKeys)
       podcastModel.applyPodcastInfo(merged)
       podcastInfo = merged  // refresh the cache from the value we just built (no re-decode)
-      transcriptKeySnapshot = nil  // episodes changed — re-scan transcript presence on next use
+      statusSnapshotsBuilt = false  // episodes changed — re-scan status on next use
       recomputeFilteredEpisodes()
       try? modelContext?.save()
       lastRefreshDate = Date()

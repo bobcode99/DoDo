@@ -35,6 +35,13 @@ struct EpisodeRowView: View {
   /// This prevents every row from re-rendering on every download progress update.
   let precomputedDownloadState: DownloadState?
 
+  /// Transcript / AI-analysis presence, batched by the parent. Both are backed
+  /// by SwiftData fetches, so a parent that lists many rows of one podcast
+  /// (EpisodeListView) resolves them once for the whole feed and hands the
+  /// answer down. nil = no snapshot available (Library views), resolve lazily.
+  let precomputedHasTranscript: Bool?
+  let precomputedHasAIAnalysis: Bool?
+
   /// Primary initializer for PodcastEpisodeInfo (used in EpisodeListView)
   init(
     episode: PodcastEpisodeInfo,
@@ -44,6 +51,8 @@ struct EpisodeRowView: View {
     downloadManager: DownloadManager = DownloadManager.shared,
     episodeModel: EpisodeDownloadModel? = nil,
     precomputedDownloadState: DownloadState? = nil,
+    precomputedHasTranscript: Bool? = nil,
+    precomputedHasAIAnalysis: Bool? = nil,
     showArtwork: Bool = true,
     onToggleStar: @escaping () -> Void,
     onDownload: @escaping () -> Void,
@@ -58,6 +67,8 @@ struct EpisodeRowView: View {
     self.downloadManager = downloadManager
     self.episodeModel = episodeModel
     self.precomputedDownloadState = precomputedDownloadState
+    self.precomputedHasTranscript = precomputedHasTranscript
+    self.precomputedHasAIAnalysis = precomputedHasAIAnalysis
     self.showArtwork = showArtwork
     self.onToggleStar = onToggleStar
     self.onDownload = onDownload
@@ -85,6 +96,10 @@ struct EpisodeRowView: View {
     self.downloadManager = downloadManager
     self.episodeModel = episodeModel
     self.precomputedDownloadState = nil
+    // Library views list episodes across many podcasts, so there is no
+    // per-podcast snapshot to hand down — these rows resolve status themselves.
+    self.precomputedHasTranscript = nil
+    self.precomputedHasAIAnalysis = nil
     self.showArtwork = showArtwork
     self.onToggleStar = onToggleStar
     self.onDownload = onDownload
@@ -103,13 +118,18 @@ struct EpisodeRowView: View {
   private let applePodcastService = ApplePodcastService()
   @State private var shareTask: Task<Void, Never>?
   @State private var cachedPlainDescription: String?
-  @State private var hasAIAnalysis = false
-  /// Cached transcript-file existence. Computed once in `.onAppear` (and
-  /// refreshed when the transcript job for this row completes) so we don't
-  /// hit the filesystem on every body evaluation — which for a 50-row list
-  /// blocked the main thread during the Library → EpisodeList navigation
-  /// transition.
-  @State private var hasCaptions = false
+  /// Resolved status. Seeded from the parent's batched snapshots when it has
+  /// them; otherwise filled in once from `.onAppear`, same fallback shape as
+  /// `precomputedDownloadState`. Both underlying checks are SwiftData fetches,
+  /// so resolving them per row cost two fetches for every row that appeared —
+  /// twenty on the main thread during a Library → EpisodeList push.
+  @State private var resolvedHasCaptions = false
+  @State private var resolvedHasAIAnalysis = false
+
+  // OR, not `??`: the snapshot is a point-in-time read, so a transcript that
+  // finished while this row was on screen must still win over its stale `false`.
+  private var hasCaptions: Bool { resolvedHasCaptions || (precomputedHasTranscript ?? false) }
+  private var hasAIAnalysis: Bool { resolvedHasAIAnalysis || (precomputedHasAIAnalysis ?? false) }
 
   // MARK: - Download state
   //
@@ -215,22 +235,27 @@ struct EpisodeRowView: View {
       if cachedPlainDescription == nil {
         cachedPlainDescription = plainDescription
       }
+      // Only when the parent had no batched snapshot to give us — both of
+      // these are SwiftData fetches, so a list of one podcast's episodes
+      // resolves them once up front instead of twice per appearing row.
+      guard precomputedHasTranscript == nil || precomputedHasAIAnalysis == nil else { return }
       let checker = EpisodeStatusChecker(
         episodeTitle: episode.title,
         podcastTitle: podcastTitle,
         audioURL: episode.audioURL
       )
-      // Cache disk-dependent status once per appearance rather than per body
-      // evaluation. Without this we hit the filesystem for every visible row
-      // every time SwiftUI re-renders the list.
-      hasCaptions = checker.hasTranscript
-      hasAIAnalysis = checker.hasAIAnalysis(in: modelContext)
+      if precomputedHasTranscript == nil {
+        resolvedHasCaptions = checker.hasTranscript
+      }
+      if precomputedHasAIAnalysis == nil {
+        resolvedHasAIAnalysis = checker.hasAIAnalysis(in: modelContext)
+      }
     }
     .onChange(of: transcriptJob?.status) { _, status in
-      // When the transcript job for THIS row finishes, refresh the cached
-      // captions flag so the icon appears without needing to leave/return.
+      // When the transcript job for THIS row finishes, show the icon without
+      // needing to leave and return. Wins over a stale `false` snapshot.
       if case .completed = status {
-        hasCaptions = true
+        resolvedHasCaptions = true
       }
     }
   }
@@ -370,7 +395,6 @@ struct EpisodeRowView: View {
           .contentShape(Rectangle())
       }
       .accessibilityLabel("Episode options")
-      .compositingGroup()
       .buttonStyle(.plain)
     }
   }

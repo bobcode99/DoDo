@@ -95,8 +95,13 @@ struct ExpandedPlayerView: View {
         var pubDate = episode.pubDate
         var guid = episode.guid
         var duration = episode.duration
-        if description == nil, let podcastModel = viewModel.podcastModel {
-            if let fullEpisode = podcastModel.podcastInfo.episodes.first(where: { $0.title == episode.title }) {
+        var podcastLanguage: String?
+        if let podcastModel = viewModel.podcastModel {
+            // One decode for both the episode lookup and the language below.
+            let info = podcastModel.podcastInfo
+            podcastLanguage = info.language
+            if description == nil,
+               let fullEpisode = info.episodes.first(where: { $0.title == episode.title }) {
                 description = fullEpisode.podcastEpisodeDescription
                 pubDate = pubDate ?? fullEpisode.pubDate
                 guid = guid ?? fullEpisode.guid
@@ -112,7 +117,6 @@ struct ExpandedPlayerView: View {
             duration: duration,
             guid: guid
         )
-        let podcastLanguage = viewModel.podcastModel?.podcastInfo.language
         dismiss()
         onNavigateToEpisodeDetail?(episodeInfo, episode.podcastTitle, episode.imageURL, podcastLanguage)
     }

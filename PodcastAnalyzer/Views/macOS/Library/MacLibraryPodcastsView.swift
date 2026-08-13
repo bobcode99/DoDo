@@ -77,18 +77,18 @@ struct MacPodcastGridCell: View {
   /// Mirrors the iOS PodcastGridCell so Mac users see the same
   /// "freshness" cue as on iPhone.
   private var latestEpisodeDateString: String? {
-    guard let date = podcast.podcastInfo.episodes
-      .lazy
-      .compactMap(\.pubDate)
-      .max() else { return nil }
+    // The denormalized mirror, not a live scan of `podcastInfo.episodes` —
+    // that decoded the whole blob per cell on every render, to recompute a
+    // value the model already stores.
+    guard let date = podcast.latestEpisodeDate else { return nil }
     return Formatters.formatRelativeDate(date, locale: Formatters.appLocale)
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      CachedArtworkImage(urlString: podcast.podcastInfo.imageURL, size: 150, cornerRadius: 10)
+      CachedArtworkImage(urlString: podcast.imageURL, size: 150, cornerRadius: 10)
 
-      Text(podcast.podcastInfo.title)
+      Text(podcast.title)
         .font(.caption)
         .fontWeight(.medium)
         .lineLimit(2)
