@@ -34,44 +34,47 @@ struct iOSContentView: View {
   @State private var playbackAlertMessage: String?
 
   var body: some View {
-    TabView {
-      Tab(Constants.homeString, systemImage: Constants.homeIconName) {
+    // `visibleTab` is driven by TabView's own selection rather than by an
+    // `.onAppear` on each tab's root. Those onAppears wrote to `coordinator`
+    // — the same object whose routers back every NavigationStack path binding
+    // here — from inside the tab-switch update pass, so SwiftUI logged
+    // "Update NavigationRequestObserver tried to update multiple times per
+    // frame". Selection is also the more accurate signal: onAppear reports
+    // "last tab whose content was built", which is not necessarily the tab the
+    // user is on, and `activeRouter` would then push onto the wrong stack.
+    TabView(selection: $coordinator.visibleTab) {
+      Tab(Constants.homeString, systemImage: Constants.homeIconName, value: TabIdentifier.home) {
         NavigationStack(path: $coordinator.homeRouter.path) {
           HomeView()
             .navigationDestinations()
-            .onAppear { coordinator.visibleTab = .home }
         }
       }
 
-      Tab(Constants.libraryString, systemImage: Constants.libraryIconName) {
+      Tab(Constants.libraryString, systemImage: Constants.libraryIconName, value: TabIdentifier.library) {
         NavigationStack(path: $coordinator.libraryRouter.path) {
           LibraryView()
             .navigationDestinations()
-            .onAppear { coordinator.visibleTab = .library }
         }
       }
 
-      Tab(Constants.analysisString, systemImage: Constants.analysisIconName) {
+      Tab(Constants.analysisString, systemImage: Constants.analysisIconName, value: TabIdentifier.analysis) {
         NavigationStack(path: $coordinator.analysisRouter.path) {
           AnalysisView()
             .navigationDestinations()
-            .onAppear { coordinator.visibleTab = .analysis }
         }
       }
 
-      Tab(Constants.settingsString, systemImage: Constants.settingsIconName) {
+      Tab(Constants.settingsString, systemImage: Constants.settingsIconName, value: TabIdentifier.settings) {
         NavigationStack(path: $coordinator.settingsRouter.path) {
           SettingsView()
             .navigationDestinations()
-            .onAppear { coordinator.visibleTab = .settings }
         }
       }
 
-      Tab(role: .search) {
+      Tab(value: TabIdentifier.search, role: .search) {
         NavigationStack(path: $coordinator.searchRouter.path) {
           PodcastSearchView()
             .navigationDestinations()
-            .onAppear { coordinator.visibleTab = .search }
         }
       }
     }
