@@ -67,9 +67,6 @@ struct SmoothScrubber: View {
             range: 0...effectiveDuration,
             onEditingChanged: handleEditingChanged
         )
-        // The track is only a couple of points tall; give it a finger-sized
-        // row to land in (UISlider centers the track in its bounds).
-        .frame(height: 44)
         #else
         Slider(
             value: $scrubTime,
@@ -103,109 +100,126 @@ struct SmoothScrubber: View {
 }
 
 #if os(iOS)
-private struct ThumblessSlider: UIViewRepresentable {
+/// Tap-anywhere scrubber.
+///
+/// Built on `DragGesture(minimumDistance: 0)` rather than a `UISlider`. That
+/// gesture delivers `onChanged` on touch-down and `onEnded` on lift for a tap
+/// and a drag alike, so "click to seek" and "drag to seek" are literally the
+/// same code path — a tap cannot silently do nothing.
+///
+/// UIKit control tracking gave no such guarantee here: the player content sits
+/// in a `ScrollView`, and `UIScrollView` delays content touches and can claim
+/// them for its pan, so a quick tap on a `UISlider` may never complete a
+/// begin/end tracking cycle and never commit a seek.
+private struct ThumblessSlider: View {
     @Binding var value: TimeInterval
     let range: ClosedRange<TimeInterval>
     let onEditingChanged: (Bool) -> Void
 
-    func makeUIView(context: Context) -> UISlider {
-        let slider = TrackTapSlider()
-        slider.setThumbImage(Self.thumbImage(diameter: 12), for: .normal)
-        slider.setThumbImage(Self.thumbImage(diameter: 16), for: .highlighted)
-        slider.minimumTrackTintColor = .label
-        slider.maximumTrackTintColor = UIColor.label.withAlphaComponent(0.18)
-        slider.addTarget(
-            context.coordinator,
-            action: #selector(Coordinator.valueChanged(_:)),
-            for: .valueChanged
-        )
-        slider.addTarget(
-            context.coordinator,
-            action: #selector(Coordinator.touchDown(_:)),
-            for: .touchDown
-        )
-        slider.addTarget(
-            context.coordinator,
-            action: #selector(Coordinator.touchUp(_:)),
-            for: [.touchUpInside, .touchUpOutside, .touchCancel]
-        )
-        return slider
-    }
+    /// Finger is down. Drives the visual expand only — never the value.
+    @State private var isTouching = false
+    /// Set once the finger has actually travelled far enough to count as a
+    /// scrub. `startValue` is the position at that moment and `originShift` the
+    /// translation already accumulated, so the playhead picks up exactly where
+    /// it was instead of hopping by the activation threshold.
+    @State private var scrub: (startValue: TimeInterval, originShift: CGFloat)?
 
-    func updateUIView(_ uiView: UISlider, context: Context) {
-        uiView.minimumValue = Float(range.lowerBound)
-        uiView.maximumValue = Float(range.upperBound)
-        if !context.coordinator.isEditing {
-            uiView.setValue(Float(value), animated: false)
-        }
-    }
+    /// Travel before a touch becomes a scrub. Below this it stays a tap, and a
+    /// tap must never move the playhead.
+    private let activationDistance: CGFloat = 2
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(value: $value, onEditingChanged: onEditingChanged)
-    }
+    private let trackHeight: CGFloat = 4
+    private let activeTrackHeight: CGFloat = 8
+    private let thumbDiameter: CGFloat = 12
+    private let activeThumbDiameter: CGFloat = 16
+    /// The track is only a few points tall; give it a finger-sized row to land in.
+    private let rowHeight: CGFloat = 44
 
-    /// White circular thumb with a soft drop shadow, matching the design's
-    /// scrubber knob. Padded so the shadow isn't clipped by the thumb bounds.
-    private static func thumbImage(diameter: CGFloat) -> UIImage {
-        let pad: CGFloat = 3
-        let size = CGSize(width: diameter + pad * 2, height: diameter + pad * 2)
-        return UIGraphicsImageRenderer(size: size).image { ctx in
-            let c = ctx.cgContext
-            c.setShadow(
-                offset: CGSize(width: 0, height: 1),
-                blur: 3,
-                color: UIColor.black.withAlphaComponent(0.3).cgColor
-            )
-            c.setFillColor(UIColor.white.cgColor)
-            c.fillEllipse(in: CGRect(x: pad, y: pad, width: diameter, height: diameter))
-        }
-    }
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let thumb = isTouching ? activeThumbDiameter : thumbDiameter
+            let track = isTouching ? activeTrackHeight : trackHeight
+            let centerX = thumb / 2 + max(width - thumb, 1) * progress
 
-    /// UISlider only starts a drag when the touch lands on the thumb, which is
-    /// a 12pt target on a full-width track — most grabs miss. This jumps the
-    /// value to wherever the track was touched and drags on from there.
-    private final class TrackTapSlider: UISlider {
-        override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-            let track = trackRect(forBounds: bounds)
-            let thumb = thumbRect(forBounds: bounds, trackRect: track, value: value)
-            let point = touch.location(in: self)
-            // Touch already on (or near) the thumb — keep UIKit's grab so the
-            // thumb doesn't teleport under the finger.
-            if !thumb.insetBy(dx: -16, dy: -16).contains(point) {
-                let usable = track.width - thumb.width
-                if usable > 0 {
-                    let fraction = min(max((point.x - track.minX - thumb.width / 2) / usable, 0), 1)
-                    value = minimumValue + Float(fraction) * (maximumValue - minimumValue)
-                    sendActions(for: .valueChanged)
-                }
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.18))
+                    .frame(height: track)
+
+                Capsule()
+                    .fill(Color.primary)
+                    .frame(width: centerX, height: track)
+
+                Circle()
+                    .fill(.white)
+                    .frame(width: thumb, height: thumb)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+                    .offset(x: centerX - thumb / 2)
             }
-            return super.beginTracking(touch, with: event)
+            .animation(.easeOut(duration: 0.15), value: isTouching)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            // The whole 44pt row is the target, not just the 4pt track.
+            .contentShape(Rectangle())
+            .gesture(
+                // `minimumDistance: 0` so the bar can thicken the instant the
+                // finger lands, the way Apple Podcasts does. The value is still
+                // gated behind `activationDistance` below, so touching alone
+                // changes nothing.
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        isTouching = true
+                        let dx = gesture.translation.width
+
+                        if scrub == nil {
+                            // Grab, don't jump: a touch anywhere on the bar
+                            // picks the playhead up from where it already is.
+                            // Seeking to the touch point would mean any stray
+                            // contact destroys your position, with no undo.
+                            guard abs(dx) > activationDistance else { return }
+                            scrub = (value, dx)
+                            onEditingChanged(true)
+                        }
+                        guard let scrub else { return }
+
+                        let usable = max(width - thumb, 1)
+                        let span = range.upperBound - range.lowerBound
+                        let travelled = Double((dx - scrub.originShift) / usable) * span
+                        value = min(max(scrub.startValue + travelled, range.lowerBound), range.upperBound)
+                    }
+                    .onEnded { _ in
+                        isTouching = false
+                        // Never activated => this was a tap. Leave the playhead
+                        // alone and, crucially, do not report an edit: the
+                        // parent commits a seek on every `false`.
+                        guard scrub != nil else { return }
+                        scrub = nil
+                        onEditingChanged(false)
+                    }
+            )
         }
-    }
-
-    final class Coordinator: NSObject {
-        @Binding var value: TimeInterval
-        let onEditingChanged: (Bool) -> Void
-        var isEditing = false
-
-        init(value: Binding<TimeInterval>, onEditingChanged: @escaping (Bool) -> Void) {
-            self._value = value
-            self.onEditingChanged = onEditingChanged
-        }
-
-        @objc func valueChanged(_ sender: UISlider) {
-            value = TimeInterval(sender.value)
-        }
-
-        @objc func touchDown(_ sender: UISlider) {
-            isEditing = true
-            onEditingChanged(true)
-        }
-
-        @objc func touchUp(_ sender: UISlider) {
-            isEditing = false
+        .frame(height: rowHeight)
+        // Replacing UISlider loses its VoiceOver semantics, so restate them.
+        .accessibilityElement()
+        .accessibilityLabel("Playback position")
+        .accessibilityValue(Formatters.formatPlaybackTime(value))
+        .accessibilityAdjustableAction { direction in
+            let span = range.upperBound - range.lowerBound
+            let step = max(span / 20, 1)
+            switch direction {
+            case .increment: value = min(value + step, range.upperBound)
+            case .decrement: value = max(value - step, range.lowerBound)
+            @unknown default: return
+            }
             onEditingChanged(false)
         }
+    }
+
+    /// 0...1 position of `value` within `range`.
+    private var progress: CGFloat {
+        let span = range.upperBound - range.lowerBound
+        guard span > 0 else { return 0 }
+        return CGFloat(min(max((value - range.lowerBound) / span, 0), 1))
     }
 }
 #endif
