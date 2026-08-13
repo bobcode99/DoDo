@@ -134,6 +134,33 @@ class BackgroundSyncManager {
   }
 
   func scheduleBackgroundRefresh() {
+    #if targetEnvironment(simulator)
+    // The Simulator has no background-task daemon, so every submission is
+    // rejected — the system (not us) logs "Error updating background task
+    // request … BGSystemTaskSchedulerErrorDomain Code=3" and nothing is ever
+    // scheduled. Exercise `handleBackgroundRefresh` with the debugger instead:
+    //   e -l objc -- (void)[[BGTaskScheduler sharedScheduler]
+    //     _simulateLaunchForTaskWithIdentifier:@"com.podcast.analyzer.refresh"]
+    logger.debug("Simulator — skipping background refresh submission (unsupported)")
+    #else
+    Task { [weak self] in
+      guard let self else { return }
+      // Only one BGAppRefreshTaskRequest can be pending, and submitting again
+      // silently *replaces* it — pushing earliestBeginDate another 4h out.
+      // This is called on every launch and every foreground→background
+      // transition, so an app opened more often than every 4 hours would keep
+      // resetting its own timer and never become eligible to run.
+      let pending = await BGTaskScheduler.shared.pendingTaskRequests()
+      guard !pending.contains(where: { $0.identifier == Self.backgroundTaskIdentifier }) else {
+        self.logger.debug("Background refresh already pending — leaving its schedule intact")
+        return
+      }
+      self.submitBackgroundRefresh()
+    }
+    #endif
+  }
+
+  private func submitBackgroundRefresh() {
     let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
     // Schedule for 4 hours from now (iOS may delay based on system conditions)
     request.earliestBeginDate = Date(timeIntervalSinceNow: 4 * 60 * 60)
@@ -142,7 +169,13 @@ class BackgroundSyncManager {
       try BGTaskScheduler.shared.submit(request)
       logger.info("Background refresh scheduled for 4 hours from now")
     } catch {
-      logger.error("Failed to schedule background refresh: \(error.localizedDescription, privacy: .public)")
+      // `localizedDescription` on a BGTaskScheduler error is just "The
+      // operation couldn't be completed", which hides which cause fired.
+      // Domain + code identifies it: 1 = unavailable (the user turned off
+      // Background App Refresh), 2 = too many pending, 3 = not permitted.
+      let nsError = error as NSError
+      logger.error(
+        "Failed to schedule background refresh: \(nsError.domain, privacy: .public) code \(nsError.code)")
     }
   }
 
