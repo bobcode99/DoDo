@@ -14,6 +14,10 @@ import UIKit
 #endif
 
 struct EpisodeRowView: View {
+  /// Set once at the app root from UserDefaults, not read per row — see
+  /// EpisodeRowAppearance.swift.
+  @Environment(\.episodeRowPlayButtonEdge) private var playButtonEdge
+
   let episode: PodcastEpisodeInfo
   let podcastTitle: String
   let fallbackImageURL: String?
@@ -319,20 +323,14 @@ struct EpisodeRowView: View {
 
   @ViewBuilder
   private var bottomStatusBar: some View {
+    // The two controls swap ends. Both branches are leaves, so a flip costs one
+    // teardown when the user changes the setting — nothing during scroll.
     HStack(spacing: 6) {
-      // Play button with progress - uses live audio manager state
-      LivePlaybackButton(
-        episodeTitle: episode.title,
-        podcastTitle: podcastTitle,
-        duration: episodeModel?.duration,
-        formattedDuration: episode.formattedDuration,
-        lastPlaybackPosition: episodeModel?.lastPlaybackPosition ?? 0,
-        playbackProgress: playbackProgress,
-        isCompleted: isCompleted,
-        onPlay: playAction,
-        style: .compact,
-        isDisabled: episode.audioURL == nil
-      )
+      if playButtonEdge == .leading {
+        playPill
+      } else {
+        ellipsisMenu
+      }
 
       // Download progress — live ring (Apple style, no numbers). The ring
       // polls DownloadManager.inFlightProgress itself, so it stays current
@@ -384,19 +382,42 @@ struct EpisodeRowView: View {
 
       Spacer()
 
-      // Ellipsis menu button
-      Menu {
-        contextMenuContent
-      } label: {
-        Image(systemName: "ellipsis")
-          .font(.system(size: 14, weight: .medium))
-          .foregroundStyle(.secondary)
-          .frame(width: 28, height: 28)
-          .contentShape(Rectangle())
+      if playButtonEdge == .leading {
+        ellipsisMenu
+      } else {
+        playPill
       }
-      .accessibilityLabel("Episode options")
-      .buttonStyle(.plain)
     }
+  }
+
+  /// Play button with progress — uses live audio manager state.
+  private var playPill: some View {
+    LivePlaybackButton(
+      episodeTitle: episode.title,
+      podcastTitle: podcastTitle,
+      duration: episodeModel?.duration,
+      formattedDuration: episode.formattedDuration,
+      lastPlaybackPosition: episodeModel?.lastPlaybackPosition ?? 0,
+      playbackProgress: playbackProgress,
+      isCompleted: isCompleted,
+      onPlay: playAction,
+      style: .compact,
+      isDisabled: episode.audioURL == nil
+    )
+  }
+
+  private var ellipsisMenu: some View {
+    Menu {
+      contextMenuContent
+    } label: {
+      Image(systemName: "ellipsis")
+        .font(.system(size: 14, weight: .medium))
+        .foregroundStyle(.secondary)
+        .frame(width: 28, height: 28)
+        .contentShape(Rectangle())
+    }
+    .accessibilityLabel("Episode options")
+    .buttonStyle(.plain)
   }
 
   @ViewBuilder

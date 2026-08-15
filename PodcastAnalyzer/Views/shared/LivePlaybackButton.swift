@@ -13,6 +13,11 @@ import SwiftUI
 @MainActor
 struct LivePlaybackButton: View {
   @Environment(\.locale) private var locale
+  /// Only the `.compact` style honours this — it is the one used in episode
+  /// rows, where the default pill is under the 44pt tap target. Read from the
+  /// environment (set once at the app root) rather than UserDefaults, so a
+  /// long list does not pay one observer per row.
+  @Environment(\.episodeRowPlayButtonSize) private var compactSize
 
   // MARK: - Episode Identity
   
@@ -114,7 +119,7 @@ struct LivePlaybackButton: View {
     if let totalSeconds = liveDuration, totalSeconds > 0 {
       let secondsToFormat = isInProgress ? (totalSeconds - livePosition) : totalSeconds
       let timeString = formatTimeUnits(Int(secondsToFormat))
-      return isInProgress ? "\(timeString)\(remainingTimeSuffix)" : timeString
+      return timeString
     }
     
     // Fallback to formatted duration from episode metadata (for unplayed episodes)
@@ -166,28 +171,30 @@ struct LivePlaybackButton: View {
   // MARK: - Compact Style (for list rows)
   
   private var compactButton: some View {
-    Button(action: onPlay) {
-      HStack(spacing: 4) {
+    let s = compactSize.scale
+    return Button(action: onPlay) {
+      HStack(spacing: 4 * s) {
         // Icon
-        playIcon(size: 9)
-        
+        playIcon(size: 9 * s)
+
         // Progress bar (only show when partially played)
         if showsPlaybackProgress {
-          progressBar(width: 24, height: 3)
+          progressBar(width: 24 * s, height: 3 * s)
         }
-        
+
         // Duration text
         if let duration = durationText {
           Text(duration)
-            .font(.system(size: 10))
+            .font(.system(size: 10 * s))
             .fontWeight(.medium)
         }
       }
       .foregroundStyle(.white)
-      .padding(.horizontal, 8)
-      .padding(.vertical, 5)
+      .padding(.horizontal, 8 * s)
+      .padding(.vertical, 5 * s)
       .background(Color.blue)
       .clipShape(Capsule())
+      .contentShape(Capsule())
     }
     .buttonStyle(.borderless)
     .disabled(isDisabled)

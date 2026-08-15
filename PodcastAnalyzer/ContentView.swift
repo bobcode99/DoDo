@@ -11,8 +11,10 @@ struct ContentView: View {
   var body: some View {
     #if os(iOS)
     iOSContentView()
+      .episodeRowAppearance()
     #else
     MacContentView()
+      .episodeRowAppearance()
     #endif
   }
 }

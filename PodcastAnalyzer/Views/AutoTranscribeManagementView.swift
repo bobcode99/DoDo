@@ -2,9 +2,16 @@
 //  AutoTranscribeManagementView.swift
 //  PodcastAnalyzer
 //
-//  Central overview of every subscribed podcast. The first section lists shows
-//  with auto-transcribe enabled (with disable / bulk-disable), and the second
-//  section lists the rest so users can flip the feature on from one place.
+//  Every automatic-transcription setting on one screen. There are two, and they
+//  used to sit in different Settings sections under names that did not
+//  distinguish them ("Auto-Generate Transcripts" vs "Auto-transcribe
+//  Podcasts"). They answer different questions:
+//
+//    - all podcasts  — transcribe whatever gets downloaded, whichever show
+//    - per podcast   — follow these shows, and with a Yap server transcribe
+//                      new episodes straight from the feed, no download needed
+//
+//  Showing them adjacent, with footers that name the trigger, is the fix.
 //
 
 import SwiftData
@@ -38,64 +45,77 @@ struct AutoTranscribeManagementView: View {
   }
 
   var body: some View {
-    Group {
+    List {
+      Section {
+        Toggle(isOn: Binding(
+          get: { SubtitleSettingsManager.shared.autoGenerateTranscripts },
+          set: { SubtitleSettingsManager.shared.autoGenerateTranscripts = $0 }
+        )) {
+          Text("Transcribe Downloads")
+        }
+      } header: {
+        Text("All Podcasts")
+      } footer: {
+        Text("Every episode you download gets a transcript, whichever podcast it came from.")
+      }
+
       if subscribedPodcasts.isEmpty {
-        ContentUnavailableView(
-          "No Subscribed Podcasts",
-          systemImage: "rectangle.stack.badge.person.crop",
-          description: Text("Subscribe to a podcast to manage auto-transcribe from here.")
-        )
+        Section {
+          ContentUnavailableView(
+            "No Subscribed Podcasts",
+            systemImage: "rectangle.stack.badge.person.crop",
+            description: Text("Subscribe to a podcast to follow it here.")
+          )
+        }
       } else {
-        List {
-          if !enabledPodcasts.isEmpty {
-            Section {
-              ForEach(enabledPodcasts) { podcast in
-                row(for: podcast)
-              }
-            } header: {
-              Text("Auto-transcribe On (\(enabledPodcasts.count))")
-            } footer: {
-              Text("New episodes from these podcasts are queued for transcription automatically. The engine is YAP server when configured, otherwise a local engine (gated by charging state).")
+        if !enabledPodcasts.isEmpty {
+          Section {
+            ForEach(enabledPodcasts) { podcast in
+              row(for: podcast)
+            }
+          } header: {
+            Text("Following (\(enabledPodcasts.count))")
+          } footer: {
+            Text("New episodes are transcribed as soon as they appear — with a Yap server no download is needed, otherwise the episode is transcribed on device once downloaded and charging.")
+              .font(.footnote)
+          }
+        }
+
+        if !otherPodcasts.isEmpty {
+          Section {
+            ForEach(otherPodcasts) { podcast in
+              row(for: podcast)
+            }
+          } header: {
+            Text("Not Following (\(otherPodcasts.count))")
+          } footer: {
+            if enabledPodcasts.isEmpty {
+              Text("Turn on a podcast to transcribe its new episodes automatically.")
                 .font(.footnote)
             }
           }
+        }
 
-          if !otherPodcasts.isEmpty {
-            Section {
-              ForEach(otherPodcasts) { podcast in
-                row(for: podcast)
-              }
-            } header: {
-              Text("Other Subscribed (\(otherPodcasts.count))")
-            } footer: {
-              if enabledPodcasts.isEmpty {
-                Text("Tap any toggle to start auto-transcribing a podcast's new episodes.")
-                  .font(.footnote)
-              }
-            }
-          }
-
-          if enabledPodcasts.isEmpty && otherPodcasts.isEmpty {
-            Section {
-              ContentUnavailableView.search(text: searchText)
-            }
+        if enabledPodcasts.isEmpty && otherPodcasts.isEmpty {
+          Section {
+            ContentUnavailableView.search(text: searchText)
           }
         }
-        .searchable(text: $searchText, prompt: "Search podcasts")
       }
     }
-    .navigationTitle("Auto-transcribe")
+    .searchable(text: $searchText, prompt: "Search podcasts")
+    .navigationTitle("Automatic Transcription")
     .toolbar {
       if !subscribedPodcasts.filter({ $0.autoTranscribeNewEpisodes }).isEmpty {
         ToolbarItem(placement: .primaryAction) {
-          Button("Disable All", role: .destructive) {
+          Button("Stop All", role: .destructive) {
             showDisableAllConfirmation = true
           }
         }
       }
     }
     .confirmationDialog(
-      "Disable Auto-transcribe for \(subscribedPodcasts.filter({ $0.autoTranscribeNewEpisodes }).count) podcasts?",
+      "Stop following \(subscribedPodcasts.filter({ $0.autoTranscribeNewEpisodes }).count) podcasts?",
       isPresented: $showDisableAllConfirmation,
       titleVisibility: .visible
     ) {

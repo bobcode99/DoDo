@@ -415,8 +415,9 @@ struct TranscriptSettingsTab: View {
 
       // MARK: Auto-generate
       Section {
-        Toggle("Auto-Generate Transcripts", isOn: $subtitleSettings.autoGenerateTranscripts)
-
+        // The global "transcribe every download" toggle lives inside
+        // AutoTranscribeManagementView, next to the per-podcast list — the two
+        // are only tellable apart when shown together.
         Toggle("Detect Music", isOn: $subtitleSettings.enableMusicDetection)
         if subtitleSettings.enableMusicDetection {
           Picker("Music Sensitivity", selection: $subtitleSettings.musicDetectionSensitivity) {
@@ -446,7 +447,7 @@ struct TranscriptSettingsTab: View {
           showAutoTranscribeManagement = true
         } label: {
           HStack {
-            Label("Auto-transcribe Podcasts", systemImage: "waveform.badge.plus")
+            Label("Automatic Transcription", systemImage: "waveform.badge.plus")
             Spacer()
             Image(systemName: "chevron.right")
               .font(.caption)
@@ -458,7 +459,7 @@ struct TranscriptSettingsTab: View {
       } header: {
         Text("Automation")
       } footer: {
-        Text("Detect Music marks music ranges as [♪ Music] instead of transcribing them. Split Long Audio transcribes in parallel parts (faster on Apple Speech); turn off for one single-pass run. Transcription Context adds per-podcast names & jargon to improve accuracy. Auto-transcribe resolves the engine at run time: YAP server when configured, otherwise local (gated by charging).")
+        Text("Detect Music marks music ranges as [♪ Music] instead of transcribing them. Split Long Audio transcribes in parallel parts (faster on Apple Speech); turn off for one single-pass run. Transcription Context adds per-podcast names & jargon to improve accuracy. Automatic Transcription covers both what gets transcribed on download and which shows are followed.")
       }
 
       // MARK: Whisper models list
