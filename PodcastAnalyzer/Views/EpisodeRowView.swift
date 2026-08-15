@@ -294,31 +294,34 @@ struct EpisodeRowView: View {
     }
   }
 
+  // Every line is reserved whether or not it has content, so all rows are the
+  // same height: titles run 1-3 lines, descriptions and dates are often missing
+  // entirely, and `cachedPlainDescription` only arrives in `.onAppear` — without
+  // a reserved budget each of those resized the row. `reservesSpace` rather than
+  // a fixed frame so the budget still scales with Dynamic Type.
   @ViewBuilder
   private var episodeInfo: some View {
     VStack(alignment: .leading, spacing: 6) {
       // Date row
-      if let date = episode.pubDate {
-        Text(formatEpisodeDate(date))
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
+      Text(episode.pubDate.map(formatEpisodeDate) ?? "")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1, reservesSpace: true)
 
       // Title
       Text(episode.title)
         .font(.subheadline)
         .fontWeight(.semibold)
-        .lineLimit(3)
+        .lineLimit(2, reservesSpace: true)
         .foregroundStyle(.primary)
 
       // Description
-      if let description = cachedPlainDescription {
-        Text(description)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(3)
-      }
+      Text(cachedPlainDescription ?? "")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(2, reservesSpace: true)
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   @ViewBuilder
