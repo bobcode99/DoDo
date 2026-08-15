@@ -271,7 +271,9 @@ final class MCPDataGateway {
         $0.episodeTitle == episodeTitle && $0.podcastTitle == podcastTitle
       }
     )
-    guard let analysis = try modelContext.fetch(descriptor).first, analysis.hasAnalysis else {
+    // Structured JSON only: an unparsed raw reply is renderable in the app but
+    // has nothing for an MCP client to consume.
+    guard let analysis = try modelContext.fetch(descriptor).first, analysis.analysisJSON != nil else {
       throw MCPGatewayError.aiAnalysisNotFound(podcast: podcastTitle, episode: episodeTitle)
     }
     return MCPAIAnalysisDTO(

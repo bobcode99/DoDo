@@ -122,24 +122,13 @@ final class CloudAIService {
         do {
             let rawResult = try await shortcutsService.runShortcut(input: prompt, timeout: settings.shortcutsTimeout * 1.5)
 
-            progressCallback?("Parsing response...", 0.8)
+            progressCallback?("Formatting result...", 0.95)
 
-            // Try to parse JSON response
-            var parsedAnalysis: ParsedEpisodeAnalysisResponse?
-            var jsonParseWarning: String?
-
-            // Clean the response - remove markdown code blocks if present
-            let cleanedResult = cleanJSONResponse(rawResult)
-
-            if let data = cleanedResult.data(using: .utf8) {
-                if let parsed = try? JSONDecoder().decode(ParsedEpisodeAnalysisResponse.self, from: data) {
-                    parsedAnalysis = parsed
-                } else {
-                    jsonParseWarning = "JSON parsing failed - showing raw response"
-                }
-            }
-
-            progressCallback?("Done", 1.0)
+            // Same tolerant path as the streaming providers: fence anywhere,
+            // prose around the object, and an all-empty decode counts as a miss.
+            var parsedAnalysis = Self.decodeJSON(rawResult, as: ParsedEpisodeAnalysisResponse.self)
+            if parsedAnalysis?.isEmpty == true { parsedAnalysis = nil }
+            let jsonParseWarning = parsedAnalysis == nil ? Self.unstructuredResponseWarning : nil
 
             // Format the raw response if JSON parsing failed
             let displayContent: String
@@ -440,11 +429,18 @@ final class CloudAIService {
             }
         )
 
-        progressCallback?("Parsing response...", 0.9)
+        progressCallback?("Formatting result...", 0.95)
 
-        let parsedAnalysis = parseJSON(fullResponse, as: ParsedEpisodeAnalysisResponse.self)
+        // A decode that yields nothing renderable counts as a failure, so the
+        // caller falls back to the raw text instead of showing an empty card.
+        var parsedAnalysis = parseJSON(fullResponse, as: ParsedEpisodeAnalysisResponse.self)
+        if parsedAnalysis?.isEmpty == true { parsedAnalysis = nil }
 
-        progressCallback?("Done", 1.0)
+        if parsedAnalysis == nil {
+            logger.error(
+                "Analysis response did not decode - provider: \(provider.displayName, privacy: .public), chars: \(fullResponse.count)"
+            )
+        }
 
         let result = CloudAnalysisResult(
             type: analysisType,
@@ -452,7 +448,8 @@ final class CloudAIService {
             parsedAnalysis: parsedAnalysis,
             provider: provider,
             model: model,
-            timestamp: Date()
+            timestamp: Date(),
+            jsonParseWarning: parsedAnalysis == nil ? Self.unstructuredResponseWarning : nil
         )
         return Self.enrichQuotes(in: result, segments: transcriptSegments)
     }
@@ -566,30 +563,82 @@ final class CloudAIService {
         )
     }
 
-    /// Parse JSON from AI response, handling markdown code blocks
+    /// Shown when the model's answer arrived but could not be turned into
+    /// sections — the text is still displayed verbatim.
+    static let unstructuredResponseWarning =
+        "The model's reply wasn't valid JSON, so it's shown as plain text. "
+        + "This usually means the response was cut short — try Regenerate, or switch to a model with a larger output limit."
+
+    /// Parse JSON from an AI response, tolerating the wrappers models add:
+    /// a markdown fence (anywhere, not just at the start) and leading or
+    /// trailing prose around the object.
     private func parseJSON<T: Decodable>(_ response: String, as type: T.Type) -> T? {
-        // Extract JSON from markdown code blocks if present
-        var jsonString = response.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Remove ```json ... ``` wrapper
-        if jsonString.hasPrefix("```json") {
-            jsonString = String(jsonString.dropFirst(7))
-        } else if jsonString.hasPrefix("```") {
-            jsonString = String(jsonString.dropFirst(3))
-        }
-        if jsonString.hasSuffix("```") {
-            jsonString = String(jsonString.dropLast(3))
-        }
-        jsonString = jsonString.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let data = jsonString.data(using: .utf8) else { return nil }
-
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            logger.error("JSON parsing failed: \(error.localizedDescription, privacy: .public)")
+        guard let decoded = Self.decodeJSON(response, as: type) else {
+            logger.error("JSON parsing failed for \(String(describing: type), privacy: .public)")
             return nil
         }
+        return decoded
+    }
+
+    nonisolated static func decodeJSON<T: Decodable>(_ response: String, as type: T.Type) -> T? {
+        for candidate in jsonCandidates(in: response) {
+            guard let data = candidate.data(using: .utf8) else { continue }
+            if let decoded = try? JSONDecoder().decode(T.self, from: data) { return decoded }
+        }
+        return nil
+    }
+
+    /// Payloads worth attempting, cheapest and most-likely first.
+    nonisolated private static func jsonCandidates(in response: String) -> [String] {
+        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        var candidates = [trimmed]
+        if let fenced = fencedBlock(in: trimmed) { candidates.append(fenced) }
+        if let object = balancedObject(in: trimmed) { candidates.append(object) }
+        return candidates
+    }
+
+    /// Contents of the first ``` / ```json fence, if one is present.
+    nonisolated private static func fencedBlock(in text: String) -> String? {
+        guard let open = text.range(of: "```") else { return nil }
+        var body = text[open.upperBound...]
+        if let newline = body.firstIndex(of: "\n"),
+           body[body.startIndex..<newline].allSatisfy({ $0.isLetter }) {
+            body = body[body.index(after: newline)...]
+        }
+        if let close = body.range(of: "```") {
+            body = body[body.startIndex..<close.lowerBound]
+        }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Outermost balanced `{…}`, skipping braces inside string literals.
+    /// Rescues responses like `Sure, here's the analysis: {…}` — previously a
+    /// total loss even though the object itself was well-formed.
+    nonisolated private static func balancedObject(in text: String) -> String? {
+        guard let start = text.firstIndex(of: "{") else { return nil }
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var index = start
+        while index < text.endIndex {
+            let character = text[index]
+            if escaped {
+                escaped = false
+            } else if inString && character == "\\" {
+                escaped = true
+            } else if character == "\"" {
+                inString.toggle()
+            } else if !inString {
+                if character == "{" {
+                    depth += 1
+                } else if character == "}" {
+                    depth -= 1
+                    if depth == 0 { return String(text[start...index]) }
+                }
+            }
+            index = text.index(after: index)
+        }
+        return nil
     }
 
     // MARK: - Question Answering

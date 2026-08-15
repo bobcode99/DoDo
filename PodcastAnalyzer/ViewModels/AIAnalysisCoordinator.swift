@@ -74,6 +74,11 @@ final class AIAnalysisCoordinator {
     CloudAnalysisJobCoordinator.shared.snapshot(for: cloudJobKey)?.currentType
   }
 
+  /// Start time of the in-flight job, for the elapsed-time readout.
+  var analysisStartedAt: Date? {
+    CloudAnalysisJobCoordinator.shared.snapshot(for: cloudJobKey)?.startedAt
+  }
+
   var hasAIAnalysis: Bool {
     cloudAnalysisCache.analysis != nil || !cloudAnalysisCache.questionAnswers.isEmpty
   }
@@ -378,6 +383,12 @@ final class AIAnalysisCoordinator {
     }
   }
 
+  /// Stop an in-flight analysis without discarding an already-saved result.
+  func cancelCloudAnalysis() {
+    CloudAnalysisJobCoordinator.shared.cancel(audioURL: cloudJobKey)
+    cloudAnalysisState = .idle
+  }
+
   /// Clear a specific cloud analysis result
   func clearCloudAnalysis(type: CloudAnalysisType) {
     switch type {
@@ -472,6 +483,19 @@ final class AIAnalysisCoordinator {
         provider: CloudAIProvider(rawValue: model.provider ?? "") ?? .openai,
         model: model.model ?? "",
         timestamp: model.generatedAt ?? model.updatedAt
+      )
+    } else if let raw = model.rawResponse, !raw.isEmpty {
+      // Undecodable reply: show it verbatim with a warning rather than an
+      // empty tab. `AnalysisResultCardView` renders `content` when
+      // `parsedAnalysis` is nil, and Regenerate stays one tap away.
+      cloudAnalysisCache.analysis = CloudAnalysisResult(
+        type: .analysis,
+        content: raw,
+        parsedAnalysis: nil,
+        provider: CloudAIProvider(rawValue: model.provider ?? "") ?? .openai,
+        model: model.model ?? "",
+        timestamp: model.generatedAt ?? model.updatedAt,
+        jsonParseWarning: CloudAIService.unstructuredResponseWarning
       )
     }
     cloudAnalysisCache.questionAnswers = model.qaHistory

@@ -21,6 +21,10 @@ final class EpisodeAIAnalysis {
 
     // Single JSON payload storing the unified ParsedEpisodeAnalysisResponse
     var analysisJSON: String?
+    /// Verbatim model output, kept even when it fails to decode as
+    /// `ParsedEpisodeAnalysisResponse` (truncation, prose wrapper, wrong shape).
+    /// Without it a parse failure looked like a successful run with no result.
+    var rawResponse: String?
     var provider: String?
     var model: String?
     var generatedAt: Date?
@@ -46,7 +50,7 @@ final class EpisodeAIAnalysis {
 
     // MARK: - Convenience Methods
 
-    var hasAnalysis: Bool { analysisJSON != nil }
+    var hasAnalysis: Bool { analysisJSON != nil || rawResponse != nil }
 
     /// Decoded unified analysis — encodes/decodes lazily on access
     var parsedAnalysis: ParsedEpisodeAnalysisResponse? {
@@ -252,6 +256,15 @@ nonisolated struct ParsedEpisodeAnalysisResponse: Codable {
         let keyPoints: [String]
     }
 
+    /// True when decoding produced nothing renderable — e.g. valid JSON of the
+    /// wrong shape. Callers treat this as a parse failure and fall back to the
+    /// raw response rather than showing an empty card.
+    var isEmpty: Bool {
+        overview.isEmpty && conclusion.isEmpty && mainTopics.isEmpty
+            && keyTakeaways.isEmpty && keyInsights.isEmpty && highlights.isEmpty
+            && actionItems.isEmpty && notableQuotes.isEmpty
+    }
+
     init(
         overview: String,
         mainTopics: [TopicDetail],
@@ -294,8 +307,11 @@ nonisolated struct ParsedEpisodeAnalysisResponse: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        overview = try container.decode(String.self, forKey: .overview)
-        mainTopics = try container.decode([TopicDetail].self, forKey: .mainTopics)
+        // Every key is optional: a model that omits one section should still
+        // yield the sections it did produce. `isEmpty` is the emptiness check,
+        // so a wholly blank object is rejected by the caller instead of here.
+        overview = try container.decodeIfPresent(String.self, forKey: .overview) ?? ""
+        mainTopics = (try? container.decodeIfPresent([TopicDetail].self, forKey: .mainTopics)) ?? []
         keyTakeaways = try container.decodeIfPresent([String].self, forKey: .keyTakeaways) ?? []
         keyInsights = try container.decodeIfPresent([String].self, forKey: .keyInsights) ?? []
         targetAudience = try container.decodeIfPresent(String.self, forKey: .targetAudience) ?? ""
@@ -316,7 +332,7 @@ nonisolated struct ParsedEpisodeAnalysisResponse: Codable {
         controversialPoints = try container.decodeIfPresent([String].self, forKey: .controversialPoints)
         entertainingMoments = try container.decodeIfPresent([String].self, forKey: .entertainingMoments)
         qaHighlights = try container.decodeIfPresent([QAHighlight].self, forKey: .qaHighlights)
-        conclusion = try container.decode(String.self, forKey: .conclusion)
+        conclusion = try container.decodeIfPresent(String.self, forKey: .conclusion) ?? ""
 
         if let quotes = try? container.decode([TimestampedQuote].self, forKey: .notableQuotes) {
             notableQuotes = quotes

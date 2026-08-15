@@ -40,6 +40,13 @@ final class CloudAnalysisJobCoordinator {
         var streamingText: String
         var currentType: CloudAnalysisType
         var isStreaming: Bool
+        /// When the job started, so the UI can show elapsed time — a long
+        /// request is otherwise indistinguishable from a hung one.
+        var startedAt: Date = Date()
+        /// Identifies this run. Cancelling a Task does not drop callbacks it
+        /// already enqueued, so a restart on the same key must not be written
+        /// to by the run it replaced.
+        var runID: UUID = UUID()
     }
 
     /// Keyed by `PodcastEpisodeInfo.audioURL`. The view model passes the same key
@@ -62,6 +69,13 @@ final class CloudAnalysisJobCoordinator {
         jobs[audioURL]?.isStreaming == true
     }
 
+    /// Whether `runID` is still the streaming job on this key — the gate every
+    /// late callback has to pass before it may write.
+    private func isLive(_ audioURL: String, _ runID: UUID) -> Bool {
+        guard let job = jobs[audioURL] else { return false }
+        return job.isStreaming && job.runID == runID
+    }
+
     /// Start (or restart) an analysis for `audioURL`. Cancels any existing
     /// job for the same key — matches the previous `cloudAnalysisTask?.cancel()`
     /// behavior in `EpisodeDetailViewModel.generateCloudAnalysis`.
@@ -78,12 +92,14 @@ final class CloudAnalysisJobCoordinator {
     ) {
         tasks[audioURL]?.cancel()
 
-        jobs[audioURL] = JobSnapshot(
+        let snapshot = JobSnapshot(
             state: .analyzing(progress: 0, message: "Preparing..."),
             streamingText: "",
             currentType: type,
             isStreaming: true
         )
+        jobs[audioURL] = snapshot
+        let runID = snapshot.runID
 
         tasks[audioURL] = Task { [weak self] in
             // iOS background grace window. Same wrapping the view model previously
@@ -114,17 +130,24 @@ final class CloudAnalysisJobCoordinator {
                     transcriptSegments: transcriptSegments,
                     onChunk: { [weak self] text in
                         Task { @MainActor in
+                            guard self?.isLive(audioURL, runID) == true else { return }
                             self?.jobs[audioURL]?.streamingText = text
                         }
                     },
+                    // Both callbacks hop to the main actor, so an update emitted
+                    // just before the request returns can land *after* the
+                    // `.completed` snapshot below. Dropping updates once the job
+                    // stops streaming keeps a late "Formatting result..." from
+                    // resurrecting the progress card and stranding it forever.
                     progressCallback: { [weak self] message, progress in
                         Task { @MainActor in
+                            guard self?.isLive(audioURL, runID) == true else { return }
                             self?.jobs[audioURL]?.state = .analyzing(progress: progress, message: message)
                         }
                     }
                 )
 
-                guard let self else { return }
+                guard let self, self.isLive(audioURL, runID) else { return }
 
                 // Persist the result before flipping state to .completed so any
                 // observer reading SwiftData after seeing .completed sees the row.
@@ -137,11 +160,14 @@ final class CloudAnalysisJobCoordinator {
                     context: modelContext
                 )
 
+                // Same runID: the drop check below must recognise this as the
+                // run it started, not a newer one.
                 self.jobs[audioURL] = JobSnapshot(
                     state: .completed,
                     streamingText: "",
                     currentType: type,
-                    isStreaming: false
+                    isStreaming: false,
+                    runID: runID
                 )
 
                 NotificationCenter.default.post(
@@ -155,19 +181,20 @@ final class CloudAnalysisJobCoordinator {
                 // then fall through to the SwiftData-backed result card.
                 let dropDelay: Duration = .seconds(3)
                 try? await Task.sleep(for: dropDelay)
-                if self.jobs[audioURL]?.state == .completed {
+                if self.jobs[audioURL]?.runID == runID, self.jobs[audioURL]?.state == .completed {
                     self.jobs.removeValue(forKey: audioURL)
                     self.tasks.removeValue(forKey: audioURL)
                 }
 
                 logger.info("Cloud analysis finished for \(audioURL, privacy: .private)")
             } catch {
-                guard let self else { return }
+                guard let self, self.isLive(audioURL, runID) else { return }
                 self.jobs[audioURL] = JobSnapshot(
                     state: .error(error.localizedDescription),
                     streamingText: "",
                     currentType: type,
-                    isStreaming: false
+                    isStreaming: false,
+                    runID: runID
                 )
                 NotificationCenter.default.post(
                     name: .cloudAnalysisJobFinished,
@@ -218,6 +245,10 @@ final class CloudAnalysisJobCoordinator {
             switch type {
             case .analysis:
                 model.parsedAnalysis = result.parsedAnalysis
+                // Keep the verbatim reply either way: when the JSON does not
+                // decode it is the only thing left to show, and previously it
+                // was dropped here — the run looked successful but empty.
+                model.rawResponse = result.content
                 model.provider = result.provider.rawValue
                 model.model = result.model
                 model.generatedAt = result.timestamp

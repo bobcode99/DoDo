@@ -107,6 +107,12 @@ struct AnalysisTabView: View {
         if case .analyzing = viewModel.aiAnalysis.cloudAnalysisState {
           analysisStateView(for: viewModel.aiAnalysis.cloudAnalysisState, type: .analysis)
         } else {
+          // Finished with nothing to show: name it, instead of silently
+          // resetting to the Analyze button as if the run never happened.
+          if case .completed = viewModel.aiAnalysis.cloudAnalysisState {
+            emptyResponseBanner
+          }
+
           // No result yet — show hint field + analyze button
           shortcutPickerRow
           formatHintField
@@ -283,6 +289,37 @@ struct AnalysisTabView: View {
     .buttonStyle(.plain)
   }
 
+  // MARK: - In-Flight Affordances
+
+  /// Elapsed time, ticking once a second. A slow model and a stalled request
+  /// look identical without it.
+  @ViewBuilder
+  private var elapsedLabel: some View {
+    if let startedAt = viewModel.aiAnalysis.analysisStartedAt {
+      TimelineView(.periodic(from: startedAt, by: 1)) { context in
+        Text(Formatters.formatPlaybackTime(max(0, context.date.timeIntervalSince(startedAt))))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  /// Escape hatch from a running analysis. Keeps any previously saved result.
+  private var stopButton: some View {
+    Button(role: .destructive) {
+      viewModel.aiAnalysis.cancelCloudAnalysis()
+    } label: {
+      Label("Stop", systemImage: "stop.circle")
+        .font(.subheadline)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(Color.red.opacity(0.1))
+        .foregroundStyle(.red)
+        .clipShape(.rect(cornerRadius: 8))
+    }
+    .buttonStyle(.plain)
+  }
+
   // MARK: - Streaming Response View
 
   private var streamingResponseView: some View {
@@ -297,6 +334,7 @@ struct AnalysisTabView: View {
           .fontWeight(.medium)
           .foregroundStyle(.blue)
         Spacer()
+        elapsedLabel
         ProgressView()
           .scaleEffect(0.8)
       }
@@ -314,6 +352,8 @@ struct AnalysisTabView: View {
             .foregroundStyle(.secondary)
         }
       }
+
+      stopButton
 
       // Metadata
       HStack {
@@ -352,6 +392,30 @@ struct AnalysisTabView: View {
             .strokeBorder(Color.blue.opacity(0.2), lineWidth: 1)
         )
     )
+  }
+
+  /// The run finished but produced nothing to persist — rare now that raw
+  /// replies are kept, but a silent reset to the Analyze button reads as
+  /// "nothing happened", which is the exact confusion this replaces.
+  private var emptyResponseBanner: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "questionmark.circle.fill")
+        .foregroundStyle(.orange)
+        .font(.subheadline)
+      VStack(alignment: .leading, spacing: 3) {
+        Text("Finished, but the model returned nothing")
+          .font(.caption)
+          .fontWeight(.semibold)
+          .foregroundStyle(.orange)
+        Text("Tap Analyze Episode to try again.")
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(10)
+    .background(Color.orange.opacity(0.1))
+    .clipShape(.rect(cornerRadius: 8))
   }
 
   /// Prominent error banner with optional retry messaging.
@@ -421,11 +485,16 @@ struct AnalysisTabView: View {
                 .foregroundStyle(.primary)
             }
 
-            if progress >= 0 {
-              Text("\(Int(progress * 100))% complete")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+              if progress >= 0 {
+                Text("\(Int(progress * 100))% complete")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+              elapsedLabel
             }
+
+            stopButton
           }
           .padding()
           .background(Color.blue.opacity(0.05))
