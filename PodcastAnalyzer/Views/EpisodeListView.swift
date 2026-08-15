@@ -367,12 +367,6 @@ struct EpisodeListView: View {
           .listRowInsets(EdgeInsets())
           .listRowSeparator(.hidden)
           .listRowBackground(Color.clear)
-
-        // MARK: - Filter and Sort Bar
-        filterSortBar(viewModel: viewModel)
-          .listRowInsets(EdgeInsets())
-          .listRowSeparator(.hidden)
-          .listRowBackground(Color.clear)
       }
 
       // MARK: - Episodes List
@@ -415,10 +409,11 @@ struct EpisodeListView: View {
             .listRowSeparator(.hidden)
         }
       } header: {
-        Text("Episodes (\(viewModel.filteredEpisodes.count))")
-          .font(.subheadline)
-          .fontWeight(.semibold)
-          .foregroundStyle(.secondary)
+        // Pinned: the filter chips and the sort control stay reachable while
+        // the backlog scrolls, so changing either does not mean scrolling back
+        // to the top of a 500-episode feed.
+        filterSortBar(viewModel: viewModel)
+          .listRowInsets(EdgeInsets())
       }
     }
     .listStyle(.plain)
@@ -639,99 +634,97 @@ struct EpisodeListView: View {
 
   @ViewBuilder
   private func headerSection(viewModel: EpisodeListViewModel) -> some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .top) {
-        if let url = URL(string: viewModel.podcastInfo.imageURL) {
-          CachedAsyncImage(url: url) { image in
-               image.resizable().scaledToFit()
-          } placeholder: {
-               Color.gray
-                  .overlay(ProgressView())
-          }
-          .frame(width: 100, height: 100)
-          .clipShape(.rect(cornerRadius: 8))
+    PodcastHeroHeader(
+      artworkURL: viewModel.podcastInfo.imageURL,
+      title: viewModel.podcastInfo.title,
+      artist: artistName,
+      episodeCount: viewModel.podcastInfo.episodes.count,
+      language: languageDisplayName(for: viewModel.podcastInfo.language),
+      isSubscribed: isSubscribed,
+      canPlayLatest: latestPlayableEpisode(viewModel: viewModel) != nil,
+      onPlayLatest: { playLatestEpisode(viewModel: viewModel) },
+      onToggleSubscribe: {
+        if isSubscribed {
+          showUnsubscribeConfirmation = true
         } else {
-          Color.gray.frame(width: 100, height: 100).clipShape(.rect(cornerRadius: 8))
+          subscribe()
         }
+      }
+    ) {
+      if viewModel.podcastInfo.podcastInfoDescription != nil {
+        VStack(alignment: .leading, spacing: 2) {
+          descriptionView(for: viewModel)
+            .lineLimit(viewModel.isDescriptionExpanded ? nil : 3)
 
-        VStack(alignment: .leading, spacing: 4) {
-          Text(viewModel.podcastInfo.title)
-            .font(.headline)
-
-          if !artistName.isEmpty {
-            Text(artistName)
-              .font(.subheadline)
-              .foregroundStyle(.secondary)
-          }
-
-          // Language badge
-          HStack(spacing: 4) {
-            Image(systemName: "globe")
-              .font(.system(size: 10))
-            Text(
-              languageDisplayName(
-                for: viewModel.podcastInfo.language
-              )
-            )
-            .font(.caption2)
-          }
-          .foregroundStyle(.secondary)
-          .padding(.horizontal, 6)
-          .padding(.vertical, 2)
-          .background(Color.gray.opacity(0.15))
-          .clipShape(.rect(cornerRadius: 4))
-
-          // Subscribe / Unsubscribe button
           Button {
-            if isSubscribed {
-              showUnsubscribeConfirmation = true
-            } else {
-              subscribe()
+            withAnimation(.easeInOut(duration: 0.2)) {
+              viewModel.isDescriptionExpanded.toggle()
             }
           } label: {
-            HStack {
-              Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
-              Text(isSubscribed ? "Subscribed" : "Subscribe")
-            }
-            .font(.subheadline)
-            .fontWeight(.medium)
-            .foregroundStyle(isSubscribed ? Color.primary : Color.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSubscribed ? Color.gray.opacity(0.25) : Color.blue)
-            .clipShape(.rect(cornerRadius: 16))
+            Text(viewModel.isDescriptionExpanded ? "Show less" : "More")
+              .font(.caption)
+              .fontWeight(.medium)
+              .foregroundStyle(.blue)
           }
           .buttonStyle(.plain)
-          .padding(.top, 4)
-
-          if viewModel.podcastInfo.podcastInfoDescription != nil {
-            VStack(alignment: .leading, spacing: 2) {
-              descriptionView(for: viewModel)
-                .lineLimit(
-                  viewModel.isDescriptionExpanded ? nil : 3
-                )
-
-              Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                  viewModel.isDescriptionExpanded.toggle()
-                }
-              }) {
-                Text(
-                  viewModel.isDescriptionExpanded
-                    ? "Show less" : "More"
-                )
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(.blue)
-              }
-              .buttonStyle(.plain)
-            }
-          }
         }
       }
     }
-    .padding(.horizontal, 16)
-    .padding(.bottom, 10)
+  }
+
+  // MARK: - Latest Episode
+
+  /// Newest episode that actually has audio. Independent of the chip filter and
+  /// the sort direction — "Latest" means the show's latest, not the top row.
+  private func latestPlayableEpisode(viewModel: EpisodeListViewModel) -> PodcastEpisodeInfo? {
+    viewModel.podcastInfo.episodes
+      .filter { $0.audioURL != nil }
+      .max { ($0.pubDate ?? .distantPast) < ($1.pubDate ?? .distantPast) }
+  }
+
+  private func playLatestEpisode(viewModel: EpisodeListViewModel) {
+    guard let episode = latestPlayableEpisode(viewModel: viewModel),
+      let audioURL = episode.audioURL
+    else { return }
+
+    let podcastTitle = viewModel.podcastInfo.title
+    let key = viewModel.makeEpisodeKey(episode)
+    let model = viewModel.episodeModels[key]
+    let imageURL = episode.imageURL ?? viewModel.podcastInfo.imageURL
+
+    // Prefer the downloaded file, same as a row's play button does.
+    let state = downloadManager.getDownloadState(
+      episodeTitle: episode.title,
+      podcastTitle: podcastTitle
+    )
+    let playbackURL: String
+    if case .downloaded(let path) = state {
+      playbackURL = URL(fileURLWithPath: path).absoluteString
+    } else {
+      playbackURL = audioURL
+    }
+
+    // A completed episode restarts: its saved position sits at the very end,
+    // so seeking a fresh player item there would stop it immediately.
+    let startTime = (model?.isCompleted ?? false) ? 0 : (model?.lastPlaybackPosition ?? 0)
+
+    EnhancedAudioManager.shared.play(
+      episode: PlaybackEpisode(
+        id: key,
+        title: episode.title,
+        podcastTitle: podcastTitle,
+        audioURL: playbackURL,
+        imageURL: imageURL,
+        episodeDescription: episode.podcastEpisodeDescription,
+        pubDate: episode.pubDate,
+        duration: episode.duration,
+        guid: episode.guid
+      ),
+      audioURL: playbackURL,
+      startTime: startTime,
+      imageURL: imageURL,
+      useDefaultSpeed: startTime == 0
+    )
   }
 
   /// Convert language code to display name
@@ -745,9 +738,9 @@ struct EpisodeListView: View {
 
   @ViewBuilder
   private func filterSortBar(viewModel: EpisodeListViewModel) -> some View {
-    VStack(spacing: 12) {
+    VStack(alignment: .leading, spacing: 8) {
       ScrollView(.horizontal) {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
           ForEach(EpisodeFilter.allCases, id: \.self) { filter in
             FilterChip(
               title: filter.rawValue,
@@ -759,39 +752,41 @@ struct EpisodeListView: View {
               }
             }
           }
-
-          Divider()
-            .frame(height: 24)
-
-          Button(action: {
-            withAnimation(.easeInOut(duration: 0.2)) {
-              viewModel.sortOldestFirst.toggle()
-            }
-          }) {
-            HStack(spacing: 4) {
-              Image(
-                systemName: viewModel.sortOldestFirst
-                  ? "arrow.up" : "arrow.down"
-              )
-              .font(.system(size: 12))
-              Text(
-                viewModel.sortOldestFirst ? "Oldest" : "Newest"
-              )
-              .font(.caption)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .foregroundStyle(.primary)
-            .background(.regularMaterial, in: .rect(cornerRadius: 16))
-          }
-          .buttonStyle(.plain)
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 16)
       }
       .scrollIndicators(.hidden)
+
+      // "Episodes (N)" and the sort toggle share one row, as in the design —
+      // the count is the section label and the direction is its only control.
+      HStack {
+        Text("Episodes (\(viewModel.filteredEpisodes.count))")
+          .font(.headline)
+          .foregroundStyle(.primary)
+
+        Spacer()
+
+        Button {
+          withAnimation(.easeInOut(duration: 0.2)) {
+            viewModel.sortOldestFirst.toggle()
+          }
+        } label: {
+          HStack(spacing: 3) {
+            Text(viewModel.sortOldestFirst ? "Oldest" : "Newest")
+              .font(.subheadline)
+              .fontWeight(.semibold)
+            Image(systemName: viewModel.sortOldestFirst ? "arrow.up" : "arrow.down")
+              .font(.system(size: 11, weight: .semibold))
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.horizontal, 16)
     }
-    .padding(.horizontal, 16)
+    .padding(.top, 8)
     .padding(.bottom, 8)
+    .background(.bar)
   }
 }
 
