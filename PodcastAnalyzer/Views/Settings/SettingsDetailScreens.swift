@@ -20,6 +20,14 @@ import UserNotifications
 
 struct SyncSettingsScreen: View {
   private var syncManager: BackgroundSyncManager { .shared }
+  @State private var cloud = CloudSyncStatus.shared
+
+  // The three models in the CloudKit-mirrored configuration
+  // (PodcastAnalyzerApp.swift). Counted so "is it actually syncing?" has an
+  // answer that does not depend on opening another device.
+  @Query private var progressRows: [PlaybackProgressModel]
+  @Query private var subscriptionRows: [SubscribedPodcastModel]
+  @Query private var queueRows: [QueueItemModel]
 
   var body: some View {
     List {
@@ -78,9 +86,79 @@ struct SyncSettingsScreen: View {
           .disabled(syncManager.isSyncing)
         }
       }
+      iCloudSection
     }
     .navigationTitle("Sync & Notifications")
     .platformToolbarTitleDisplayMode()
+    .task { await cloud.refreshAccountStatus() }
+  }
+
+  // MARK: - iCloud
+
+  /// Separate from background sync above: that one polls RSS feeds, this one
+  /// mirrors playback progress, subscriptions and Up Next between devices —
+  /// including the watch, which has no other source of data.
+  @ViewBuilder
+  private var iCloudSection: some View {
+    Section("iCloud") {
+      LabeledContent("Account") {
+        accountText.foregroundStyle(accountColor)
+      }
+
+      activityRow("Last Download", cloud.lastImport)
+      activityRow("Last Upload", cloud.lastExport)
+
+      LabeledContent("Synced Items") {
+        Text("\(progressRows.count + subscriptionRows.count + queueRows.count)")
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func activityRow(
+    _ title: LocalizedStringKey, _ activity: CloudSyncStatus.Activity?
+  ) -> some View {
+    LabeledContent(title) {
+      if let activity {
+        if activity.isRunning {
+          Text("In progress…").foregroundStyle(.secondary)
+        } else if activity.succeeded {
+          Text(Formatters.formatDate(activity.ended ?? activity.started, time: .shortened))
+            .foregroundStyle(.secondary)
+        } else if let errorDescription = activity.errorDescription {
+          Text(verbatim: errorDescription)
+            .foregroundStyle(.red)
+            .multilineTextAlignment(.trailing)
+        } else {
+          Text("Failed").foregroundStyle(.red)
+        }
+      } else {
+        Text("—").foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  /// `Text` rather than `String`: a String handed to `Text` is shown verbatim,
+  /// so these would stay English in a localized build. The one genuinely
+  /// dynamic case is explicitly verbatim.
+  private var accountText: Text {
+    switch cloud.account {
+    case .available: Text("Signed in")
+    case .noAccount: Text("Not signed in")
+    case .restricted: Text("Restricted")
+    case .temporarilyUnavailable: Text("Temporarily unavailable")
+    case .couldNotDetermine(let reason): Text(verbatim: reason)
+    case .unknown: Text("Checking…")
+    }
+  }
+
+  private var accountColor: Color {
+    switch cloud.account {
+    case .available: .green
+    case .unknown: .secondary
+    default: .red
+    }
   }
 
   @ViewBuilder
