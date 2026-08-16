@@ -10,6 +10,9 @@
 		154AA7D72F50161700848582 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000022F4F0001000NUKE0 /* Nuke */; };
 		154AA7D82F50161700848582 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000032F4F0001000NUKE0 /* NukeUI */; };
 		155164762ED374440015567A /* ZMarkupParser in Frameworks */ = {isa = PBXBuildFile; productRef = 155164752ED374440015567A /* ZMarkupParser */; };
+		5EA5D10A2FF000000000010A /* DoDoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 5EA5D1022FF0000000000102 /* DoDoWatch.app */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5EA5D1132FF0000000000113 /* FeedKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5EA5D1102FF0000000000110 /* FeedKit */; };
+		5EA5D1142FF0000000000114 /* XMLKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5EA5D1112FF0000000000111 /* XMLKit */; };
 		158240912ED303EC000ABA90 /* FeedKit in Frameworks */ = {isa = PBXBuildFile; productRef = 158240902ED303EC000ABA90 /* FeedKit */; };
 		158240932ED303EC000ABA90 /* XMLKit in Frameworks */ = {isa = PBXBuildFile; productRef = 158240922ED303EC000ABA90 /* XMLKit */; };
 		15AEEAE02F26464200D90D05 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 15AEEA152F2642D900D90D05 /* WidgetKit.framework */; };
@@ -51,6 +54,13 @@
 			remoteGlobalIDString = 5EA5D00A2FF0000000000001;
 			remoteInfo = OpenInDoDoExtension;
 		};
+		5EA5D10C2FF000000000010C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 15ED5EE52EC44BC6001B6CD7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5EA5D1012FF0000000000101;
+			remoteInfo = DoDoWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -66,12 +76,24 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5EA5D1092FF0000000000109 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				5EA5D10A2FF000000000010A /* DoDoWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		15AEEA152F2642D900D90D05 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		15AEEA172F2642D900D90D05 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PodcastAnalyzerWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EA5D1022FF0000000000102 /* DoDoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoDoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5EED2EC44BC6001B6CD7 /* DoDo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoDo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5EFC2EC44BC9001B6CD7 /* PodcastAnalyzerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15ED5F062EC44BC9001B6CD7 /* PodcastAnalyzerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodcastAnalyzerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -144,6 +166,11 @@
 			path = SharedCore;
 			sourceTree = "<group>";
 		};
+		5EA5D1002FF0000000000100 /* DoDoWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DoDoWatch;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -192,6 +219,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5EA5D1042FF0000000000104 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5EA5D1132FF0000000000113 /* FeedKit in Frameworks */,
+				5EA5D1142FF0000000000114 /* XMLKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -209,6 +245,7 @@
 			children = (
 				AC576B882F776FE9007B884A /* PodcastAnalyzer.xctestplan */,
 				5EA5D0202FF0000000000020 /* SharedCore */,
+				5EA5D1002FF0000000000100 /* DoDoWatch */,
 				15ED5EEF2EC44BC6001B6CD7 /* PodcastAnalyzer */,
 				15ED5EFF2EC44BC9001B6CD7 /* PodcastAnalyzerTests */,
 				5EA5D0102FF0000000000010 /* PodcastAnalyzerUITests */,
@@ -228,6 +265,7 @@
 				15ED5F062EC44BC9001B6CD7 /* PodcastAnalyzerUITests.xctest */,
 				15AEEADF2F26464200D90D05 /* PodcastAnalyzerWidgetExtension.appex */,
 				5EA5D0012FF0000000000001 /* OpenInDoDoExtension.appex */,
+				5EA5D1022FF0000000000102 /* DoDoWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -265,12 +303,14 @@
 				15ED5EEA2EC44BC6001B6CD7 /* Frameworks */,
 				15ED5EEB2EC44BC6001B6CD7 /* Resources */,
 				15AEEA2E2F2642DB00D90D05 /* Embed Foundation Extensions */,
+				5EA5D1092FF0000000000109 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				15AEEAED2F26464500D90D05 /* PBXTargetDependency */,
 				5EA5D0042FF0000000000001 /* PBXTargetDependency */,
+				5EA5D10B2FF000000000010B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				15ED5EEF2EC44BC6001B6CD7 /* PodcastAnalyzer */,
@@ -359,6 +399,31 @@
 			productReference = 5EA5D0012FF0000000000001 /* OpenInDoDoExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		5EA5D1012FF0000000000101 /* DoDoWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EA5D1062FF0000000000106 /* Build configuration list for PBXNativeTarget "DoDoWatch" */;
+			buildPhases = (
+				5EA5D1032FF0000000000103 /* Sources */,
+				5EA5D1042FF0000000000104 /* Frameworks */,
+				5EA5D1052FF0000000000105 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5EA5D1002FF0000000000100 /* DoDoWatch */,
+				5EA5D0202FF0000000000020 /* SharedCore */,
+			);
+			name = DoDoWatch;
+			packageProductDependencies = (
+				5EA5D1102FF0000000000110 /* FeedKit */,
+				5EA5D1112FF0000000000111 /* XMLKit */,
+			);
+			productName = DoDoWatch;
+			productReference = 5EA5D1022FF0000000000102 /* DoDoWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -411,6 +476,7 @@
 				15ED5EFB2EC44BC9001B6CD7 /* PodcastAnalyzerTests */,
 				15ED5F052EC44BC9001B6CD7 /* PodcastAnalyzerUITests */,
 				15AEEADE2F26464200D90D05 /* PodcastAnalyzerWidgetExtension */,
+				5EA5D1012FF0000000000101 /* DoDoWatch */,
 				5EA5D00A2FF0000000000001 /* OpenInDoDoExtension */,
 			);
 		};
@@ -447,6 +513,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5EA5D0092FF0000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EA5D1052FF0000000000105 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -491,6 +564,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5EA5D1032FF0000000000103 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -514,6 +594,12 @@
 			platformFilter = ios;
 			target = 5EA5D00A2FF0000000000001 /* OpenInDoDoExtension */;
 			targetProxy = 5EA5D0032FF0000000000001 /* PBXContainerItemProxy */;
+		};
+		5EA5D10B2FF000000000010B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilters = (ios, );
+			target = 5EA5D1012FF0000000000101 /* DoDoWatch */;
+			targetProxy = 5EA5D10C2FF000000000010C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1000,6 +1086,78 @@
 			};
 			name = Release;
 		};
+		5EA5D1072FF0000000000107 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DoDoWatch/DoDoWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.jn.PodcastAnalyzer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jn.PodcastAnalyzer.watchkitapp;
+				PRODUCT_MODULE_NAME = DoDoWatch;
+				PRODUCT_NAME = DoDoWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		5EA5D1082FF0000000000108 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DoDoWatch/DoDoWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.jn.PodcastAnalyzer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jn.PodcastAnalyzer.watchkitapp;
+				PRODUCT_MODULE_NAME = DoDoWatch;
+				PRODUCT_NAME = DoDoWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1053,6 +1211,15 @@
 			buildConfigurations = (
 				5EA5D00B2FF0000000000001 /* Debug */,
 				5EA5D00C2FF0000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5EA5D1062FF0000000000106 /* Build configuration list for PBXNativeTarget "DoDoWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EA5D1072FF0000000000107 /* Debug */,
+				5EA5D1082FF0000000000108 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1150,6 +1317,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = CCDD0001000000000000CCDD /* XCRemoteSwiftPackageReference "hummingbird" */;
 			productName = Hummingbird;
+		};
+		5EA5D1102FF0000000000110 /* FeedKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1582408F2ED303EC000ABA90 /* XCRemoteSwiftPackageReference "FeedKit" */;
+			productName = FeedKit;
+		};
+		5EA5D1112FF0000000000111 /* XMLKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1582408F2ED303EC000ABA90 /* XCRemoteSwiftPackageReference "FeedKit" */;
+			productName = XMLKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
