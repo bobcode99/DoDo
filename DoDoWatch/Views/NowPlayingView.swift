@@ -2,24 +2,27 @@
 //  NowPlayingView.swift
 //  DoDoWatch
 //
-//  Transport controls for whatever the watch is playing.
+//  Transport controls for whichever source the user picked.
+//
+//  The two sources are read directly rather than through a protocol: an
+//  existential would hide the @Observable type SwiftUI needs to see in order to
+//  track it. Pocket Casts can use a ~50-member protocol here
+//  (UI/Play Source/PlaySourceViewModel.swift) because their views are driven by
+//  Combine publishers instead.
 //
 
 import SwiftUI
 
 struct NowPlayingView: View {
+  @State private var sourceManager = SourceManager.shared
   @State private var player = WatchAudioPlayer.shared
+  @State private var session = WatchSessionManager.shared
 
   var body: some View {
     Group {
-      if let episode = player.episode {
-        playing(episode)
-      } else {
-        ContentUnavailableView(
-          "Nothing Playing",
-          systemImage: "headphones",
-          description: Text("Pick an episode from Shows.")
-        )
+      switch sourceManager.selected {
+      case .watch: watchSource
+      case .phone: phoneSource
       }
     }
     .navigationTitle("Now Playing")
@@ -28,44 +31,89 @@ struct NowPlayingView: View {
     .onDisappear { player.checkpoint() }
   }
 
-  private func playing(_ episode: WatchPlayableEpisode) -> some View {
+  @ViewBuilder
+  private var watchSource: some View {
+    if let episode = player.episode {
+      PlayerControls(
+        title: episode.title,
+        currentTime: player.currentTime,
+        duration: player.duration,
+        progress: player.progress,
+        isPlaying: player.isPlaying,
+        onToggle: { player.togglePlayPause() },
+        onSkipBack: { player.skipBackward() },
+        onSkipForward: { player.skipForward() }
+      )
+    } else {
+      empty("Pick an episode from Shows.")
+    }
+  }
+
+  @ViewBuilder
+  private var phoneSource: some View {
+    if let snapshot = session.nowPlaying {
+      PlayerControls(
+        title: snapshot.episodeTitle,
+        currentTime: snapshot.currentTime,
+        duration: snapshot.duration,
+        progress: snapshot.progress,
+        isPlaying: snapshot.isPlaying,
+        onToggle: { session.send(.togglePlayPause) },
+        onSkipBack: { session.send(.skipBackward) },
+        onSkipForward: { session.send(.skipForward) }
+      )
+    } else {
+      empty("Start something on your iPhone.")
+    }
+  }
+
+  private func empty(_ message: String) -> some View {
+    ContentUnavailableView(
+      "Nothing Playing",
+      systemImage: "headphones",
+      description: Text(message)
+    )
+  }
+}
+
+/// The controls themselves, given plain values — so both sources render
+/// identically and neither one owns the layout.
+private struct PlayerControls: View {
+  let title: String
+  let currentTime: TimeInterval
+  let duration: TimeInterval
+  let progress: Double
+  let isPlaying: Bool
+  let onToggle: () -> Void
+  let onSkipBack: () -> Void
+  let onSkipForward: () -> Void
+
+  var body: some View {
     VStack(spacing: 6) {
-      Text(episode.title)
+      Text(title)
         .font(.caption)
         .lineLimit(2)
         .multilineTextAlignment(.center)
 
-      ProgressView(value: player.progress)
+      ProgressView(value: progress)
         .tint(.accentColor)
 
       HStack {
-        Text(Self.format(player.currentTime))
+        Text(Self.format(currentTime))
         Spacer()
-        Text(player.duration > 0 ? Self.format(player.duration) : "--:--")
+        Text(duration > 0 ? Self.format(duration) : "--:--")
       }
       .font(.system(size: 11))
       .foregroundStyle(.secondary)
       .monospacedDigit()
 
       HStack(spacing: 14) {
-        Button {
-          player.skipBackward()
-        } label: {
-          Image(systemName: "gobackward.15")
-        }
-
-        Button {
-          player.togglePlayPause()
-        } label: {
-          Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+        Button(action: onSkipBack) { Image(systemName: "gobackward.15") }
+        Button(action: onToggle) {
+          Image(systemName: isPlaying ? "pause.fill" : "play.fill")
             .font(.title3)
         }
-
-        Button {
-          player.skipForward()
-        } label: {
-          Image(systemName: "goforward.30")
-        }
+        Button(action: onSkipForward) { Image(systemName: "goforward.30") }
       }
       .buttonStyle(.plain)
       .font(.title3)
@@ -73,7 +121,7 @@ struct NowPlayingView: View {
     .padding(.horizontal, 4)
   }
 
-  private static func format(_ time: TimeInterval) -> String {
+  static func format(_ time: TimeInterval) -> String {
     guard time.isFinite, time >= 0 else { return "--:--" }
     let total = Int(time)
     let hours = total / 3600

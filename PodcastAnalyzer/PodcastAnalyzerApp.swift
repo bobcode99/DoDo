@@ -132,6 +132,9 @@ struct PodcastAnalyzerApp: App {
     PlaybackProgressSyncCoordinator.shared.setModelContainer(sharedModelContainer)
     TranscriptStore.shared.setModelContainer(sharedModelContainer)
     AppIntentsModelStore.container = sharedModelContainer
+    #if os(iOS)
+    PhoneWatchSession.shared.activate()
+    #endif
 
     // Show new-episode banners in foreground + route taps to episode detail.
     UNUserNotificationCenter.current().delegate = NotificationTapDelegate.shared

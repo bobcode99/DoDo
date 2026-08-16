@@ -1229,6 +1229,10 @@ private func handleAudioInterruption(_ notification: Notification) {
 
     // Always write data so progress bar stays current
     WidgetDataManager.writePlaybackData(data)
+    #if os(iOS)
+    // Same payload to the watch. It throttles itself — see PhoneWatchSession.
+    PhoneWatchSession.shared.push(data)
+    #endif
     logger.debug("Widget: wrote data — episode=\"\(episode.title)\" isPlaying=\(self.isPlaying) progress=\(String(format: "%.1f%%", data.progress * 100))")
 
     // Only trigger a timeline reload (expensive, budget-limited) when the
@@ -1263,6 +1267,9 @@ private func handleAudioInterruption(_ notification: Notification) {
       lastUpdated: Date()
     )
     WidgetDataManager.writePlaybackData(data)
+    #if os(iOS)
+    PhoneWatchSession.shared.push(data)
+    #endif
     WidgetCenter.shared.reloadTimelines(ofKind: "NowPlayingWidget")
   }
 
