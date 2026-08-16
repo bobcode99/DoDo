@@ -141,9 +141,14 @@ struct EpisodeListView: View {
         browseContent
       }
     }
-    .navigationTitle(navigationTitle)
+    // No title in the bar on iOS: the hero header repeats the show name
+    // directly below it. macOS keeps it — that title is the window's, not a
+    // duplicated row.
     #if os(iOS)
+      .navigationTitle("")
       .navigationBarTitleDisplayMode(.inline)
+    #else
+      .navigationTitle(navigationTitle)
     #endif
     .onDisappear {
       // Clean up all resources when view disappears (works for both modes)
@@ -360,10 +365,28 @@ struct EpisodeListView: View {
 
   @ViewBuilder
   private func episodeListContent(viewModel: EpisodeListViewModel) -> some View {
+    // The reader only supplies the top inset (status bar + navigation bar) that
+    // the hero has to bleed back over; the List still lays out normally inside.
+    GeometryReader { proxy in
+      episodeList(viewModel: viewModel, topBleed: proxy.safeAreaInsets.top)
+    }
+  }
+
+  @ViewBuilder
+  private func episodeList(viewModel: EpisodeListViewModel, topBleed: CGFloat) -> some View {
     List {
       // MARK: - Header Section
       Section {
-        headerSection(viewModel: viewModel)
+        headerSection(viewModel: viewModel, topBleed: topBleed)
+          .listRowInsets(EdgeInsets())
+          .listRowSeparator(.hidden)
+          .listRowBackground(Color.clear)
+
+        // A plain row, not the episode section's `header:`. As a header a plain
+        // List pins it, so the chips stayed parked under the navigation bar
+        // while the backlog ran past underneath; here the whole screen scrolls
+        // as one page and the filters leave with the hero.
+        filterSortBar(viewModel: viewModel)
           .listRowInsets(EdgeInsets())
           .listRowSeparator(.hidden)
           .listRowBackground(Color.clear)
@@ -408,15 +431,15 @@ struct EpisodeListView: View {
             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
         }
-      } header: {
-        // Pinned: the filter chips and the sort control stay reachable while
-        // the backlog scrolls, so changing either does not mean scrolling back
-        // to the top of a 500-episode feed.
-        filterSortBar(viewModel: viewModel)
-          .listRowInsets(EdgeInsets())
       }
     }
     .listStyle(.plain)
+    #if os(iOS)
+    .listSectionSpacing(0)
+    // Let the hero gradient run behind the back/••• row instead of stopping at
+    // an opaque system bar just below it.
+    .toolbarBackground(.hidden, for: .navigationBar)
+    #endif
     .toolbar {
       ToolbarItem(placement: toolbarPlacement) {
         Menu {
@@ -501,13 +524,6 @@ struct EpisodeListView: View {
     .refreshable {
       await viewModel.refreshPodcast()
     }
-    .searchable(
-      text: Binding(
-        get: { viewModel.searchText },
-        set: { viewModel.searchText = $0 }
-      ),
-      prompt: "Search episodes"
-    )
     .confirmationDialog(
       "Delete Download",
       isPresented: $showDeleteConfirmation,
@@ -625,15 +641,21 @@ struct EpisodeListView: View {
         .foregroundStyle(.secondary)
         .font(.caption)
     case .parsed(let attributedString):
-      HTMLTextView(attributedString: attributedString)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      // Collapsed height comes from HTMLTextView's own parameter: `.lineLimit()`
+      // is a Text modifier and the text view it renders through ignores it.
+      HTMLTextView(
+        attributedString: attributedString,
+        lineLimit: viewModel.isDescriptionExpanded ? nil : 3
+      )
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
   // MARK: - Header Section
 
   @ViewBuilder
-  private func headerSection(viewModel: EpisodeListViewModel) -> some View {
+  private func headerSection(viewModel: EpisodeListViewModel, topBleed: CGFloat) -> some View {
+    let target = playTarget(viewModel: viewModel)
     PodcastHeroHeader(
       artworkURL: viewModel.podcastInfo.imageURL,
       title: viewModel.podcastInfo.title,
@@ -641,8 +663,10 @@ struct EpisodeListView: View {
       episodeCount: viewModel.podcastInfo.episodes.count,
       language: languageDisplayName(for: viewModel.podcastInfo.language),
       isSubscribed: isSubscribed,
-      canPlayLatest: latestPlayableEpisode(viewModel: viewModel) != nil,
-      onPlayLatest: { playLatestEpisode(viewModel: viewModel) },
+      topBleed: topBleed,
+      playTitle: target?.isResume == true ? "Resume" : "Latest",
+      canPlay: target != nil,
+      onPlay: { playTargetEpisode(viewModel: viewModel) },
       onToggleSubscribe: {
         if isSubscribed {
           showUnsubscribeConfirmation = true
@@ -654,7 +678,6 @@ struct EpisodeListView: View {
       if viewModel.podcastInfo.podcastInfoDescription != nil {
         VStack(alignment: .leading, spacing: 2) {
           descriptionView(for: viewModel)
-            .lineLimit(viewModel.isDescriptionExpanded ? nil : 3)
 
           Button {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -672,18 +695,41 @@ struct EpisodeListView: View {
     }
   }
 
-  // MARK: - Latest Episode
+  // MARK: - Play Button Target
 
-  /// Newest episode that actually has audio. Independent of the chip filter and
-  /// the sort direction — "Latest" means the show's latest, not the top row.
-  private func latestPlayableEpisode(viewModel: EpisodeListViewModel) -> PodcastEpisodeInfo? {
-    viewModel.podcastInfo.episodes
-      .filter { $0.audioURL != nil }
+  /// What the header's play button acts on: the episode the user last listened
+  /// to in this show, falling back to the newest one when nothing here has been
+  /// played yet. Independent of the chip filter and the sort direction.
+  ///
+  /// Recency is the later of `progressUpdatedAt` and `lastPlayedDate`. The
+  /// first moves on every playback-position write, so it catches an episode
+  /// left half-finished; the second only moves on completion, but legacy rows
+  /// may carry just that one.
+  private func playTarget(viewModel: EpisodeListViewModel)
+    -> (episode: PodcastEpisodeInfo, isResume: Bool)?
+  {
+    let playable = viewModel.podcastInfo.episodes.filter { $0.audioURL != nil }
+
+    let lastListened =
+      playable
+      .compactMap { episode -> (PodcastEpisodeInfo, Date)? in
+        guard let model = viewModel.episodeModels[viewModel.makeEpisodeKey(episode)],
+          let stamp = [model.progressUpdatedAt, model.lastPlayedDate].compactMap({ $0 }).max()
+        else { return nil }
+        return (episode, stamp)
+      }
+      .max { $0.1 < $1.1 }?
+      .0
+
+    if let lastListened { return (lastListened, true) }
+
+    return playable
       .max { ($0.pubDate ?? .distantPast) < ($1.pubDate ?? .distantPast) }
+      .map { ($0, false) }
   }
 
-  private func playLatestEpisode(viewModel: EpisodeListViewModel) {
-    guard let episode = latestPlayableEpisode(viewModel: viewModel),
+  private func playTargetEpisode(viewModel: EpisodeListViewModel) {
+    guard let episode = playTarget(viewModel: viewModel)?.episode,
       let audioURL = episode.audioURL
     else { return }
 

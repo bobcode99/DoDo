@@ -49,12 +49,6 @@ final class EpisodeListViewModel {
   var sortOldestFirst: Bool = false {
     didSet { recomputeFilteredEpisodes() }  // same set, just reordered — keep expansion
   }
-  var searchText: String = "" {
-    didSet {
-      isShowingAllEpisodes = false
-      recomputeFilteredEpisodes()
-    }
-  }
   var isRefreshing: Bool = false
   var isDescriptionExpanded: Bool = false
 
@@ -76,7 +70,11 @@ final class EpisodeListViewModel {
   private var parseDescriptionTask: Task<Void, Never>?
   @ObservationIgnored private var isCleaned = false
   @ObservationIgnored private var progressTimer: Timer?
-  @ObservationIgnored private var lastRefreshDate: Date?
+  // No `lastRefreshDate` here: a fresh view model is built on every push into
+  // a show, so an instance-scoped throttle never fired and every open refetched
+  // the feed. `podcastModel.lastUpdated` is the persistent record of when we
+  // last saw it — and it also lets BackgroundSyncManager's sync suppress a
+  // redundant fetch here.
 
   // MARK: - Throttled Download States Snapshot
   //
@@ -189,15 +187,6 @@ final class EpisodeListViewModel {
 
   private func recomputeFilteredEpisodes() {
     var episodes = podcastInfo.episodes
-
-    // Apply search filter first
-    if !searchText.isEmpty {
-      let query = searchText
-      episodes = episodes.filter { episode in
-        episode.title.localizedStandardContains(query)
-          || (episode.podcastEpisodeDescription?.localizedStandardContains(query) ?? false)
-      }
-    }
 
     // Apply category filter
     switch selectedFilter {
@@ -533,11 +522,10 @@ final class EpisodeListViewModel {
   // MARK: - Podcast Operations
 
   func refreshPodcast() async {
-    // Skip network fetch if refreshed within last 30 minutes
+    // Skip network fetch if this feed was seen within the last 30 minutes,
+    // by anyone — this view model or a background sync.
     let staleAfter: TimeInterval = 30 * 60
-    if let last = lastRefreshDate, Date().timeIntervalSince(last) < staleAfter {
-      return
-    }
+    guard Date().timeIntervalSince(podcastModel.lastUpdated) >= staleAfter else { return }
     isRefreshing = true
     defer { isRefreshing = false }
 
@@ -557,11 +545,14 @@ final class EpisodeListViewModel {
       let merged = podcastInfo.merging(
         updatedFrom: updatedPodcast, preservedKeys: preservedKeys)
       podcastModel.applyPodcastInfo(merged)
+      // Same bookkeeping BackgroundSyncManager does after a merge: this is a
+      // successful feed refresh, and the Library grid / macOS list treat
+      // `lastUpdated` as "when we last saw this feed".
+      podcastModel.lastUpdated = Date()
       podcastInfo = merged  // refresh the cache from the value we just built (no re-decode)
       statusSnapshotsBuilt = false  // episodes changed — re-scan status on next use
       recomputeFilteredEpisodes()
       try? modelContext?.save()
-      lastRefreshDate = Date()
     } catch {
       viewModelLogger.error("Failed to refresh podcast: \(error.localizedDescription, privacy: .public)")
     }

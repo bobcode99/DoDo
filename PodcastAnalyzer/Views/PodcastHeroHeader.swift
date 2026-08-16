@@ -107,8 +107,18 @@ struct PodcastHeroHeader<Description: View>: View {
   let episodeCount: Int
   let language: String
   let isSubscribed: Bool
-  let canPlayLatest: Bool
-  let onPlayLatest: () -> Void
+  /// Distance to extend the tint *above* this view, so the fill reaches the
+  /// back/••• row instead of starting under it.
+  ///
+  /// Passed in rather than taken from `.ignoresSafeArea`: inside a `List` the
+  /// safe area is already spent as content inset, so a row has none left to
+  /// expand into. The host measures it and we bleed upward by hand.
+  var topBleed: CGFloat = 0
+  /// "Resume" when the host resolved an episode the user was part-way through,
+  /// "Latest" when it fell back to the newest one.
+  var playTitle: String = "Latest"
+  let canPlay: Bool
+  let onPlay: () -> Void
   let onToggleSubscribe: () -> Void
   @ViewBuilder let description: () -> Description
 
@@ -143,6 +153,14 @@ struct PodcastHeroHeader<Description: View>: View {
         endPoint: .bottom
       )
       .ignoresSafeArea(edges: .top)
+    }
+    .background(alignment: .top) {
+      // Solid rather than a continuation of the gradient: this strip sits above
+      // the gradient's first stop, which is `deep` anyway, so the two meet with
+      // no seam. Scrolls away with the header because it is part of the row.
+      deep
+        .frame(height: topBleed)
+        .padding(.top, -topBleed)
     }
     .task(id: artworkURL) {
       if let hit = ArtworkTint.cached(for: artworkURL) {
@@ -191,11 +209,11 @@ struct PodcastHeroHeader<Description: View>: View {
 
   private var actionButtons: some View {
     HStack(spacing: 9) {
-      Button(action: onPlayLatest) {
+      Button(action: onPlay) {
         HStack(spacing: 7) {
           Image(systemName: "play.fill")
             .font(.system(size: 13))
-          Text("Latest")
+          Text(playTitle)
             .font(.system(size: 15, weight: .semibold))
         }
         .foregroundStyle(deep)
@@ -204,8 +222,8 @@ struct PodcastHeroHeader<Description: View>: View {
         .shadow(color: .black.opacity(0.16), radius: 6, y: 3)
       }
       .buttonStyle(.plain)
-      .disabled(!canPlayLatest)
-      .opacity(canPlayLatest ? 1 : 0.5)
+      .disabled(!canPlay)
+      .opacity(canPlay ? 1 : 0.5)
 
       Button(action: onToggleSubscribe) {
         Text(isSubscribed ? "Following" : "Follow")
