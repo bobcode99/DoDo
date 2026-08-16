@@ -4134,6 +4134,9 @@
         }
       }
     },
+    "Detect Music marks music ranges as [♪ Music] instead of transcribing them. Split Long Audio transcribes in parallel parts (faster on Apple Speech); turn off for one single-pass run. Transcription Context adds per-podcast names & jargon to improve accuracy. Automatic Transcription covers both what gets transcribed on download and which shows are followed." : {
+
+    },
     "Device Language" : {
       "localizations" : {
         "zh-Hans" : {

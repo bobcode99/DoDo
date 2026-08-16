@@ -160,13 +160,6 @@ struct LivePlaybackButton: View {
   private var usesSimplifiedChinese: Bool {
     localeIdentifier.contains("hans")
   }
-
-  private var remainingTimeSuffix: String {
-    if usesChineseUnits {
-      return usesSimplifiedChinese ? "剩余" : "剩餘"
-    }
-    return " left"
-  }
   
   // MARK: - Compact Style (for list rows)
   
