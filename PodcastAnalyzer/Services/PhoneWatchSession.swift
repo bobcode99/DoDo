@@ -41,14 +41,14 @@ final class PhoneWatchSession: NSObject {
 
   // MARK: - Push
 
-  func push(_ data: WidgetPlaybackData) {
+  func push(_ data: WidgetPlaybackData, force: Bool = false) {
     guard WCSession.isSupported() else { return }
     let session = WCSession.default
     guard session.activationState == .activated else { return }
 
     // Position moves constantly; the watch redraws its own clock between
     // pushes, so only send when something it cannot infer has changed.
-    if let last = lastSentSnapshot,
+    if !force, let last = lastSentSnapshot,
       last.episodeTitle == data.episodeTitle,
       last.isPlaying == data.isPlaying,
       abs(last.currentTime - data.currentTime) < 5
@@ -63,6 +63,27 @@ final class PhoneWatchSession: NSObject {
     } catch {
       logger.error("Context push failed: \(error.localizedDescription, privacy: .public)")
     }
+  }
+
+  /// Current state whether or not anything is playing, so a watch that has
+  /// never received a context gets one. `currentEpisode` is nil on a cold app,
+  /// and an empty snapshot is still more useful to the watch than silence.
+  func pushCurrentState() {
+    let manager = EnhancedAudioManager.shared
+    let episode = manager.currentEpisode
+    push(
+      WidgetPlaybackData(
+        episodeTitle: episode?.title ?? "",
+        podcastTitle: episode?.podcastTitle ?? "",
+        imageURL: episode?.imageURL,
+        audioURL: episode?.audioURL,
+        currentTime: manager.currentTime,
+        duration: manager.duration,
+        isPlaying: manager.isPlaying,
+        lastUpdated: Date()
+      ),
+      force: true
+    )
   }
 
   // MARK: - Receive
@@ -80,6 +101,8 @@ final class PhoneWatchSession: NSObject {
       manager.seek(to: time)
     case .setRate(let rate):
       manager.setPlaybackRate(rate)
+    case .requestNowPlaying:
+      pushCurrentState()
     }
   }
 
@@ -100,7 +123,11 @@ extension PhoneWatchSession: WCSessionDelegate {
   ) {
     if let error {
       logger.error("Activation failed: \(error.localizedDescription, privacy: .public)")
+      return
     }
+    // Seed the watch immediately rather than waiting for the next playback
+    // change, which may never come.
+    Task { @MainActor in self.pushCurrentState() }
   }
 
   nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {

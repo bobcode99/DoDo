@@ -39,6 +39,11 @@ final class WatchSessionManager: NSObject {
     // A context delivered while the app was not running is waiting here.
     if let snapshot = decodeSnapshot(from: session.receivedApplicationContext) {
       apply(snapshot)
+    } else {
+      // Never received one. The phone only pushes from its playback funnel, so
+      // if nothing has played since this watch app was installed there is
+      // nothing waiting — ask, which also wakes the phone app.
+      send(.requestNowPlaying)
     }
   }
 

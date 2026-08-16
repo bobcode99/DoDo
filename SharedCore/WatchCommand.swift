@@ -17,6 +17,12 @@ nonisolated enum WatchCommand: Codable, Sendable, Equatable {
   case skipBackward
   case seek(to: TimeInterval)
   case setRate(Float)
+
+  /// "Send me the current state." The phone only pushes from its playback
+  /// funnel, so a watch installed before anything played has never received a
+  /// context at all. Sending this wakes the phone app, which answers with one.
+  /// Pocket Casts does the same from `SessionManager.setup()` (`:18-23`).
+  case requestNowPlaying
 }
 
 /// Keys for the `[String: Any]` dictionaries WatchConnectivity actually moves.
