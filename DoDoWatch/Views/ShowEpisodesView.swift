@@ -13,6 +13,7 @@ struct ShowEpisodesView: View {
   let rssUrl: String
   let title: String
 
+  @State private var downloads = WatchDownloadManager.shared
   @State private var episodes: [PodcastEpisodeInfo] = []
   @State private var loadFailed = false
 
@@ -39,6 +40,21 @@ struct ShowEpisodesView: View {
                 .task { await start(playable) }
             } label: {
               episodeRow(episode)
+            }
+            .swipeActions {
+              if downloads.isDownloaded(playable.progressKey) {
+                Button(role: .destructive) {
+                  downloads.delete(id: playable.progressKey)
+                } label: {
+                  Label("Delete", systemImage: "trash")
+                }
+              } else {
+                Button {
+                  downloads.download(playable)
+                } label: {
+                  Label("Download", systemImage: "arrow.down.circle")
+                }
+              }
             }
           } else {
             // No enclosure in the feed — show it, but it cannot be played.

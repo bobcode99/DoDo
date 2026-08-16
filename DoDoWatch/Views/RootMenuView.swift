@@ -45,6 +45,12 @@ struct RootMenuView: View {
           } label: {
             Label("Shows", systemImage: "square.grid.2x2")
           }
+
+          NavigationLink {
+            DownloadsView()
+          } label: {
+            Label("Downloads", systemImage: "arrow.down.circle")
+          }
         }
       }
       .navigationTitle("DoDo")
