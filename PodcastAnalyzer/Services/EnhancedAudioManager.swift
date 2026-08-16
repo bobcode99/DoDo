@@ -1599,17 +1599,7 @@ private func handleAudioInterruption(_ notification: Notification) {
 
 // MARK: - Supporting Models
 
-struct PlaybackEpisode: Identifiable, Codable, Sendable, Equatable {
-  let id: String
-  let title: String
-  let podcastTitle: String
-  let audioURL: String
-  var imageURL: String?
-  var episodeDescription: String?
-  var pubDate: Date?
-  var duration: Int?
-  var guid: String?
-}
+// `PlaybackEpisode` lives in SharedCore/ — the watch target needs it too.
 
 struct CaptionSegment: Identifiable, Sendable {
   let id = UUID()

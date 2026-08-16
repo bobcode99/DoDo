@@ -139,6 +139,11 @@
 			path = PodcastAnalyzerUITests;
 			sourceTree = "<group>";
 		};
+		5EA5D0202FF0000000000020 /* SharedCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedCore;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -203,6 +208,7 @@
 			isa = PBXGroup;
 			children = (
 				AC576B882F776FE9007B884A /* PodcastAnalyzer.xctestplan */,
+				5EA5D0202FF0000000000020 /* SharedCore */,
 				15ED5EEF2EC44BC6001B6CD7 /* PodcastAnalyzer */,
 				15ED5EFF2EC44BC9001B6CD7 /* PodcastAnalyzerTests */,
 				5EA5D0102FF0000000000010 /* PodcastAnalyzerUITests */,
@@ -268,6 +274,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				15ED5EEF2EC44BC6001B6CD7 /* PodcastAnalyzer */,
+				5EA5D0202FF0000000000020 /* SharedCore */,
 			);
 			name = PodcastAnalyzer;
 			packageProductDependencies = (

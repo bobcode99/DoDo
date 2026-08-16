@@ -61,7 +61,6 @@ struct PodcastAnalyzerApp: App {
         PodcastInfoModel.self,
         EpisodeDownloadModel.self,
         EpisodeQuickTagsModel.self,
-        QueueItemModel.self,
         EpisodeTranscriptModel.self,
       ]),
       isStoredInMemoryOnly: false,
@@ -71,11 +70,21 @@ struct PodcastAnalyzerApp: App {
     // CloudKit-synced store: playback progress, subscribed-podcast pointers
     // (rssUrl/title only, not the full episode blob — PodcastInfoModel's RSS
     // snapshot risks CloudKit's 1MB-per-record cap for large back-catalogs),
-    // and AI analyses (text JSON, comfortably under the record cap) mirrored
-    // to the user's private database.
+    // AI analyses (text JSON, comfortably under the record cap), and the Up
+    // Next queue mirrored to the user's private database.
+    //
+    // QueueItemModel is here rather than in the local store because it is how
+    // the watch app reads Up Next — the watch shares this container, and an
+    // App Group would not reach it. The row is already CloudKit-legal: no
+    // relationships, no #Unique, every property defaulted.
     let cloudConfiguration = ModelConfiguration(
       "cloud",
-      schema: Schema([PlaybackProgressModel.self, SubscribedPodcastModel.self, EpisodeAIAnalysis.self]),
+      schema: Schema([
+        PlaybackProgressModel.self,
+        SubscribedPodcastModel.self,
+        EpisodeAIAnalysis.self,
+        QueueItemModel.self,
+      ]),
       isStoredInMemoryOnly: false,
       cloudKitDatabase: .private(cloudKitContainerIdentifier)
     )
