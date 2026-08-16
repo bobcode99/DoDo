@@ -16,6 +16,12 @@ struct RootMenuView: View {
     NavigationStack {
       List {
         NavigationLink {
+          NowPlayingView()
+        } label: {
+          Label("Now Playing", systemImage: "play.circle")
+        }
+
+        NavigationLink {
           ShowsListView()
         } label: {
           Label("Shows", systemImage: "square.grid.2x2")

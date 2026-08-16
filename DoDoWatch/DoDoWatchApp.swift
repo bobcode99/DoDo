@@ -60,6 +60,12 @@ struct DoDoWatchApp: App {
     }
   }()
 
+  init() {
+    // The player writes progress from outside the view tree, so it needs the
+    // container handed to it rather than an @Environment context.
+    WatchProgressStore.shared.setModelContainer(sharedModelContainer)
+  }
+
   var body: some Scene {
     WindowGroup {
       RootMenuView()

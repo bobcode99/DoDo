@@ -33,21 +33,43 @@ struct ShowEpisodesView: View {
           .frame(maxWidth: .infinity)
       } else {
         ForEach(episodes) { episode in
-          VStack(alignment: .leading, spacing: 2) {
-            Text(episode.title)
-              .font(.body)
-              .lineLimit(3)
-            if let pubDate = episode.pubDate {
-              Text(pubDate, format: .dateTime.month().day())
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+          if let playable = WatchPlayableEpisode(episode: episode, podcastTitle: title) {
+            NavigationLink {
+              NowPlayingView()
+                .task { await start(playable) }
+            } label: {
+              episodeRow(episode)
             }
+          } else {
+            // No enclosure in the feed — show it, but it cannot be played.
+            episodeRow(episode)
+              .foregroundStyle(.secondary)
           }
         }
       }
     }
     .navigationTitle(title)
     .task(id: rssUrl) { await load() }
+  }
+
+  private func episodeRow(_ episode: PodcastEpisodeInfo) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(episode.title)
+        .font(.body)
+        .lineLimit(3)
+      if let pubDate = episode.pubDate {
+        Text(pubDate, format: .dateTime.month().day())
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  /// Picks up wherever this Apple ID left off — the position may have been
+  /// written by the iPhone rather than by this watch.
+  private func start(_ episode: WatchPlayableEpisode) async {
+    let resumeAt = WatchProgressStore.shared.position(for: episode.progressKey)
+    await WatchAudioPlayer.shared.play(episode, resumingAt: resumeAt)
   }
 
   private func load() async {
