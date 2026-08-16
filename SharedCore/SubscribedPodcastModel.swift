@@ -22,9 +22,15 @@ final class SubscribedPodcastModel {
   var title: String = ""
   var dateSubscribed: Date = Date()
 
-  init(rssUrl: String, title: String, dateSubscribed: Date = Date()) {
+  /// Artwork URL, carried so the watch can draw its shows list without
+  /// fetching every feed first. A URL string, not image data — CloudKit's
+  /// per-record cap is the reason this model stays small.
+  var imageURL: String = ""
+
+  init(rssUrl: String, title: String, imageURL: String = "", dateSubscribed: Date = Date()) {
     self.rssUrl = rssUrl
     self.title = title
+    self.imageURL = imageURL
     self.dateSubscribed = dateSubscribed
   }
 }

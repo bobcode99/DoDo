@@ -2,34 +2,31 @@
 //  RootMenuView.swift
 //  DoDoWatch
 //
-//  Root of the watch app. For now it exists to prove the CloudKit container
-//  reaches the watch — the show count below comes from records the iPhone
-//  wrote. The menu rows arrive as their screens land.
+//  Root of the watch app: the menu Pocket Casts puts behind its source picker,
+//  minus the picker until there is a phone source to pick.
 //
 
 import SwiftData
 import SwiftUI
 
 struct RootMenuView: View {
-  @Query(sort: \SubscribedPodcastModel.dateSubscribed, order: .reverse)
-  private var subscriptions: [SubscribedPodcastModel]
+  @Environment(\.modelContext) private var modelContext
 
   var body: some View {
     NavigationStack {
       List {
-        Section("Shows") {
-          if subscriptions.isEmpty {
-            Text("No shows yet")
-              .foregroundStyle(.secondary)
-          } else {
-            ForEach(subscriptions) { podcast in
-              Text(podcast.title)
-                .lineLimit(2)
-            }
-          }
+        NavigationLink {
+          ShowsListView()
+        } label: {
+          Label("Shows", systemImage: "square.grid.2x2")
         }
       }
       .navigationTitle("DoDo")
+    }
+    .task {
+      #if DEBUG
+      DebugSeed.apply(to: modelContext)
+      #endif
     }
   }
 }

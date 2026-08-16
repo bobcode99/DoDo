@@ -47,8 +47,13 @@ final class SubscriptionSyncCoordinator {
       if podcast.isSubscribed {
         if let existing {
           existing.title = podcast.title
+          existing.imageURL = podcast.imageURL
         } else {
-          context.insert(SubscribedPodcastModel(rssUrl: rssUrl, title: podcast.title))
+          context.insert(
+            SubscribedPodcastModel(
+              rssUrl: rssUrl, title: podcast.title, imageURL: podcast.imageURL
+            )
+          )
         }
       } else if let existing {
         context.delete(existing)
