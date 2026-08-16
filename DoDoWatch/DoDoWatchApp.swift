@@ -36,6 +36,16 @@ struct DoDoWatchApp: App {
       WatchDownloadModel.self,
     ])
 
+    // Pinned, not left to `.automatic`. That default means "the first app group
+    // in the entitlements", so adding the App Group the complication needs
+    // silently moved both stores into the group container — and the recovery
+    // path below, which deletes by path, was then looking in the wrong place.
+    // The complication reads UserDefaults, never SwiftData, so the group buys
+    // these stores nothing.
+    let storeDirectory = URL.applicationSupportDirectory
+    try? FileManager.default.createDirectory(
+      at: storeDirectory, withIntermediateDirectories: true)
+
     // Downloads stay off CloudKit for the same reason the phone keeps
     // localAudioPath out of its synced store: a file path from one device is
     // meaningless on another.
@@ -43,6 +53,7 @@ struct DoDoWatchApp: App {
       "local",
       schema: Schema([WatchDownloadModel.self]),
       isStoredInMemoryOnly: false,
+      groupContainer: .none,
       cloudKitDatabase: .none
     )
 
@@ -55,6 +66,7 @@ struct DoDoWatchApp: App {
       "cloud",
       schema: cloudSchema,
       isStoredInMemoryOnly: false,
+      groupContainer: .none,
       cloudKitDatabase: .private(cloudKitContainerIdentifier)
     )
 
@@ -65,12 +77,11 @@ struct DoDoWatchApp: App {
       // Same bargain as the phone: this project ships no migrations, so a
       // schema change is allowed to discard the local copy and re-download it
       // from CloudKit rather than refuse to launch. Cheaper here than on the
-      // phone — everything in this store is a CloudKit mirror, so nothing is
-      // actually lost.
-      let support = URL.applicationSupportDirectory
+      // phone — the cloud store is a mirror, and the local store only tracks
+      // downloads, which can be fetched again.
       for stem in ["cloud.store", "local.store"] {
         for name in [stem, "\(stem)-wal", "\(stem)-shm"] {
-          try? FileManager.default.removeItem(at: support.appending(path: name))
+          try? FileManager.default.removeItem(at: storeDirectory.appending(path: name))
         }
       }
       do {

@@ -144,6 +144,13 @@
 			);
 			target = 5EA5D00A2FF0000000000001 /* OpenInDoDoExtension */;
 		};
+		5EA5D10E2FF000000000010E /* Exceptions for "DoDoWatch" folder in "DoDoWatch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5EA5D1012FF0000000000101 /* DoDoWatch */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -188,6 +195,9 @@
 		};
 		5EA5D1002FF0000000000100 /* DoDoWatch */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5EA5D10E2FF000000000010E /* Exceptions for "DoDoWatch" folder in "DoDoWatch" target */,
+			);
 			path = DoDoWatch;
 			sourceTree = "<group>";
 		};
@@ -1171,8 +1181,8 @@
 				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DoDoWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
-				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.jn.PodcastAnalyzer;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1207,8 +1217,8 @@
 				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DoDoWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
-				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.jn.PodcastAnalyzer;
 				LD_RUNPATH_SEARCH_PATHS = (
