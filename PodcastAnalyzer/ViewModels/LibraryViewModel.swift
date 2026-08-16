@@ -206,13 +206,13 @@ final class LibraryViewModel {
     }
   }
 
-  /// Podcasts sorted by most recent update (combines lastUpdated and latest episode date)
-  var podcastsSortedByRecentUpdate: [PodcastInfoModel] {
-    podcastInfoModelList.sorted { p1, p2 in
-      // Use lastUpdated if available (set during sync), otherwise use latest episode date
-        let date1 = p1.lastUpdated
-        let date2 = p2.lastUpdated
-      return date1 > date2
+  /// Podcasts ordered the way the Library grids present them — see
+  /// `PodcastRecencyOrder`. Was sorted on `lastUpdated`, which is sync time,
+  /// not release recency.
+  var podcastsSortedByLatestEpisode: [PodcastInfoModel] {
+    podcastInfoModelList.sorted {
+      PodcastRecencyOrder.isOrderedBefore(
+        $0.latestEpisodeDate, $0.title, $1.latestEpisodeDate, $1.title)
     }
   }
 

@@ -17,6 +17,28 @@ enum AutoDownloadSetting: String, CaseIterable {
   }
 }
 
+// MARK: - Library Ordering
+
+/// The order the Library grids present subscribed shows in: newest episode
+/// first.
+///
+/// Not `lastUpdated` — that records when we last *synced*, so a refresh that
+/// finds nothing new still restamps every feed and reshuffles the grid, while
+/// a show that actually published stays put.
+enum PodcastRecencyOrder {
+  /// Undated feeds sink to the bottom; the title breaks ties, because
+  /// `sorted(by:)` is not stable and the grid animates position changes.
+  nonisolated static func isOrderedBefore(
+    _ lhsDate: Date?, _ lhsTitle: String,
+    _ rhsDate: Date?, _ rhsTitle: String
+  ) -> Bool {
+    let lhs = lhsDate ?? .distantPast
+    let rhs = rhsDate ?? .distantPast
+    if lhs != rhs { return lhs > rhs }
+    return lhsTitle.localizedCaseInsensitiveCompare(rhsTitle) == .orderedAscending
+  }
+}
+
 @Model
 class PodcastInfoModel {
   // Indexes for the hot query paths: the subscribed-podcasts @Query, identity

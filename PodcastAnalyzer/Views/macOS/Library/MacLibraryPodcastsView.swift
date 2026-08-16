@@ -25,7 +25,7 @@ struct MacLibraryPodcastsView: View {
 
   var body: some View {
     ScrollView {
-      if viewModel.podcastsSortedByRecentUpdate.isEmpty {
+      if viewModel.podcastsSortedByLatestEpisode.isEmpty {
         ContentUnavailableView(
           "No Subscriptions",
           systemImage: "square.stack.3d.up",
@@ -34,7 +34,7 @@ struct MacLibraryPodcastsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         LazyVGrid(columns: columns, spacing: 20) {
-          ForEach(viewModel.podcastsSortedByRecentUpdate) { podcast in
+          ForEach(viewModel.podcastsSortedByLatestEpisode) { podcast in
             NavigationLink(value: PodcastBrowseRoute(podcastModel: podcast)) {
               MacPodcastGridCell(podcast: podcast)
             }

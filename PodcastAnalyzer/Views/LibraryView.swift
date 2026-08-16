@@ -23,12 +23,13 @@ struct LibraryView: View {
 
   @State private var sortedPodcasts: [PodcastGridItem] = []
   @State private var podcastModelByID: [PodcastInfoModel.ID: PodcastInfoModel] = [:]
-  /// (id → lastUpdated) of the last podcast snapshot we processed. Lets us skip
+  /// Recency signature of the last podcast snapshot we processed. Lets us skip
   /// re-sorting and re-mapping on the second+ time the user enters the tab when
   /// nothing has changed — the @Query emits a new array on every SwiftData
-  /// write, even unrelated ones. Tracking lastUpdated (not just ids) means a
-  /// background feed sync still refreshes the grid's latest-episode dates.
-  @State private var lastProcessedPodcastStamp: [PodcastInfoModel.ID: Date] = [:]
+  /// write, even unrelated ones.
+  @State private var lastProcessedSignature: Int?
+  /// Incremented on `.podcastSyncCompleted` to re-check the grid order.
+  @State private var syncTick = 0
   /// Throttles the saved/downloaded re-fetch in onAppear: popping back from a
   /// sub-page re-fires onAppear, and running SwiftData fetches during the nav
   /// transition is what makes the pop animation hitch.
@@ -147,16 +148,32 @@ struct LibraryView: View {
       // Modernized notification observers using async sequences
       for await _ in NotificationCenter.default.notifications(named: .podcastSyncCompleted) {
         viewModel.refreshData()
+        // BackgroundSyncManager writes through its own ModelContext, so the
+        // grid would otherwise have to wait on the cross-context merge to
+        // notice a show moved. Bumping a @State counter re-runs the signature
+        // check against the current @Query results; unchanged = no-op.
+        syncTick &+= 1
       }
+    }
+    .onChange(of: syncTick) { _, _ in
+      applyPodcastsIfChanged(subscribedPodcasts)
     }
     .onChange(of: errorMessage) { _, newValue in
       showError = newValue != nil
     }
-    .onChange(of: subscribedPodcasts) { _, newPodcasts in
-      // No withAnimation here: animating a full grid map+sort+dictionary
-      // rebuild was both a main-thread cost and visible jank. The grid items
-      // are cheap value types; SwiftUI's default diffing handles insert/remove.
-      applyPodcastsIfChanged(newPodcasts)
+    // Watch the recency *signature*, not the array. `[PodcastInfoModel]`
+    // equality is persistent-identity based, so `onChange(of: subscribedPodcasts)`
+    // never fired when a sync only mutated `lastUpdated` / `latestEpisodeDate`
+    // on shows already in the list — the grid then kept its old order until the
+    // user left and re-entered the tab. Reading those two properties here also
+    // registers the Observation dependency that invalidates this body when a
+    // background-context sync merges in.
+    //
+    // No withAnimation here: animating a full grid map+sort+dictionary
+    // rebuild was both a main-thread cost and visible jank. The grid items
+    // are cheap value types; LibraryPodcastsGrid animates the reposition.
+    .onChange(of: podcastRecencySignature) { _, _ in
+      applyPodcastsIfChanged(subscribedPodcasts)
     }
 
     // Note: Do NOT call viewModel.cleanup() here — LibraryView is a tab root,
@@ -171,16 +188,32 @@ struct LibraryView: View {
 
   // MARK: - Helper Methods
 
-  /// Apply a new subscribed-podcasts snapshot only if the (id, lastUpdated)
-  /// signature actually changed. Cheap identity check that skips the expensive
-  /// map+sort, the dictionary rebuild, and the viewModel refresh on every
-  /// body re-eval.
+  /// Order-and-content signature of the current snapshot. Includes
+  /// `latestEpisodeDate` — the value the grid actually sorts on — because a
+  /// feed refresh started from EpisodeListView updates it without touching
+  /// `lastUpdated`, and a legacy-row backfill updates it deliberately without
+  /// bumping the sync timestamp.
+  private var podcastRecencySignature: Int {
+    signature(for: subscribedPodcasts)
+  }
+
+  private func signature(for podcasts: [PodcastInfoModel]) -> Int {
+    var hasher = Hasher()
+    for podcast in podcasts {
+      hasher.combine(podcast.id)
+      hasher.combine(podcast.lastUpdated)
+      hasher.combine(podcast.latestEpisodeDate)
+    }
+    return hasher.finalize()
+  }
+
+  /// Apply a new subscribed-podcasts snapshot only if its recency signature
+  /// actually changed. Cheap check that skips the expensive map+sort, the
+  /// dictionary rebuild, and the viewModel refresh on every body re-eval.
   private func applyPodcastsIfChanged(_ podcasts: [PodcastInfoModel]) {
-    let currentStamp = Dictionary(
-      uniqueKeysWithValues: podcasts.map { ($0.id, $0.lastUpdated) }
-    )
-    guard currentStamp != lastProcessedPodcastStamp else { return }
-    lastProcessedPodcastStamp = currentStamp
+    let currentSignature = signature(for: podcasts)
+    guard currentSignature != lastProcessedSignature else { return }
+    lastProcessedSignature = currentSignature
     podcastModelByID = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0) })
     viewModel.setPodcasts(podcasts)
 
@@ -194,33 +227,43 @@ struct LibraryView: View {
     var rebuiltCache: [PodcastInfoModel.ID: CachedGridItem] = [:]
     rebuiltCache.reserveCapacity(podcasts.count)
     let items: [PodcastGridItem] = podcasts.map { model in
-      if let cached = gridItemCache[model.id], cached.stamp == model.lastUpdated {
+      let stamp = CachedGridItem.Stamp(model)
+      if let cached = gridItemCache[model.id], cached.stamp == stamp {
         rebuiltCache[model.id] = cached
         return cached.item
       }
       let item = PodcastGridItem(from: model)
-      rebuiltCache[model.id] = CachedGridItem(stamp: model.lastUpdated, item: item)
+      rebuiltCache[model.id] = CachedGridItem(stamp: stamp, item: item)
       return item
     }
     gridItemCache = rebuiltCache
 
     sortedPodcasts = items.sorted {
-      switch ($0.latestEpisodeDate, $1.latestEpisodeDate) {
-      case let (lhs?, rhs?): return lhs > rhs
-      case (_?, nil):        return true   // dated before undated
-      case (nil, _?):        return false
-      case (nil, nil):       return false
-      }
+      PodcastRecencyOrder.isOrderedBefore(
+        $0.latestEpisodeDate, $0.title, $1.latestEpisodeDate, $1.title)
     }
   }
 
 }
 
-/// A `PodcastGridItem` tagged with the `lastUpdated` stamp it was built from,
-/// so `LibraryView` can reuse it across appearances without re-decoding the
+/// A `PodcastGridItem` tagged with the recency stamp it was built from, so
+/// `LibraryView` can reuse it across appearances without re-decoding the
 /// podcast's `podcastInfo` blob when nothing changed.
 private struct CachedGridItem {
-  let stamp: Date
+  /// Both fields, not just `lastUpdated`: a refresh started from
+  /// EpisodeListView moves `latestEpisodeDate` on its own, and stamping only
+  /// on the sync timestamp served a stale cached cell for that show.
+  struct Stamp: Equatable {
+    let lastUpdated: Date
+    let latestEpisodeDate: Date?
+
+    init(_ model: PodcastInfoModel) {
+      self.lastUpdated = model.lastUpdated
+      self.latestEpisodeDate = model.latestEpisodeDate
+    }
+  }
+
+  let stamp: Stamp
   let item: PodcastGridItem
 }
 
