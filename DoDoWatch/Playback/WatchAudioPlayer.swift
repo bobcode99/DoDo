@@ -15,6 +15,7 @@ import Foundation
 import MediaPlayer
 import Observation
 import OSLog
+import WidgetKit
 
 private let logger = Logger(subsystem: "com.jn.PodcastAnalyzer.watch", category: "Playback")
 
@@ -196,6 +197,7 @@ final class WatchAudioPlayer {
   }
 
   private func updateNowPlayingInfo() {
+    publishComplicationState()
     guard let episode else {
       MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
       return
@@ -207,5 +209,27 @@ final class WatchAudioPlayer {
       MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
       MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
     ]
+  }
+
+  /// Pushed to the watch face. Only on episode/play-state changes rather than
+  /// every tick — complication reloads are a scarce budget on watchOS, and the
+  /// progress bar at this size cannot show a second of movement anyway.
+  private func publishComplicationState() {
+    let next =
+      episode.map {
+        WatchComplicationState(
+          episodeTitle: $0.title,
+          podcastTitle: $0.podcastTitle,
+          progress: progress,
+          isPlaying: isPlaying
+        )
+      } ?? .empty
+
+    let previous = WatchComplicationStore.read()
+    guard previous.episodeTitle != next.episodeTitle || previous.isPlaying != next.isPlaying
+    else { return }
+
+    WatchComplicationStore.write(next)
+    WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationStore.widgetKind)
   }
 }

@@ -14,6 +14,7 @@ import Foundation
 import Observation
 import OSLog
 import WatchConnectivity
+import WidgetKit
 
 private nonisolated let logger = Logger(subsystem: "com.jn.PodcastAnalyzer.watch", category: "Connectivity")
 
@@ -65,6 +66,21 @@ final class WatchSessionManager: NSObject {
 
   private func apply(_ snapshot: WidgetPlaybackData) {
     nowPlaying = snapshot
+    // The watch face should follow the phone too when that is the chosen
+    // source; otherwise it would go blank the moment the user stops playing
+    // on the watch itself.
+    guard SourceManager.shared.selected == .phone else { return }
+    let next = WatchComplicationState(
+      episodeTitle: snapshot.episodeTitle,
+      podcastTitle: snapshot.podcastTitle,
+      progress: snapshot.progress,
+      isPlaying: snapshot.isPlaying
+    )
+    let previous = WatchComplicationStore.read()
+    guard previous.episodeTitle != next.episodeTitle || previous.isPlaying != next.isPlaying
+    else { return }
+    WatchComplicationStore.write(next)
+    WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationStore.widgetKind)
   }
 }
 
