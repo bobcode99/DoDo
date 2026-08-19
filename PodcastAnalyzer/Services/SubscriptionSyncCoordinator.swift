@@ -21,6 +21,7 @@ final class SubscriptionSyncCoordinator {
   private let rssService = PodcastRssService()
   private var context: ModelContext?
   private var remoteChangeObserver: NSObjectProtocol?
+  private var syncCompletedObserver: NSObjectProtocol?
 
   // Internal (not private) so tests can create an isolated instance against
   // an in-memory container instead of sharing app-wide singleton state.
@@ -30,7 +31,11 @@ final class SubscriptionSyncCoordinator {
     guard context == nil else { return }
     context = container.mainContext
     observeRemoteChanges()
+    observeFeedRefreshes()
     backfillExistingSubscriptions()
+    // Rows that predate `latestEpisodeDate` carry nil and would sort last
+    // forever otherwise — the next feed refresh is hours away.
+    refreshMirroredMetadata()
   }
 
   /// Mirrors subscriptions that predate the synced store.
@@ -62,7 +67,10 @@ final class SubscriptionSyncCoordinator {
     where !podcast.rssUrl.isEmpty && !mirrored.contains(podcast.rssUrl) {
       context.insert(
         SubscribedPodcastModel(
-          rssUrl: podcast.rssUrl, title: podcast.title, imageURL: podcast.imageURL
+          rssUrl: podcast.rssUrl,
+          title: podcast.title,
+          imageURL: podcast.imageURL,
+          latestEpisodeDate: podcast.latestEpisodeDate
         )
       )
       inserted += 1
@@ -100,10 +108,14 @@ final class SubscriptionSyncCoordinator {
         if let existing {
           existing.title = podcast.title
           existing.imageURL = podcast.imageURL
+          existing.latestEpisodeDate = podcast.latestEpisodeDate
         } else {
           context.insert(
             SubscribedPodcastModel(
-              rssUrl: rssUrl, title: podcast.title, imageURL: podcast.imageURL
+              rssUrl: rssUrl,
+              title: podcast.title,
+              imageURL: podcast.imageURL,
+              latestEpisodeDate: podcast.latestEpisodeDate
             )
           )
         }
@@ -136,6 +148,61 @@ final class SubscriptionSyncCoordinator {
   }
 
   // MARK: - Pull (CloudKit → local, silent)
+
+  /// Keeps the mirrored rows current after a feed refresh.
+  ///
+  /// `sync(from:)` only fires on subscribe/unsubscribe, so without this a show
+  /// that published this morning would still carry last month's
+  /// `latestEpisodeDate` and sort to the bottom of the watch's list. Title and
+  /// artwork ride along because a feed can rename itself or change its cover.
+  private func observeFeedRefreshes() {
+    syncCompletedObserver = NotificationCenter.default.addObserver(
+      forName: .podcastSyncCompleted, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        self?.refreshMirroredMetadata()
+      }
+    }
+  }
+
+  /// One pass over the mirror, writing only rows that actually changed — a
+  /// no-op save would churn CloudKit on every sync round for no benefit.
+  func refreshMirroredMetadata() {
+    guard let context else { return }
+
+    let subscribed =
+      (try? context.fetch(
+        FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.isSubscribed })
+      )) ?? []
+    guard !subscribed.isEmpty else { return }
+
+    let byRSS = Dictionary(
+      subscribed.compactMap { $0.rssUrl.isEmpty ? nil : ($0.rssUrl, $0) },
+      uniquingKeysWith: { first, _ in first }
+    )
+
+    let rows = (try? context.fetch(FetchDescriptor<SubscribedPodcastModel>())) ?? []
+    var changed = 0
+    for row in rows {
+      guard let podcast = byRSS[row.rssUrl] else { continue }
+      guard row.title != podcast.title
+        || row.imageURL != podcast.imageURL
+        || row.latestEpisodeDate != podcast.latestEpisodeDate
+      else { continue }
+      row.title = podcast.title
+      row.imageURL = podcast.imageURL
+      row.latestEpisodeDate = podcast.latestEpisodeDate
+      changed += 1
+    }
+    guard changed > 0 else { return }
+
+    do {
+      try context.save()
+      logger.info("Refreshed \(changed, privacy: .public) mirrored subscription(s)")
+    } catch {
+      logger.error("Mirror refresh failed: \(error.localizedDescription, privacy: .public)")
+    }
+  }
 
   private func observeRemoteChanges() {
     remoteChangeObserver = NotificationCenter.default.addObserver(

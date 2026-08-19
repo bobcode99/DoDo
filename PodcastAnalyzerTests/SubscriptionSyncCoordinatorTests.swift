@@ -115,4 +115,50 @@ struct SubscriptionSyncCoordinatorTests {
         second.setModelContainer(container)
         #expect(second.cloudSubscriptionRSSURLs().count == 2)
     }
+
+    @Test("A feed publishing a newer episode moves latestEpisodeDate onto the mirrored row")
+    func refreshCarriesLatestEpisodeDate() throws {
+        let schema = Schema([SubscribedPodcastModel.self, PodcastInfoModel.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = container.mainContext
+
+        let old = Date(timeIntervalSince1970: 1_700_000_000)
+        let info = PodcastInfo(
+            title: "Cadence", description: nil,
+            episodes: [PodcastEpisodeInfo(title: "Ep 1", pubDate: old, audioURL: "https://x/1.mp3")],
+            rssUrl: "https://example.com/cadence.xml", imageURL: "", language: "en"
+        )
+        let podcast = PodcastInfoModel(podcastInfo: info, lastUpdated: Date(), isSubscribed: true)
+        context.insert(podcast)
+        try context.save()
+
+        let coordinator = SubscriptionSyncCoordinator()
+        coordinator.setModelContainer(container)
+
+        func mirroredDate() -> Date? {
+            (try? context.fetch(FetchDescriptor<SubscribedPodcastModel>()))?.first?.latestEpisodeDate
+        }
+        #expect(mirroredDate() == old)
+
+        // The feed publishes. applyPodcastInfo is the funnel every refresh path
+        // goes through, and it recomputes latestEpisodeDate.
+        let fresh = Date(timeIntervalSince1970: 1_800_000_000)
+        podcast.applyPodcastInfo(
+            PodcastInfo(
+                title: "Cadence", description: nil,
+                episodes: [
+                    PodcastEpisodeInfo(title: "Ep 1", pubDate: old, audioURL: "https://x/1.mp3"),
+                    PodcastEpisodeInfo(title: "Ep 2", pubDate: fresh, audioURL: "https://x/2.mp3"),
+                ],
+                rssUrl: "https://example.com/cadence.xml", imageURL: "", language: "en"
+            )
+        )
+        try context.save()
+
+        // Without the refresh the row still carries the old date — the mirror is
+        // only written on subscribe/unsubscribe otherwise.
+        coordinator.refreshMirroredMetadata()
+        #expect(mirroredDate() == fresh)
+    }
 }

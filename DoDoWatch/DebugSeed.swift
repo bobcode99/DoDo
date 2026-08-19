@@ -32,13 +32,24 @@ enum DebugSeed {
     let existing = (try? context.fetchCount(FetchDescriptor<SubscribedPodcastModel>())) ?? 0
     guard existing == 0 else { return }
 
-    context.insert(
-      SubscribedPodcastModel(
-        rssUrl: "https://atp.fm/rss",
-        title: "Accidental Tech Podcast",
-        imageURL: "https://cdn.atp.fm/artwork"
+    // Two rows with different `latestEpisodeDate`s, so the Shows list's
+    // recency ordering and its relative-date subtitle are both visible without
+    // an iCloud sign-in.
+    let seeds: [(rss: String, title: String, image: String, daysAgo: Int)] = [
+      ("https://atp.fm/rss", "Accidental Tech Podcast", "https://cdn.atp.fm/artwork", 2),
+      ("https://feeds.simplecast.com/xKJ93w_9", "The Talk Show", "", 11),
+    ]
+    for seed in seeds {
+      context.insert(
+        SubscribedPodcastModel(
+          rssUrl: seed.rss,
+          title: seed.title,
+          imageURL: seed.image,
+          latestEpisodeDate: Calendar.current.date(
+            byAdding: .day, value: -seed.daysAgo, to: .now)
+        )
       )
-    )
+    }
     try? context.save()
   }
 }

@@ -4,7 +4,7 @@
 //
 //  Subscribed shows, straight out of the CloudKit-mirrored store the phone
 //  writes. Nothing is fetched to draw this screen — that is what carrying
-//  `imageURL` on SubscribedPodcastModel buys.
+//  `imageURL` and `latestEpisodeDate` on SubscribedPodcastModel buys.
 //
 
 import CloudKit
@@ -12,7 +12,11 @@ import SwiftData
 import SwiftUI
 
 struct ShowsListView: View {
-  @Query(sort: \SubscribedPodcastModel.dateSubscribed, order: .reverse)
+  /// Sorted in the query rather than in Swift so SwiftData does it in SQLite.
+  /// Rows written before `latestEpisodeDate` existed carry nil, which sorts
+  /// last under `.reverse` — the same place they belong anyway, since nothing
+  /// is known about when they last published.
+  @Query(sort: \SubscribedPodcastModel.latestEpisodeDate, order: .reverse)
   private var subscriptions: [SubscribedPodcastModel]
 
   @State private var accountIssue: String?
@@ -32,16 +36,12 @@ struct ShowsListView: View {
           NavigationLink {
             ShowEpisodesView(rssUrl: podcast.rssUrl, title: podcast.title)
           } label: {
-            HStack(spacing: 8) {
-              WatchArtwork(urlString: podcast.imageURL)
-              Text(podcast.title)
-                .font(.body)
-                .lineLimit(2)
-            }
+            ShowRow(podcast: podcast)
           }
         }
       }
     }
+    .listStyle(.carousel)
     .navigationTitle("Shows")
     .task { accountIssue = await iCloudIssue() }
   }
@@ -65,5 +65,32 @@ struct ShowsListView: View {
     @unknown default:
       return nil
     }
+  }
+}
+
+/// Artwork, title, and how long ago the show last published — the last of these
+/// being the reason the list is ordered the way it is. Without it the order
+/// looks arbitrary.
+private struct ShowRow: View {
+  let podcast: SubscribedPodcastModel
+
+  var body: some View {
+    HStack(spacing: 10) {
+      WatchArtwork(urlString: podcast.imageURL, size: 44)
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(podcast.title)
+          .font(.body)
+          .lineLimit(2)
+
+        if let date = podcast.latestEpisodeDate {
+          Text(date, format: .relative(presentation: .named))
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+      }
+    }
+    .padding(.vertical, 2)
   }
 }

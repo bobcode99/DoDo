@@ -27,10 +27,27 @@ final class SubscribedPodcastModel {
   /// per-record cap is the reason this model stays small.
   var imageURL: String = ""
 
-  init(rssUrl: String, title: String, imageURL: String = "", dateSubscribed: Date = Date()) {
+  /// Newest episode's pubDate in the show, so the watch can order its list by
+  /// what actually published recently rather than by when the user happened to
+  /// subscribe. Computed on the phone — `PodcastInfoModel.latestEpisodeDate`,
+  /// which its own Library grid already sorts on — because deriving it here
+  /// would mean the watch fetching every feed just to draw one screen.
+  ///
+  /// Optional, like every other CloudKit-mirrored attribute: rows written
+  /// before this property existed arrive with nil and sort last.
+  var latestEpisodeDate: Date?
+
+  init(
+    rssUrl: String,
+    title: String,
+    imageURL: String = "",
+    dateSubscribed: Date = Date(),
+    latestEpisodeDate: Date? = nil
+  ) {
     self.rssUrl = rssUrl
     self.title = title
     self.imageURL = imageURL
     self.dateSubscribed = dateSubscribed
+    self.latestEpisodeDate = latestEpisodeDate
   }
 }
