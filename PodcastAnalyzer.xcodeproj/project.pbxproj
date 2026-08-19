@@ -20,10 +20,10 @@
 		5EA5D1132FF0000000000113 /* FeedKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5EA5D1102FF0000000000110 /* FeedKit */; };
 		5EA5D1142FF0000000000114 /* XMLKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5EA5D1112FF0000000000111 /* XMLKit */; };
 		5EA5D2052FF0000000000205 /* DoDoWatchWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5EA5D2022FF0000000000202 /* DoDoWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5EA5D2302FF0000000000230 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
 		AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000022ED303EC000ABAA0 /* WhisperKit */; };
 		AABB0003000000000000AABB /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002000000000000AABB /* MCP */; };
 		ACDDA2642FD871880075A140 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
-		5EA5D2302FF0000000000230 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
 		CCDD0003000000000000CCDD /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = CCDD0002000000000000CCDD /* Hummingbird */; };
 /* End PBXBuildFile section */
 
