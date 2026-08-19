@@ -130,6 +130,7 @@ struct PodcastAnalyzerApp: App {
     DownloadManager.shared.setModelContainer(sharedModelContainer)
     TranscriptManager.shared.setModelContainer(sharedModelContainer)
     PlaybackProgressSyncCoordinator.shared.setModelContainer(sharedModelContainer)
+    SubscriptionSyncCoordinator.shared.setModelContainer(sharedModelContainer)
     TranscriptStore.shared.setModelContainer(sharedModelContainer)
     AppIntentsModelStore.container = sharedModelContainer
     #if os(iOS)

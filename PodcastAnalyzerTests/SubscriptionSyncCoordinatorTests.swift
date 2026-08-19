@@ -76,4 +76,43 @@ struct SubscriptionSyncCoordinatorTests {
             "https://example.com/feed2.xml",
         ])
     }
+
+    @Test("A library subscribed before the synced store existed is backfilled on wiring")
+    func backfillsPreexistingSubscriptions() throws {
+        let schema = Schema([SubscribedPodcastModel.self, PodcastInfoModel.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+
+        // Stand in for a real library: rows already subscribed, and never
+        // pushed, because sync(from:) only fires on a state *change* and
+        // setSubscribed(_:) returns early when the flag already matches.
+        let context = container.mainContext
+        for i in 0..<2 {
+            let info = PodcastInfo(
+                title: "Legacy \(i)", description: nil, episodes: [],
+                rssUrl: "https://example.com/legacy\(i).xml", imageURL: "", language: "en"
+            )
+            context.insert(PodcastInfoModel(podcastInfo: info, lastUpdated: Date(), isSubscribed: true))
+        }
+        // An unsubscribed row must stay out of the mirror.
+        let browsedInfo = PodcastInfo(
+            title: "Browsed", description: nil, episodes: [],
+            rssUrl: "https://example.com/browsed.xml", imageURL: "", language: "en"
+        )
+        context.insert(PodcastInfoModel(podcastInfo: browsedInfo, lastUpdated: Date(), isSubscribed: false))
+        try context.save()
+
+        let coordinator = SubscriptionSyncCoordinator()
+        coordinator.setModelContainer(container)
+
+        #expect(Set(coordinator.cloudSubscriptionRSSURLs()) == [
+            "https://example.com/legacy0.xml",
+            "https://example.com/legacy1.xml",
+        ])
+
+        // Idempotent: a second wiring must not duplicate rows.
+        let second = SubscriptionSyncCoordinator()
+        second.setModelContainer(container)
+        #expect(second.cloudSubscriptionRSSURLs().count == 2)
+    }
 }

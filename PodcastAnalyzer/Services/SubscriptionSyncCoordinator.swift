@@ -30,6 +30,51 @@ final class SubscriptionSyncCoordinator {
     guard context == nil else { return }
     context = container.mainContext
     observeRemoteChanges()
+    backfillExistingSubscriptions()
+  }
+
+  /// Mirrors subscriptions that predate the synced store.
+  ///
+  /// `sync(from:)` only runs on a state *change*, and `setSubscribed(_:)`
+  /// returns early when the flag already holds the requested value — so a
+  /// library subscribed before `SubscribedPodcastModel` existed never produced
+  /// a row, and re-subscribing cannot produce one either. Every screen in the
+  /// watch app reads that model, so without this pass the watch stays empty
+  /// no matter how long CloudKit is given.
+  ///
+  /// Idempotent and cheap: one fetch of subscribed podcasts, one of the rows
+  /// already mirrored, and a save only when something was actually missing.
+  private func backfillExistingSubscriptions() {
+    guard let context else { return }
+
+    let subscribed =
+      (try? context.fetch(
+        FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.isSubscribed })
+      )) ?? []
+    guard !subscribed.isEmpty else { return }
+
+    let mirrored = Set(
+      ((try? context.fetch(FetchDescriptor<SubscribedPodcastModel>())) ?? []).map(\.rssUrl)
+    )
+
+    var inserted = 0
+    for podcast in subscribed
+    where !podcast.rssUrl.isEmpty && !mirrored.contains(podcast.rssUrl) {
+      context.insert(
+        SubscribedPodcastModel(
+          rssUrl: podcast.rssUrl, title: podcast.title, imageURL: podcast.imageURL
+        )
+      )
+      inserted += 1
+    }
+    guard inserted > 0 else { return }
+
+    do {
+      try context.save()
+      logger.info("Backfilled \(inserted, privacy: .public) subscription(s) to iCloud")
+    } catch {
+      logger.error("Subscription backfill failed: \(error.localizedDescription, privacy: .public)")
+    }
   }
 
   // MARK: - Push (local → CloudKit)
@@ -37,7 +82,14 @@ final class SubscriptionSyncCoordinator {
   /// Call whenever a podcast's subscribed state changes. Mirrors the
   /// subscription (or its removal) into the synced store.
   func sync(from podcast: PodcastInfoModel) {
-    guard let context, !podcast.rssUrl.isEmpty else { return }
+    guard let context else {
+      // Was silent, and that is how this shipped unwired: `setModelContainer`
+      // was never called, so every subscribe/unsubscribe returned here and the
+      // watch — which reads only the synced store — saw an empty library.
+      logger.error("sync(from:) called before setModelContainer; subscription not mirrored")
+      return
+    }
+    guard !podcast.rssUrl.isEmpty else { return }
     let rssUrl = podcast.rssUrl
 
     do {
