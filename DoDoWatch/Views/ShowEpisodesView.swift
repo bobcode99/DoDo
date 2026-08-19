@@ -24,11 +24,15 @@ struct ShowEpisodesView: View {
   var body: some View {
     List {
       if loadFailed {
-        ContentUnavailableView(
-          "Couldn't Load",
-          systemImage: "wifi.exclamationmark",
-          description: Text("Check your connection and try again.")
-        )
+        ContentUnavailableView {
+          Label("Couldn't Load", systemImage: "wifi.exclamationmark")
+        } description: {
+          Text("Check your connection and try again.")
+        } actions: {
+          // Without this the only retry is backing out of the screen and
+          // re-entering it, since `.task(id:)` will not re-run for the same id.
+          Button("Retry") { Task { await load() } }
+        }
       } else if episodes.isEmpty {
         ProgressView()
           .frame(maxWidth: .infinity)
@@ -89,6 +93,7 @@ struct ShowEpisodesView: View {
   }
 
   private func load() async {
+    loadFailed = false
     do {
       let info = try await PodcastRssService().fetchPodcast(from: rssUrl)
       episodes = Array(info.episodes.prefix(Self.episodeLimit))

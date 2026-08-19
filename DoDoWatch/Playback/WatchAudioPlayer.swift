@@ -29,6 +29,13 @@ final class WatchAudioPlayer {
   private(set) var currentTime: TimeInterval = 0
   private(set) var duration: TimeInterval = 0
 
+  /// Set when the item itself failed — a dead enclosure URL, a 404, an
+  /// unplayable codec. Without it a failed stream looks identical to one that
+  /// is merely buffering: the clock sits at 0:00 and the pause button stays
+  /// lit forever, because `play()` reports success the moment AVPlayer accepts
+  /// the URL rather than when it manages to decode anything.
+  private(set) var failureMessage: String?
+
   var skipBackInterval: TimeInterval = 15
   var skipForwardInterval: TimeInterval = 30
 
@@ -37,6 +44,7 @@ final class WatchAudioPlayer {
   /// Set when the caller wants playback to resume from a saved position; the
   /// seek only lands once the item reports a usable duration.
   private var pendingResume: TimeInterval?
+  private var statusObservation: NSKeyValueObservation?
 
   private init() {
     configureRemoteCommands()
@@ -59,10 +67,13 @@ final class WatchAudioPlayer {
 
     guard let url = episode.playbackURL else {
       logger.error("No playable URL for \(episode.title, privacy: .public)")
+      self.episode = episode
+      failureMessage = String(localized: "This episode has no playable audio.")
       return
     }
 
     self.episode = episode
+    failureMessage = nil
     currentTime = position
     duration = 0
     pendingResume = position > 0 ? position : nil
@@ -79,7 +90,16 @@ final class WatchAudioPlayer {
       logger.error("Audio session activation failed: \(error.localizedDescription, privacy: .public)")
     }
 
-    let player = AVPlayer(url: url)
+    let item = AVPlayerItem(url: url)
+    // KVO rather than a check inside the periodic observer: a failed item never
+    // advances its clock, so that observer would never fire to notice.
+    statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+      guard item.status == .failed else { return }
+      let message = item.error?.localizedDescription
+      Task { @MainActor in self?.handleItemFailure(message) }
+    }
+
+    let player = AVPlayer(playerItem: item)
     self.player = player
     observeTime(on: player)
     player.play()
@@ -130,7 +150,10 @@ final class WatchAudioPlayer {
       [weak self] time in
       MainActor.assumeIsolated {
         guard let self else { return }
-        self.currentTime = time.seconds
+        // NaN until the item is ready, and a NaN here propagates into
+        // `progress` and then into a ProgressView, which draws nothing and
+        // logs for every tick afterwards.
+        if time.seconds.isFinite { self.currentTime = time.seconds }
 
         if let itemDuration = player.currentItem?.duration.seconds,
           itemDuration.isFinite, itemDuration > 0
@@ -145,8 +168,20 @@ final class WatchAudioPlayer {
     }
   }
 
+  /// Stops the transport and tells the user, instead of leaving the UI in a
+  /// permanent "playing" state that never moves.
+  private func handleItemFailure(_ message: String?) {
+    logger.error("Playback item failed: \(message ?? "unknown", privacy: .public)")
+    player?.pause()
+    isPlaying = false
+    failureMessage = message ?? String(localized: "Couldn't play this episode.")
+    updateNowPlayingInfo()
+  }
+
   private func teardown() {
     persistProgress()
+    statusObservation?.invalidate()
+    statusObservation = nil
     if let timeObserver { player?.removeTimeObserver(timeObserver) }
     timeObserver = nil
     player?.pause()

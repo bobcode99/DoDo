@@ -33,7 +33,13 @@ struct NowPlayingView: View {
 
   @ViewBuilder
   private var watchSource: some View {
-    if let episode = player.episode {
+    if let message = player.failureMessage {
+      ContentUnavailableView(
+        "Can't Play",
+        systemImage: "exclamationmark.triangle",
+        description: Text(message)
+      )
+    } else if let episode = player.episode {
       PlayerControls(
         title: episode.title,
         currentTime: player.currentTime,
