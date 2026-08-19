@@ -23,6 +23,7 @@
 		AA0000032ED303EC000ABAA0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000022ED303EC000ABAA0 /* WhisperKit */; };
 		AABB0003000000000000AABB /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002000000000000AABB /* MCP */; };
 		ACDDA2642FD871880075A140 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
+		5EA5D2302FF0000000000230 /* dodo.icon in Resources */ = {isa = PBXBuildFile; fileRef = ACDDA2632FD871880075A140 /* dodo.icon */; };
 		CCDD0003000000000000CCDD /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = CCDD0002000000000000CCDD /* Hummingbird */; };
 /* End PBXBuildFile section */
 
@@ -597,6 +598,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5EA5D2302FF0000000000230 /* dodo.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
