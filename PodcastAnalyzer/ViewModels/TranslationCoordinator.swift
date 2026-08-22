@@ -99,17 +99,21 @@ final class TranslationCoordinator {
 
     logger.debug("Translate requested to: \(language.displayName) (\(targetLang))")
 
-    translationStatus = .preparingSession
     descriptionTranslationTrigger.toggle()
     episodeTitleTranslationTrigger.toggle()
     podcastTitleTranslationTrigger.toggle()
 
     let segments = transcript?.transcriptSegments ?? []
     guard !segments.isEmpty else {
+      // `translationStatus` tracks transcript translation only. Setting
+      // .preparingSession before this guard stranded the progress circle at
+      // 0 forever whenever the page had no transcript segments loaded.
+      translationStatus = .idle
       logger.info("No transcript segments - translating title/description only")
       return
     }
 
+    translationStatus = .preparingSession
     translationTask?.cancel()
     translationTask = Task { [weak self] in
       guard let self else { return }

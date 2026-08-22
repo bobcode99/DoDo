@@ -78,6 +78,23 @@ public actor TranscriptService {
   }
 
   private func setupAndInstallAssetsInternal(continuation: AsyncStream<Double>.Continuation) async {
+    // Resolve to the Speech framework's actual supported locale rather than
+    // trusting our own guess. This corrects mismatched region defaults
+    // (e.g. a bare "zh" tag) and script-subtag locales the resolver can't
+    // reliably map itself — Apple's own equivalence table is authoritative.
+    if let resolved = await SpeechTranscriber.supportedLocale(equivalentTo: targetLocale) {
+      if resolved.identifier(.bcp47) != targetLocale.identifier(.bcp47) {
+        logger.info(
+          "Resolved locale \(self.targetLocale.identifier(.bcp47), privacy: .public) -> \(resolved.identifier(.bcp47), privacy: .public)"
+        )
+      }
+      targetLocale = resolved
+    } else {
+      logger.error(
+        "No supported Speech locale equivalent to \(self.targetLocale.identifier(.bcp47), privacy: .public); proceeding unresolved"
+      )
+    }
+
     var attributeOptions: Set<SpeechTranscriber.ResultAttributeOption> = [.transcriptionConfidence]
     if needsAudioTimeRange { attributeOptions.insert(.audioTimeRange) }
 

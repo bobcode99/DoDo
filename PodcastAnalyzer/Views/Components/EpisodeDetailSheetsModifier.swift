@@ -122,39 +122,37 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
 
     // MARK: - Translation triggers
 
-    private func triggerTranscriptTranslation() {
+    /// `TranslationSession.Configuration` is Equatable, so re-assigning an
+    /// equal value leaves `.translationTask` untouched and no session starts —
+    /// re-translating to the same language would silently do nothing. Apple's
+    /// contract for that case is `invalidate()`, which restarts the session.
+    private func refreshConfig(_ config: inout TranslationSession.Configuration?) {
         guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
         let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
-        transcriptTranslationConfig = TranslationService.shared.makeConfiguration(
+        let newConfig = TranslationService.shared.makeConfiguration(
             sourceLanguage: sourceLang,
             targetLanguage: targetLang
         )
+        if config == newConfig {
+            config?.invalidate()
+        } else {
+            config = newConfig
+        }
+    }
+
+    private func triggerTranscriptTranslation() {
+        refreshConfig(&transcriptTranslationConfig)
     }
 
     private func triggerDescriptionTranslation() {
-        guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
-        let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
-        descriptionTranslationConfig = TranslationService.shared.makeConfiguration(
-            sourceLanguage: sourceLang,
-            targetLanguage: targetLang
-        )
+        refreshConfig(&descriptionTranslationConfig)
     }
 
     private func triggerTitleTranslation() {
-        guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
-        let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
-        titleTranslationConfig = TranslationService.shared.makeConfiguration(
-            sourceLanguage: sourceLang,
-            targetLanguage: targetLang
-        )
+        refreshConfig(&titleTranslationConfig)
     }
 
     private func triggerPodcastTitleTranslation() {
-        guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
-        let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
-        podcastTitleTranslationConfig = TranslationService.shared.makeConfiguration(
-            sourceLanguage: sourceLang,
-            targetLanguage: targetLang
-        )
+        refreshConfig(&podcastTitleTranslationConfig)
     }
 }
