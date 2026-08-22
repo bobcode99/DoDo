@@ -319,13 +319,13 @@ struct MacContentView: View {
               .font(.caption2.monospacedDigit())
               .padding(.horizontal, 6)
               .padding(.vertical, 1)
-              .background(Color.accentColor, in: .capsule)
+              .background(.tint, in: .capsule)
               .foregroundStyle(.white)
           }
         }
       } icon: {
         Image(systemName: "waveform.badge.plus")
-          .foregroundStyle(count > 0 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+          .foregroundStyle(count > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
           .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: count > 0)
       }
     }

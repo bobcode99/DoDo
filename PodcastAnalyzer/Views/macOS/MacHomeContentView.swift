@@ -35,7 +35,7 @@ struct MacHomeContentView: View {
       TrendingEpisodesListView(episodes: viewModel.trendingEpisodes)
     }
     .navigationDestination(for: PopularShowsDestination.self) { _ in
-      PopularShowsListView(podcasts: viewModel.topPodcasts, viewModel: viewModel)
+      PopularShowsListView(viewModel: viewModel)
     }
     .navigationDestination(for: UpNextListRoute.self) { _ in
       // Bind to the live VM array (not the route's frozen snapshot) so

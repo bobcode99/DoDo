@@ -12,9 +12,11 @@ struct ContentView: View {
     #if os(iOS)
     iOSContentView()
       .episodeRowAppearance()
+      .appAccentColor()
     #else
     MacContentView()
       .episodeRowAppearance()
+      .appAccentColor()
     #endif
   }
 }

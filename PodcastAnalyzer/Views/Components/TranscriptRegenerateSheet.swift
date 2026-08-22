@@ -115,6 +115,13 @@ struct TranscriptRegenerateSheet: View {
                     }
 
                     Picker("Language", selection: selectedLanguageBinding) {
+                        // `selectedLanguageBinding` reports "auto" whenever
+                        // Whisper is selected with no explicit language, so the
+                        // tag has to exist or the selection matches nothing and
+                        // SwiftUI warns about undefined results.
+                        if effectiveEngine == .whisper {
+                            Text("Auto-detect").tag("auto")
+                        }
                         ForEach(pickerLocales) { locale in
                             Text(locale.name).tag(locale.id)
                         }

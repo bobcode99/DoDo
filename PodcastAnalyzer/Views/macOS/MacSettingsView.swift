@@ -77,6 +77,7 @@ struct GeneralSettingsTab: View {
   @State private var showAddFeedSheet = false
   @State private var showListeningStats = false
   @State private var showImportInstructions = false
+  @State private var showingRegions = false
   @Environment(\.modelContext) private var modelContext
 
   var body: some View {
@@ -97,18 +98,20 @@ struct GeneralSettingsTab: View {
       }
 
       Section {
-        Picker("Default Region", selection: $viewModel.selectedRegion) {
-          ForEach(Constants.podcastRegions, id: \.code) { region in
-            Text(region.name).tag(region.code)
+        Button {
+          showingRegions = true
+        } label: {
+          HStack {
+            Text("Discovery Regions")
+            Spacer()
+            Text(DiscoveryRegions.shared.enabledStorefronts.map(\.flag).joined())
+              .foregroundStyle(.secondary)
           }
-        }
-        .onChange(of: viewModel.selectedRegion) { _, newValue in
-          viewModel.setSelectedRegion(newValue)
         }
       } header: {
         Text("Discovery")
       } footer: {
-        Text("Region for browsing top podcasts on Home.")
+        Text("Countries whose top podcasts Home offers.")
       }
 
       Section {
@@ -147,6 +150,9 @@ struct GeneralSettingsTab: View {
     }
     .formStyle(.grouped)
     .padding()
+    .sheet(isPresented: $showingRegions) {
+      DiscoveryRegionsView()
+    }
     .sheet(isPresented: $showAddFeedSheet) {
       AddFeedView(viewModel: viewModel, modelContext: modelContext) {
         showAddFeedSheet = false

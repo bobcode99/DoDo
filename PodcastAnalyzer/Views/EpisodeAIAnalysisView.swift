@@ -186,7 +186,7 @@ struct EpisodeAIAnalysisView: View {
       .padding(.vertical, 8)
       .background(
         RoundedRectangle(cornerRadius: 8)
-          .fill(uiState.selectedTab == tab ? Color.accentColor : Color.clear)
+          .fill(uiState.selectedTab == tab ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear))
       )
       .foregroundStyle(uiState.selectedTab == tab ? .white : .primary)
     }

@@ -49,7 +49,7 @@ struct MacLibraryEpisodeRow: View {
             .font(.title3)
             .foregroundStyle(.white)
             .frame(width: 32, height: 32)
-            .background(Color.accentColor)
+            .background(.tint)
             .clipShape(Circle())
         }
         .buttonStyle(.plain)

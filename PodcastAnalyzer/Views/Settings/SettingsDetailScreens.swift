@@ -590,8 +590,62 @@ struct AppearanceSettingsScreen: View {
   @AppStorage(EpisodeRowAppearanceDefaults.sizeKey)
   private var playButtonSize = EpisodeRowPlayButtonSize.medium.rawValue
 
+  /// Empty = System Default. Stored here rather than read through the
+  /// environment because this screen is the one place that writes it.
+  @AppStorage(AppAccentColorDefaults.key) private var accentRaw = ""
+
+  private var accentColor: Color {
+    AppAccentColorDefaults.decode(accentRaw) ?? .accentColor
+  }
+
+
+  // MARK: - Accent
+
+  private var accentSection: some View {
+    Section {
+      // Swatches first: one tap covers almost everyone, and the full picker
+      // stays available underneath for anything else.
+      HStack(spacing: 12) {
+        ForEach(AccentPreset.allCases) { preset in
+          Button {
+            accentRaw = AppAccentColorDefaults.encode(preset.color)
+          } label: {
+            Circle()
+              .fill(preset.color)
+              .frame(width: 28, height: 28)
+              .overlay {
+                if accentRaw == AppAccentColorDefaults.encode(preset.color) {
+                  Image(systemName: "checkmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                }
+              }
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel(preset.titleKey)
+        }
+      }
+      .padding(.vertical, 4)
+
+      ColorPicker("Custom Colour", selection: Binding(
+        get: { accentColor },
+        set: { accentRaw = AppAccentColorDefaults.encode($0) }
+      ), supportsOpacity: false)
+
+      if !accentRaw.isEmpty {
+        Button("Use System Default") { accentRaw = "" }
+      }
+    } header: {
+      Text("Accent Colour")
+    } footer: {
+      Text("Tints buttons and controls throughout the app. System Default is monochrome — white on dark backgrounds, black on light.")
+    }
+  }
+
   var body: some View {
     List {
+      accentSection
+
       Section {
         Toggle(isOn: Binding(
           get: { viewModel.showEpisodeArtwork },
@@ -656,6 +710,15 @@ struct AppearanceSettingsScreen: View {
 
 struct GeneralSettingsScreen: View {
   @Bindable var viewModel: SettingsViewModel
+  @State private var showingRegions = false
+  @State private var regions = DiscoveryRegions.shared
+
+  /// Flags of the ticked regions, or a count once there are too many to read
+  /// at a glance in a settings row.
+  private var regionSummary: String {
+    let flags = regions.enabledStorefronts.map(\.flag)
+    return flags.count <= 4 ? flags.joined() : "\(flags.count) regions"
+  }
 
   var body: some View {
     List {
@@ -672,16 +735,25 @@ struct GeneralSettingsScreen: View {
         .pickerStyle(.menu)
         #endif
 
-        Picker("Discovery Region", selection: $viewModel.selectedRegion) {
-          ForEach(Constants.podcastRegions, id: \.code) { region in
-            Text(region.name).tag(region.code)
+        // A flat Picker over 174 storefronts was unusable, and most people
+        // want two of them — the editor handles ticking, ordering and adding
+        // by code.
+        Button {
+          showingRegions = true
+        } label: {
+          HStack {
+            Text("Discovery Regions")
+              .foregroundStyle(.primary)
+            Spacer()
+            Text(regionSummary)
+              .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.tertiary)
           }
         }
-        .onChange(of: viewModel.selectedRegion) { _, newValue in
-          viewModel.setSelectedRegion(newValue)
-        }
       } footer: {
-        Text("“System Default” follows your device language. The region decides which country's top podcasts appear on Home.")
+        Text("“System Default” follows your device language. Discovery Regions decides which countries' top podcasts Home offers.")
       }
 
       Section {
@@ -702,6 +774,9 @@ struct GeneralSettingsScreen: View {
       #endif
     }
     .navigationTitle("General")
+    .sheet(isPresented: $showingRegions) {
+      DiscoveryRegionsView()
+    }
     .platformToolbarTitleDisplayMode()
   }
 }

@@ -240,7 +240,7 @@ struct AnalysisTabView: View {
       .clipShape(.rect(cornerRadius: 8))
       .overlay(
         RoundedRectangle(cornerRadius: 8)
-          .strokeBorder(isFormatFieldFocused ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1)
+          .strokeBorder(isFormatFieldFocused ? AnyShapeStyle(.tint.opacity(0.5)) : AnyShapeStyle(Color.clear), lineWidth: 1)
       )
     }
   }

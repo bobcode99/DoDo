@@ -441,3 +441,65 @@ private struct DownloadActionView: View {
         }
     }
 }
+
+// MARK: - Preview
+
+#if DEBUG
+/// The two states this view can actually reach in a preview.
+///
+/// `canGenerate` is `hasLocalAudio || engine == .yapServer`, and `hasLocalAudio`
+/// is derived from the download store rather than being settable — so Yap is the
+/// only lever that reaches the ready state without a real downloaded file. The
+/// Apple Speech "Recognition Terms" section needs *both* that engine and local
+/// audio, so it stays out of reach here; exercise it on device.
+private enum TranscriptConfigPreview {
+    static func viewModel(engine: TranscriptEngine?) -> EpisodeDetailViewModel {
+        let episode = PodcastEpisodeInfo(
+            title: "Understanding Swift Concurrency",
+            podcastEpisodeDescription: "A deep dive into async/await.",
+            pubDate: Date(),
+            audioURL: "https://example.com/episode.mp3",
+            duration: 1800
+        )
+        let viewModel = EpisodeDetailViewModel(
+            episode: episode,
+            podcastTitle: "The Swift Podcast",
+            fallbackImageURL: nil,
+            podcastLanguage: "en"
+        )
+        viewModel.transcript.selectedTranscriptEngine = engine
+        return viewModel
+    }
+}
+
+#Preview("Download required") {
+    ScrollView {
+        TranscriptGenerateConfigView(
+            viewModel: TranscriptConfigPreview.viewModel(engine: .appleSpeech)
+        )
+        .padding()
+    }
+    .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+
+#Preview("Ready to generate") {
+    ScrollView {
+        TranscriptGenerateConfigView(
+            viewModel: TranscriptConfigPreview.viewModel(engine: .yapServer)
+        )
+        .padding()
+    }
+    .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+
+#Preview("Ready to generate · Dark") {
+    ScrollView {
+        TranscriptGenerateConfigView(
+            viewModel: TranscriptConfigPreview.viewModel(engine: .yapServer)
+        )
+        .padding()
+    }
+    .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+    .preferredColorScheme(.dark)
+}
+#endif

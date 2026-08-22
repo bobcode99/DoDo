@@ -134,7 +134,7 @@ struct TranscriptStatusStrip: View {
             return AnyShapeStyle(Color.red.opacity(0.15))
         }
         if viewModel.translation.hasExistingTranslation {
-            return AnyShapeStyle(Color.accentColor.opacity(0.15))
+            return AnyShapeStyle(.tint.opacity(0.15))
         }
         return AnyShapeStyle(.thinMaterial)
     }
@@ -144,7 +144,7 @@ struct TranscriptStatusStrip: View {
             return AnyShapeStyle(Color.red)
         }
         if viewModel.translation.hasExistingTranslation {
-            return AnyShapeStyle(Color.accentColor)
+            return AnyShapeStyle(.tint)
         }
         return AnyShapeStyle(.secondary)
     }
@@ -165,11 +165,11 @@ struct TranscriptStatusStrip: View {
             .padding(.vertical, 6)
             .background(
                 autoScrollEnabled
-                    ? AnyShapeStyle(Color.accentColor.opacity(0.15))
+                    ? AnyShapeStyle(.tint.opacity(0.15))
                     : AnyShapeStyle(.thinMaterial),
                 in: .capsule
             )
-            .foregroundStyle(autoScrollEnabled ? Color.accentColor : .secondary)
+            .foregroundStyle(autoScrollEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(autoScrollEnabled ? "Pause auto-scroll" : "Resume auto-scroll")

@@ -73,8 +73,9 @@ final class HomeViewModel {
   var selectedRegion: String = "us" {
     didSet {
       if oldValue != selectedRegion {
-        // Save to UserDefaults for consistency
-        UserDefaults.standard.set(selectedRegion, forKey: "selectedPodcastRegion")
+        // Persist through DiscoveryRegions rather than writing the key here:
+        // it owns "is this selection still ticked", which a raw write bypasses.
+        DiscoveryRegions.shared.select(selectedRegion, notify: false)
         regionChangeTask?.cancel()
         if isHomeVisible {
           regionChangeTask = Task { [weak self] in
@@ -210,24 +211,26 @@ final class HomeViewModel {
     UserDefaults.standard.bool(forKey: "showTrendingEpisodes")
   }
 
+  /// Storefronts Home offers, in the user's order. Only the ticked ones — the
+  /// full catalogue is 174 entries and belongs in Settings, not in a switcher.
+  var availableRegions: [Storefront] {
+    DiscoveryRegions.shared.enabledStorefronts
+  }
+
   var selectedRegionName: String {
-    if let region = Constants.podcastRegions.first(where: { $0.code == selectedRegion }) {
-      return "\(region.flag) \(region.name)"
-    }
-    return selectedRegion.uppercased()
+    let storefront = DiscoveryRegions.shared.storefront(for: selectedRegion)
+    return "\(storefront.flag) \(storefront.name)"
   }
 
   var selectedRegionFlag: String {
-    Constants.podcastRegions.first { $0.code == selectedRegion }?.flag ?? "🌍"
+    DiscoveryRegions.shared.storefront(for: selectedRegion).flag
   }
 
   init() {
-    // Restore saved region preference, else default to the device's locale region
-    if let saved = UserDefaults.standard.string(forKey: "selectedPodcastRegion") {
-      selectedRegion = saved
-    } else {
-      selectedRegion = Constants.defaultRegion
-    }
+    // DiscoveryRegions resolves this: a stored region that has since been
+    // unticked falls back to the first one still enabled, so Home never opens
+    // on a region the user removed.
+    selectedRegion = DiscoveryRegions.shared.selected
 
     // Restore from static cache if available for current region
     if !Self.cachedTopPodcasts.isEmpty && Self.cachedRegion == selectedRegion {
@@ -721,14 +724,17 @@ final class HomeViewModel {
     isLoadingTopPodcasts = true
     Self.loadingRegion = regionToLoad
 
-    // Blank the list only when switching to a different region (old rows are for the
-    // wrong region). For a same-region refresh — pull-to-refresh or reconnect — keep
-    // the current list on screen and swap it when fresh data lands: no flash of empty.
+    // Switching region: the old rows belong to the wrong country, so they go —
+    // but blanking to nothing strands the user on an empty screen if the new
+    // region then fails to load. Paint that region's saved chart if we have
+    // one, so a failure degrades to stale-but-real rather than empty.
     if let shown = displayedRegion, shown != regionToLoad {
-      topPodcasts = []
-      displayedRegion = nil
-      Self.cachedTopPodcasts = []
-      Self.cachedRegion = ""
+      let saved = DiscoveryCacheStore.loadTopPodcasts(region: regionToLoad)
+      topPodcasts = saved?.podcasts ?? []
+      popularShowsFetchedAt = saved?.fetchedAt
+      displayedRegion = saved == nil ? nil : regionToLoad
+      Self.cachedTopPodcasts = saved?.podcasts ?? []
+      Self.cachedRegion = saved == nil ? "" : regionToLoad
     }
 
     // Create shared task with retry logic and limit fallback for API failures
@@ -773,6 +779,18 @@ final class HomeViewModel {
       logger.info("Loaded \(podcasts.count) top podcasts for \(regionToLoad)")
     } catch {
       logger.error("Failed to load top podcasts: \(error.localizedDescription, privacy: .public)")
+      // Keep something on screen. The chart changes slowly, so last week's
+      // ranking beats an empty list — the freshness caption already says how
+      // old it is, and goes on to say "Offline" when that's the cause.
+      if topPodcasts.isEmpty, selectedRegion == regionToLoad,
+         let saved = DiscoveryCacheStore.loadTopPodcasts(region: regionToLoad) {
+        topPodcasts = saved.podcasts
+        popularShowsFetchedAt = saved.fetchedAt
+        displayedRegion = regionToLoad
+        Self.cachedTopPodcasts = saved.podcasts
+        Self.cachedRegion = regionToLoad
+        logger.info("Fetch failed; showing \(saved.podcasts.count) saved podcasts for \(regionToLoad)")
+      }
     }
 
     // Cleanup static state if it's still ours

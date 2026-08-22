@@ -148,7 +148,7 @@ private struct MacMiniPlayerProgressBar: View {
           .fill(Color.gray.opacity(0.2))
 
         Rectangle()
-          .fill(Color.accentColor)
+          .fill(.tint)
           .frame(width: geometry.size.width * progressPercentage)
       }
       .contentShape(Rectangle())

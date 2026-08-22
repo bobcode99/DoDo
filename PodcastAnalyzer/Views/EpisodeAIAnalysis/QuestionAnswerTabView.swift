@@ -157,15 +157,15 @@ struct QuestionAnswerTabView: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.accentColor, in: .rect(cornerRadius: 16))
+        .background(.tint, in: .rect(cornerRadius: 16))
         .textSelection(.enabled)
       ZStack {
         Circle()
-          .fill(Color.accentColor.opacity(0.15))
+          .fill(.tint.opacity(0.15))
           .frame(width: 28, height: 28)
         Image(systemName: "person.fill")
           .font(.system(size: 13))
-          .foregroundStyle(Color.accentColor)
+          .foregroundStyle(.tint)
       }
     }
   }

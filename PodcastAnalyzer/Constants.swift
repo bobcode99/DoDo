@@ -27,40 +27,17 @@ struct Constants {
   // Apple RSS Marketing API for top podcasts
   static let appleRSSBaseURL = "https://rss.marketingtools.apple.com/api/v2"
 
-  // Available regions for top podcasts with flag emojis
-  static let podcastRegions: [(code: String, name: String, flag: String)] = [
-    ("us", "United States", "🇺🇸"),
-    ("tw", "Taiwan", "🇹🇼"),
-    ("jp", "Japan", "🇯🇵"),
-    ("gb", "United Kingdom", "🇬🇧"),
-    ("au", "Australia", "🇦🇺"),
-    ("ca", "Canada", "🇨🇦"),
-    ("de", "Germany", "🇩🇪"),
-    ("fr", "France", "🇫🇷"),
-    ("kr", "South Korea", "🇰🇷"),
-    ("hk", "Hong Kong", "🇭🇰"),
-    ("my", "Malaysia", "🇲🇾"),
-    ("in", "India", "🇮🇳"),
-    ("cn", "China", "🇨🇳"),
-    ("sg", "Singapore", "🇸🇬"),
-    ("id", "Indonesia", "🇮🇩"),
-    ("th", "Thailand", "🇹🇭"),
-    ("vn", "Vietnam", "🇻🇳"),
-    ("ph", "Philippines", "🇵🇭"),
-    ("nz", "New Zealand", "🇳🇿"),
-    ("es", "Spain", "🇪🇸"),
-    ("it", "Italy", "🇮🇹"),
-    ("br", "Brazil", "🇧🇷"),
-    ("mx", "Mexico", "🇲🇽"),
-    ("nl", "Netherlands", "🇳🇱"),
-    ("se", "Sweden", "🇸🇪")
-  ]
+  /// Every Apple Podcasts storefront, verified by probing the API — see
+  /// `Storefronts.swift` and `locales.md`. Was 25 hand-written entries; the
+  /// real set is 174, and hand-maintaining it meant the picker silently
+  /// omitted most of the world.
+  static var podcastRegions: [Storefront] { Storefront.all }
 
   /// Region to use before the user picks one. Derived from the device's
   /// locale (Settings → General → Language & Region) — no location permission
-  /// needed. Falls back to "us" if the device region isn't a supported store.
+  /// needed. Falls back to "us" if the device region isn't a live storefront.
   static var defaultRegion: String {
     let code = Locale.current.region?.identifier.lowercased() ?? "us"
-    return podcastRegions.contains { $0.code == code } ? code : "us"
+    return Storefront.isKnown(code) ? code : "us"
   }
 }

@@ -128,7 +128,7 @@ struct MacExpandedPlayerView: View {
 
           // Fill
           Capsule()
-            .fill(Color.accentColor)
+            .fill(.tint)
             .frame(width: max(0, geometry.size.width * currentProgress), height: 4)
         }
         .contentShape(Rectangle())

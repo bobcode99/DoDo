@@ -135,7 +135,7 @@ struct HomeView: View {
       TrendingEpisodesListView(episodes: viewModel.trendingEpisodes)
     }
     .navigationDestination(for: PopularShowsDestination.self) { _ in
-      PopularShowsListView(podcasts: viewModel.topPodcasts, viewModel: viewModel)
+      PopularShowsListView(viewModel: viewModel)
     }
     .navigationTitle(Constants.homeString)
     .platformToolbarTitleDisplayMode()
