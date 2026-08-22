@@ -144,8 +144,19 @@ final class ListeningStatsViewModel {
       totalHoursListened = totalSeconds / 3600.0
 
       // Top 3 podcasts sorted by listening time
+      let artworkByPodcast = podcastArtworkByTitle(
+        for: podcastGroups.filter { $0.value.imageURL == nil }.keys,
+        context: context
+      )
       topPodcasts = podcastGroups
-        .map { PodcastListeningStat(podcastTitle: $0.key, totalListeningTime: $0.value.time, playCount: $0.value.count, imageURL: $0.value.imageURL) }
+        .map {
+          PodcastListeningStat(
+            podcastTitle: $0.key,
+            totalListeningTime: $0.value.time,
+            playCount: $0.value.count,
+            imageURL: $0.value.imageURL ?? artworkByPodcast[$0.key]
+          )
+        }
         .sorted { $0.totalListeningTime > $1.totalListeningTime }
         .prefix(3)
         .map { $0 }
@@ -165,6 +176,36 @@ final class ListeningStatsViewModel {
   }
 
   // MARK: - Weekly Buckets
+
+  /// Podcast artwork keyed by title, for shows whose episode rows carry none.
+  ///
+  /// EpisodeDownloadModel only gets `imageURL` when the row is created by the
+  /// download path, which looks the podcast up first. The row created by
+  /// merely *playing* an episode (PlaybackStateCoordinator.savePlaybackPosition)
+  /// passes only title/podcast/audioURL, and the one created from an incoming
+  /// iCloud progress record knows even less — so every episode you streamed,
+  /// or listened to on another device, has a nil imageURL. Measured on a real
+  /// library: 55 of 55 rows feeding this screen, which is why the artwork was
+  /// never anything but a placeholder.
+  ///
+  /// Resolved here rather than by backfilling the model: this screen groups by
+  /// podcast, so the show's own artwork is the right image regardless of which
+  /// episode happened to create the row.
+  private func podcastArtworkByTitle(
+    for titles: some Collection<String>, context: ModelContext
+  ) -> [String: String] {
+    guard !titles.isEmpty else { return [:] }
+    let wanted = Set(titles)
+    // `title` and `imageURL` are stored properties; this deliberately never
+    // touches `podcastInfo`, whose blob decode is expensive enough to have
+    // hung the Library screen before.
+    let podcasts = (try? context.fetch(FetchDescriptor<PodcastInfoModel>())) ?? []
+    var result: [String: String] = [:]
+    for podcast in podcasts where wanted.contains(podcast.title) && !podcast.imageURL.isEmpty {
+      result[podcast.title] = podcast.imageURL
+    }
+    return result
+  }
 
   private func buildWeeklyBuckets(from models: [EpisodeDownloadModel]) -> [WeeklyListeningBucket] {
     let cal = Calendar.current
