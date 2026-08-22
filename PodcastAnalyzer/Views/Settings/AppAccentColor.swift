@@ -150,19 +150,36 @@ struct AccentProminentButtonStyle: ButtonStyle {
     @Environment(\.appAccentColor) private var accent
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.controlSize) private var controlSize
 
     /// The chosen accent, or the shipped monochrome default for this appearance.
-    private var fill: Color {
-        accent ?? (colorScheme == .dark ? .white : Color(.sRGB, white: 0.11))
+    private var fill: Color { AccentFill.color(accent, colorScheme) }
+
+    /// A custom ButtonStyle draws its own background, so it must also supply the
+    /// insets `.borderedProminent` gave for free — without them the fill hugs
+    /// the text and reads as a mis-sized chip. Scaled by `controlSize`, which
+    /// several macOS call sites set to `.small`.
+    private var insets: (horizontal: CGFloat, vertical: CGFloat, radius: CGFloat) {
+        switch controlSize {
+        case .mini:                 (8, 3, 6)
+        case .small:                (10, 5, 7)
+        case .large, .extraLarge:   (20, 12, 12)
+        default:                    (16, 9, 10)
+        }
     }
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let insets = insets
+        return configuration.label
+            .padding(.horizontal, insets.horizontal)
+            .padding(.vertical, insets.vertical)
             .foregroundStyle(isEnabled ? fill.contrastingLabel : Color.secondary)
             .background(
                 (isEnabled ? fill : Color.secondary.opacity(0.25)),
-                in: .rect(cornerRadius: 10)
+                in: .rect(cornerRadius: insets.radius)
             )
+            // The fill is the hit target, not just the glyph inside it.
+            .contentShape(.rect(cornerRadius: insets.radius))
             .opacity(configuration.isPressed ? 0.85 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
@@ -171,4 +188,40 @@ struct AccentProminentButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == AccentProminentButtonStyle {
     /// Use in place of `.borderedProminent` wherever the accent fills the button.
     static var accentProminent: AccentProminentButtonStyle { .init() }
+}
+
+// MARK: - Accent-filled surfaces
+
+/// The accent actually in force, resolved for an appearance.
+///
+/// `.tint` is usable as a fill but cannot be read back, so any view that fills
+/// with `.tint` and then hardcodes its label colour is guessing — and guesses
+/// `.white`, which is white-on-white against the shipped monochrome accent in
+/// dark mode. This is the one place that answers "what colour is the fill".
+enum AccentFill {
+    static func color(_ accent: Color?, _ scheme: ColorScheme) -> Color {
+        accent ?? (scheme == .dark ? .white : Color(.sRGB, white: 0.11))
+    }
+}
+
+private struct AccentFilledModifier<S: Shape>: ViewModifier {
+    @Environment(\.appAccentColor) private var accent
+    @Environment(\.colorScheme) private var colorScheme
+    let shape: S
+
+    func body(content: Content) -> some View {
+        let fill = AccentFill.color(accent, colorScheme)
+        content
+            .foregroundStyle(fill.contrastingLabel)
+            .background(fill, in: shape)
+    }
+}
+
+extension View {
+    /// Fills with the accent and labels it in whatever stays readable on top —
+    /// the same bargain `AccentProminentButtonStyle` makes, for the badges and
+    /// pills that are not buttons with a style to swap.
+    func accentFilled(in shape: some Shape) -> some View {
+        modifier(AccentFilledModifier(shape: shape))
+    }
 }

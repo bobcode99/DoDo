@@ -319,8 +319,10 @@ struct MacContentView: View {
               .font(.caption2.monospacedDigit())
               .padding(.horizontal, 6)
               .padding(.vertical, 1)
-              .background(.tint, in: .capsule)
-              .foregroundStyle(.white)
+              // Not `.background(.tint) + .foregroundStyle(.white)`: the
+              // shipped accent is white in dark mode, so the count was white
+              // on white.
+              .accentFilled(in: .capsule)
           }
         }
       } icon: {

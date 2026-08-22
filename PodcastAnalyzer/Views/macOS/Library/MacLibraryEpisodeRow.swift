@@ -47,10 +47,10 @@ struct MacLibraryEpisodeRow: View {
         }) {
           Image(systemName: "play.fill")
             .font(.title3)
-            .foregroundStyle(.white)
             .frame(width: 32, height: 32)
-            .background(.tint)
-            .clipShape(Circle())
+            // Same reason as the sidebar badge: a white glyph on a `.tint`
+            // fill disappears when the accent resolves to white.
+            .accentFilled(in: .circle)
         }
         .buttonStyle(.plain)
       }

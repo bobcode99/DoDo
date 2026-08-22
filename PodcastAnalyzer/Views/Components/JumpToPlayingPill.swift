@@ -13,7 +13,11 @@ struct JumpToPlayingPill: View {
     var isVisible: Bool
     var action: () -> Void
 
+    @Environment(\.appAccentColor) private var accent
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
+        let fill = AccentFill.color(accent, colorScheme)
         Group {
             if isVisible {
                 Button(action: action) {
@@ -25,9 +29,13 @@ struct JumpToPlayingPill: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .foregroundStyle(.white)
-                    .background(.tint, in: .capsule)
-                    .glassEffect(.regular, in: .capsule)
+                    // One material, tinted — not glass painted over a separate
+                    // `.tint` fill. Two of them fight: the glass washes the
+                    // fill out, and the label was hardcoded `.white`, so the
+                    // pill read as white text on pale glass in light mode and
+                    // white on white in dark.
+                    .foregroundStyle(fill.contrastingLabel)
+                    .glassEffect(Glass.regular.tint(fill), in: .capsule)
                     .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
                 }
                 .buttonStyle(.plain)
