@@ -431,7 +431,7 @@ struct TranscriptSettingsScreen: View {
       ProgressView().scaleEffect(0.8)
     case .notDownloaded, .error:
       Button("Download") { viewModel.downloadTranscriptModel() }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.accentProminent)
         .controlSize(.small)
     case .downloading(let progress):
       HStack(spacing: 8) {

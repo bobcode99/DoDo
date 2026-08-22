@@ -559,7 +559,7 @@ private struct RegionOnboardingPage: View {
           .frame(maxWidth: .infinity)
           .padding(.vertical, 14)
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.accentProminent)
       .padding(.horizontal, 32)
       .padding(.bottom, 60)
     }

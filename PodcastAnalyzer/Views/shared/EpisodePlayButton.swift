@@ -278,7 +278,7 @@ struct EpisodePlayButton: View {
       .padding(.horizontal, 16)
       .padding(.vertical, 8)
     }
-    .buttonStyle(.borderedProminent)
+    .buttonStyle(.accentProminent)
     .disabled(isDisabled)
   }
 

@@ -89,7 +89,7 @@ struct WhisperModelRow: View {
       Button("Download") {
         manager.downloadModel(variant)
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.accentProminent)
       .controlSize(.small)
 
     case .downloading(let progress):
@@ -134,7 +134,7 @@ struct WhisperModelRow: View {
         Button("Retry") {
           manager.downloadModel(variant)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.accentProminent)
         .controlSize(.mini)
       }
       .help(message)

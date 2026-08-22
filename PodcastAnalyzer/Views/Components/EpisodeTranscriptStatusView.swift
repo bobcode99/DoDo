@@ -45,7 +45,7 @@ struct EpisodeTranscriptStatusView: View {
             } label: {
                 Label("Download Transcript", systemImage: "arrow.down.circle")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.accentProminent)
         }
     }
 

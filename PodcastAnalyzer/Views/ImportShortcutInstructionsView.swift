@@ -24,7 +24,7 @@ struct ImportShortcutInstructionsView: View {
         Button("Get Shortcut", systemImage: "square.and.arrow.down") {
           openURL(shortcutLink)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.accentProminent)
         .padding(.top, 2)
       }
 

@@ -298,7 +298,7 @@ struct PodcastImportSheet: View {
             Button("Done") {
               importManager.dismissImportSheet()
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.accentProminent)
             .padding(.top, 16)
           }
           .padding()

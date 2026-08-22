@@ -258,7 +258,7 @@ struct EpisodeListView: View {
       Button("Try Again") {
         Task { await loadBrowsePodcast() }
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.accentProminent)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

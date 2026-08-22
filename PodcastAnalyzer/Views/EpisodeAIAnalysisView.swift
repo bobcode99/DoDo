@@ -144,7 +144,7 @@ struct EpisodeAIAnalysisView: View {
         Button("Setup") {
           uiState.showSettingsSheet = true
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.accentProminent)
         .controlSize(.small)
       }
       .padding(.horizontal, 16)

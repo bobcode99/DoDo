@@ -353,7 +353,7 @@ struct TranscriptGenerateConfigView: View {
                     .font(.subheadline)
                     .padding(.horizontal, 20).padding(.vertical, 10)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.accentProminent)
         } else {
             DownloadActionView(viewModel: viewModel)
         }
@@ -391,7 +391,7 @@ private struct DownloadActionView: View {
                     .font(.subheadline)
                     .padding(.horizontal, 20).padding(.vertical, 10)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.accentProminent)
         }
     }
 
@@ -437,7 +437,7 @@ private struct DownloadActionView: View {
                     .font(.subheadline)
                     .padding(.horizontal, 20).padding(.vertical, 10)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.accentProminent)
         }
     }
 }

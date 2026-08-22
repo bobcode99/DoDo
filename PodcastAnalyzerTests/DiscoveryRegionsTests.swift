@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 @testable import PodcastAnalyzer
 
@@ -130,6 +131,33 @@ struct DiscoveryRegionsTests {
     }
 
     // MARK: - Accent colour
+
+    @Test("A filled button labels itself readably whatever the accent")
+    func accentContrast() {
+        // The bug this exists to prevent: .borderedProminent labels in white
+        // regardless of fill, so a pale accent renders white on white.
+        #expect(Color.white.contrastingLabel == .black)
+        #expect(Color(.sRGB, white: 0.95).contrastingLabel == .black)
+        #expect(Color.yellow.contrastingLabel == .black)
+
+        #expect(Color.black.contrastingLabel == .white)
+        #expect(Color(.sRGB, white: 0.11).contrastingLabel == .white, "the shipped light-mode default")
+        #expect(AccentPreset.indigo.color.contrastingLabel == .white)
+
+        for preset in AccentPreset.allCases {
+            let fill = preset.color
+            let label = fill.contrastingLabel
+            let gap = abs(fill.relativeLuminance - label.relativeLuminance)
+            #expect(gap > 0.35, "\(preset.rawValue) label is too close to its fill")
+        }
+    }
+
+    @Test("Luminance ranks colours the way the eye does")
+    func luminanceOrdering() {
+        #expect(Color.white.relativeLuminance > Color.black.relativeLuminance)
+        #expect(Color.yellow.relativeLuminance > Color.blue.relativeLuminance,
+                "yellow is far brighter than blue at equal saturation")
+    }
 
     @Test("An accent colour round-trips, and absence means System Default")
     func accentRoundTrip() {

@@ -112,7 +112,7 @@ struct MacEpisodeDetailView: View {
             ) {
                 Label("Transcript", systemImage: "captions.bubble")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.accentProminent)
             .controlSize(.large)
             .accessibilityHint("Open the transcript for this episode")
 

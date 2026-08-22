@@ -83,7 +83,7 @@ struct TranscribeBackfillSheet: View {
                 blockedReason = nil
                 confirm()
               }
-              .buttonStyle(.borderedProminent)
+              .buttonStyle(.accentProminent)
               .controlSize(.small)
               .padding(.top, 4)
             }

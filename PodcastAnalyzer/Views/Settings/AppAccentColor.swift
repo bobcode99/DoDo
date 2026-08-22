@@ -116,3 +116,59 @@ extension View {
     modifier(AppAccentColorModifier())
   }
 }
+
+// MARK: - Prominent buttons
+
+extension Color {
+    /// WCAG relative luminance of this colour, 0 (black) to 1 (white).
+    /// Resolved against a default environment, which is exact for the concrete
+    /// sRGB colours the accent store hands back.
+    var relativeLuminance: Double {
+        let resolved = resolve(in: .init())
+        func linear(_ channel: Float) -> Double {
+            let c = Double(channel)
+            return c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(resolved.red)
+             + 0.7152 * linear(resolved.green)
+             + 0.0722 * linear(resolved.blue)
+    }
+
+    /// Black or white, whichever stays readable on top of this colour.
+    var contrastingLabel: Color {
+        relativeLuminance > 0.5 ? .black : .white
+    }
+}
+
+/// A filled button whose label colour is derived from the fill.
+///
+/// `.borderedProminent` fills with the tint but always labels in white, so any
+/// pale accent — and the monochrome default in dark mode — produces white on
+/// white. Picking the label from the fill's luminance means no accent, chosen or
+/// shipped, can render an unreadable button.
+struct AccentProminentButtonStyle: ButtonStyle {
+    @Environment(\.appAccentColor) private var accent
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    /// The chosen accent, or the shipped monochrome default for this appearance.
+    private var fill: Color {
+        accent ?? (colorScheme == .dark ? .white : Color(.sRGB, white: 0.11))
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? fill.contrastingLabel : Color.secondary)
+            .background(
+                (isEnabled ? fill : Color.secondary.opacity(0.25)),
+                in: .rect(cornerRadius: 10)
+            )
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == AccentProminentButtonStyle {
+    /// Use in place of `.borderedProminent` wherever the accent fills the button.
+    static var accentProminent: AccentProminentButtonStyle { .init() }
+}

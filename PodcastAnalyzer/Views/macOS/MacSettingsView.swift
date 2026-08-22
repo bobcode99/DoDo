@@ -542,7 +542,7 @@ struct AppleSpeechStatusView: View {
       HStack(spacing: 8) {
         Text("Not installed").foregroundStyle(.orange)
         Button("Download") { viewModel.downloadTranscriptModel() }
-          .buttonStyle(.borderedProminent).controlSize(.small)
+          .buttonStyle(.accentProminent).controlSize(.small)
       }
     case .downloading(let progress):
       HStack(spacing: 8) {
@@ -563,7 +563,7 @@ struct AppleSpeechStatusView: View {
       HStack(spacing: 8) {
         Text(message).foregroundStyle(.red).lineLimit(1)
         Button("Retry") { viewModel.downloadTranscriptModel() }
-          .buttonStyle(.borderedProminent).controlSize(.small)
+          .buttonStyle(.accentProminent).controlSize(.small)
       }
     case .simulatorNotSupported:
       Text("Requires physical device").foregroundStyle(.secondary)
@@ -624,7 +624,7 @@ struct MacWhisperModelRow: View {
     switch status {
     case .notDownloaded:
       Button("Download") { manager.downloadModel(variant) }
-        .buttonStyle(.borderedProminent).controlSize(.small)
+        .buttonStyle(.accentProminent).controlSize(.small)
     case .downloading(let progress):
       HStack(spacing: 8) {
         ProgressView(value: progress).frame(width: 80)
@@ -648,7 +648,7 @@ struct MacWhisperModelRow: View {
       HStack(spacing: 4) {
         Text("Error").foregroundStyle(.red).font(.caption)
         Button("Retry") { manager.downloadModel(variant) }
-          .buttonStyle(.borderedProminent).controlSize(.small)
+          .buttonStyle(.accentProminent).controlSize(.small)
       }
       .help(message)
     }
