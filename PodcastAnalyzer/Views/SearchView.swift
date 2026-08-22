@@ -125,7 +125,7 @@ struct PodcastSearchView: View {
         HStack(spacing: 0) {
             ForEach(SearchTab.allCases, id: \.self) { tab in
                 SearchTabButton(
-                    title: tab.rawValue,
+                    title: tab.title,
                     isSelected: selectedTab == tab
                 ) {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -171,10 +171,19 @@ struct PodcastSearchView: View {
                     Spacer()
                 }
             } else if viewModel.podcasts.isEmpty {
-                VStack {
+                // The data source is named here and nowhere else: before a
+                // search it is trivia, but the moment a show is missing it is
+                // the explanation *and* the way out. A directory nobody
+                // mentioned looks like a broken search.
+                VStack(spacing: 8) {
                     Spacer()
                     Text("No results found")
                         .foregroundStyle(.secondary)
+                    Text("Search covers the Apple Podcasts directory. If a show isn't listed there, add it by RSS URL in Settings ▸ Subscriptions.")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                     Spacer()
                 }
             } else {
@@ -319,7 +328,7 @@ struct PodcastSearchView: View {
 
     private var searchPrompt: LocalizedStringKey {
         switch selectedTab {
-        case .applePodcasts: "Search Apple Podcasts"
+        case .applePodcasts: "Search all podcasts"
         case .library: "Search your library"
         case .transcripts: "Search transcripts"
         }

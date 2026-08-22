@@ -74,7 +74,7 @@ struct MacSearchView: View {
             selectedTab = tab
           }
         }) {
-          Text(tab.rawValue)
+          Text(tab.title)
             .font(.subheadline)
             .fontWeight(selectedTab == tab ? .semibold : .regular)
             .foregroundStyle(selectedTab == tab ? .primary : .secondary)
@@ -126,10 +126,18 @@ struct MacSearchView: View {
           Spacer()
         }
       } else if viewModel.podcasts.isEmpty {
-        VStack {
+        // Named here and nowhere else — see the iOS view. Before a search the
+        // directory is trivia; the moment a show is missing it is both the
+        // explanation and the way out.
+        VStack(spacing: 8) {
           Spacer()
           Text("No results found")
             .foregroundStyle(.secondary)
+          Text("Search covers the Apple Podcasts directory. If a show isn't listed there, add it by RSS URL in Settings ▸ Subscriptions.")
+            .font(.footnote)
+            .foregroundStyle(.tertiary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
           Spacer()
         }
       } else {

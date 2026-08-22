@@ -8,13 +8,29 @@
 import SwiftUI
 
 enum SearchTab: String, CaseIterable {
-    case applePodcasts = "Apple Podcasts"
-    case library = "Library"
-    case transcripts = "Transcripts"
+    /// Raw values are stable identifiers, never labels. They used to be the
+    /// display text, and `Text(String)` does not localize — so these tabs
+    /// shipped in English to every locale regardless of the catalog entries
+    /// sitting in Localizable.xcstrings.
+    case applePodcasts
+    case library
+    case transcripts
+
+    /// "Podcasts", not "Apple Podcasts": naming another app's product as a tab
+    /// inside this one reads as a section belonging to that app, and which
+    /// directory backs the search is not something the user is choosing here.
+    /// The case name stays honest about where the results come from.
+    var title: LocalizedStringKey {
+        switch self {
+        case .applePodcasts: "Podcasts"
+        case .library: "Library"
+        case .transcripts: "Transcripts"
+        }
+    }
 }
 
 struct SearchTabButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let isSelected: Bool
     let action: () -> Void
 
