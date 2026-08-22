@@ -2,110 +2,86 @@
 //  DoDoMenubarIcon.swift
 //  PodcastAnalyzer
 //
-//  The menubar mark, drawn rather than shipped as an image.
+//  The menubar mark: the DoDo cactus artwork itself.
 //
-//  The status item used to borrow SF Symbols' `network` globe, which said
-//  "some app is doing networking" and nothing about DoDo — and since headless
-//  mode now means "the app is running with no window", this glyph is the app's
-//  only presence on screen, not a server indicator.
+//  This started as a drawn template — a disc cut into eight wedges with a dot
+//  in each — because menubar images are conventionally templates, where macOS
+//  keeps only the alpha and tints it. That reads as the Kubernetes helm, which
+//  is not a resemblance any podcast app wants, and it was a redrawing of the
+//  logo rather than the logo.
 //
-//  Drawn, not scaled from dodogood.png, because a menubar image has to be a
-//  template: macOS keeps the alpha and throws the colour away so it can tint
-//  for light, dark, and the highlighted state. The artwork's alpha is a filled
-//  disc, so scaling it down would produce a featureless blob. This reproduces
-//  the same mark — a ribbed cactus seen from above, areoles along the ribs —
-//  in alpha, at whatever size the menubar happens to be.
+//  So: the real artwork, in colour. A colour status item is ordinary (Slack,
+//  Dropbox), and the muted green survives both menubars — checked by rendering
+//  it at 36px, the true retina size, over white and over black. The ribs and
+//  areoles still read at that size, which is the whole reason the shape works
+//  this small.
 //
 
 #if os(macOS)
 
 import AppKit
+import OSLog
 
 enum DoDoMenubarIcon {
-  /// Eight ribs, not the artwork's ten. At the ~18pt the menubar gives us, ten
-  /// cuts sit under two points apart and mush into grey.
-  private static let ribCount = 8
+  private static let logger = Logger(subsystem: "com.podcast.analyzer", category: "MenubarIcon")
+
+  /// Built once per state. `refresh()` runs on every observation tick, and the
+  /// source art is a 1024px PNG — rescaling it a few times a second to fill an
+  /// 18pt slot is pure waste.
+  private static var cache: [Bool: NSImage] = [:]
 
   static func image(size: CGFloat = 18, showsBadge: Bool = false) -> NSImage {
+    if let cached = cache[showsBadge], cached.size.width == size { return cached }
+    let built = build(size: size, showsBadge: showsBadge)
+    cache[showsBadge] = built
+    return built
+  }
+
+  private static func build(size: CGFloat, showsBadge: Bool) -> NSImage {
+    guard let art = NSImage(named: "DoDoLogo") else {
+      // Never expected — the imageset ships in the app's asset catalog — but a
+      // missing icon must not cost the user the menu behind it.
+      logger.error("DoDoLogo missing from the asset catalog; falling back")
+      let fallback = NSImage(
+        systemSymbolName: "circle.dotted.circle",
+        accessibilityDescription: "DoDo") ?? NSImage()
+      fallback.isTemplate = true
+      return fallback
+    }
+
     let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-      draw(in: rect.insetBy(dx: 0.5, dy: 0.5), showsBadge: showsBadge)
+      art.draw(
+        in: rect, from: .zero, operation: .sourceOver, fraction: 1,
+        respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+      if showsBadge { drawBadge(in: rect) }
       return true
     }
-    // Without this the glyph stays black in dark mode and never inverts when
-    // the menu is open.
-    image.isTemplate = true
+    // Colour, not a template: tinting this to a flat silhouette would throw
+    // away the ribs and dots that make it legible at all.
+    image.isTemplate = false
     return image
   }
 
-  private static func draw(in rect: NSRect, showsBadge: Bool) {
+  /// Server trouble. A red pip in a punched-out ring at the lower trailing
+  /// corner, kept fully inside the bounds — hung off the edge it gets clipped
+  /// by the image rect and reads as a bite out of the mark.
+  private static func drawBadge(in rect: NSRect) {
     guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-
     let side = min(rect.width, rect.height)
-    let radius = side / 2
-    let center = NSPoint(x: rect.midX, y: rect.midY)
-
-    NSColor.black.setFill()
-    NSBezierPath(
-      ovalIn: NSRect(
-        x: center.x - radius, y: center.y - radius,
-        width: radius * 2, height: radius * 2)
-    ).fill()
-
-    // The ribs and areoles are cut out of the disc rather than drawn on top:
-    // in a template image only alpha survives, so "lighter" has to mean
-    // "absent".
-    ctx.saveGState()
-    ctx.setBlendMode(.destinationOut)
-    NSColor.black.setStroke()
-    NSColor.black.setFill()
-
-    let ribWidth = max(side * 0.064, 0.8)
-    for rib in 0..<ribCount {
-      let angle = (CGFloat(rib) / CGFloat(ribCount)) * .pi * 2 - .pi / 2
-      let path = NSBezierPath()
-      path.move(
-        to: NSPoint(
-          x: center.x + cos(angle) * radius * 0.12,
-          y: center.y + sin(angle) * radius * 0.12))
-      path.line(
-        to: NSPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius))
-      path.lineWidth = ribWidth
-      path.lineCapStyle = .round
-      path.stroke()
-    }
-
-    let dot = max(side * 0.085, 1)
-    for rib in 0..<ribCount {
-      let angle = ((CGFloat(rib) + 0.5) / CGFloat(ribCount)) * .pi * 2 - .pi / 2
-      let distance = radius * 0.55
-      NSBezierPath(
-        ovalIn: NSRect(
-          x: center.x + cos(angle) * distance - dot / 2,
-          y: center.y + sin(angle) * distance - dot / 2,
-          width: dot, height: dot)
-      ).fill()
-    }
-    ctx.restoreGState()
-
-    guard showsBadge else { return }
-    // Server trouble. A notch bitten out of the lower-trailing edge, then a
-    // filled pip inside it, so the badge survives tinting and reads against
-    // both a light and a dark menubar.
-    let badge = side * 0.32
-    // Fully inside the bounds: a badge hung off the corner is clipped by the
-    // image rect and reads as a bite taken out of the mark.
+    let badge = side * 0.34
     let origin = NSPoint(x: rect.maxX - badge, y: rect.minY)
-    let gap = side * 0.05
+    let ring = side * 0.05
+
     ctx.saveGState()
     ctx.setBlendMode(.destinationOut)
     NSColor.black.setFill()
     NSBezierPath(
       ovalIn: NSRect(x: origin.x, y: origin.y, width: badge, height: badge)
-        .insetBy(dx: -gap, dy: -gap)
+        .insetBy(dx: -ring, dy: -ring)
     ).fill()
     ctx.restoreGState()
 
-    NSColor.black.setFill()
+    NSColor.systemRed.setFill()
     NSBezierPath(ovalIn: NSRect(x: origin.x, y: origin.y, width: badge, height: badge)).fill()
   }
 }
