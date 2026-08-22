@@ -21,6 +21,7 @@ final class SubscriptionSyncCoordinator {
   private let rssService = PodcastRssService()
   private var context: ModelContext?
   private var remoteChangeObserver: NSObjectProtocol?
+  private var syncCompletedObserver: NSObjectProtocol?
 
   // Internal (not private) so tests can create an isolated instance against
   // an in-memory container instead of sharing app-wide singleton state.
@@ -30,6 +31,58 @@ final class SubscriptionSyncCoordinator {
     guard context == nil else { return }
     context = container.mainContext
     observeRemoteChanges()
+    observeFeedRefreshes()
+    backfillExistingSubscriptions()
+    // Rows that predate `latestEpisodeDate` carry nil and would sort last
+    // forever otherwise — the next feed refresh is hours away.
+    refreshMirroredMetadata()
+  }
+
+  /// Mirrors subscriptions that predate the synced store.
+  ///
+  /// `sync(from:)` only runs on a state *change*, and `setSubscribed(_:)`
+  /// returns early when the flag already holds the requested value — so a
+  /// library subscribed before `SubscribedPodcastModel` existed never produced
+  /// a row, and re-subscribing cannot produce one either. Every screen in the
+  /// watch app reads that model, so without this pass the watch stays empty
+  /// no matter how long CloudKit is given.
+  ///
+  /// Idempotent and cheap: one fetch of subscribed podcasts, one of the rows
+  /// already mirrored, and a save only when something was actually missing.
+  private func backfillExistingSubscriptions() {
+    guard let context else { return }
+
+    let subscribed =
+      (try? context.fetch(
+        FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.isSubscribed })
+      )) ?? []
+    guard !subscribed.isEmpty else { return }
+
+    let mirrored = Set(
+      ((try? context.fetch(FetchDescriptor<SubscribedPodcastModel>())) ?? []).map(\.rssUrl)
+    )
+
+    var inserted = 0
+    for podcast in subscribed
+    where !podcast.rssUrl.isEmpty && !mirrored.contains(podcast.rssUrl) {
+      context.insert(
+        SubscribedPodcastModel(
+          rssUrl: podcast.rssUrl,
+          title: podcast.title,
+          imageURL: podcast.imageURL,
+          latestEpisodeDate: podcast.latestEpisodeDate
+        )
+      )
+      inserted += 1
+    }
+    guard inserted > 0 else { return }
+
+    do {
+      try context.save()
+      logger.info("Backfilled \(inserted, privacy: .public) subscription(s) to iCloud")
+    } catch {
+      logger.error("Subscription backfill failed: \(error.localizedDescription, privacy: .public)")
+    }
   }
 
   // MARK: - Push (local → CloudKit)
@@ -37,7 +90,14 @@ final class SubscriptionSyncCoordinator {
   /// Call whenever a podcast's subscribed state changes. Mirrors the
   /// subscription (or its removal) into the synced store.
   func sync(from podcast: PodcastInfoModel) {
-    guard let context, !podcast.rssUrl.isEmpty else { return }
+    guard let context else {
+      // Was silent, and that is how this shipped unwired: `setModelContainer`
+      // was never called, so every subscribe/unsubscribe returned here and the
+      // watch — which reads only the synced store — saw an empty library.
+      logger.error("sync(from:) called before setModelContainer; subscription not mirrored")
+      return
+    }
+    guard !podcast.rssUrl.isEmpty else { return }
     let rssUrl = podcast.rssUrl
 
     do {
@@ -47,8 +107,17 @@ final class SubscriptionSyncCoordinator {
       if podcast.isSubscribed {
         if let existing {
           existing.title = podcast.title
+          existing.imageURL = podcast.imageURL
+          existing.latestEpisodeDate = podcast.latestEpisodeDate
         } else {
-          context.insert(SubscribedPodcastModel(rssUrl: rssUrl, title: podcast.title))
+          context.insert(
+            SubscribedPodcastModel(
+              rssUrl: rssUrl,
+              title: podcast.title,
+              imageURL: podcast.imageURL,
+              latestEpisodeDate: podcast.latestEpisodeDate
+            )
+          )
         }
       } else if let existing {
         context.delete(existing)
@@ -79,6 +148,61 @@ final class SubscriptionSyncCoordinator {
   }
 
   // MARK: - Pull (CloudKit → local, silent)
+
+  /// Keeps the mirrored rows current after a feed refresh.
+  ///
+  /// `sync(from:)` only fires on subscribe/unsubscribe, so without this a show
+  /// that published this morning would still carry last month's
+  /// `latestEpisodeDate` and sort to the bottom of the watch's list. Title and
+  /// artwork ride along because a feed can rename itself or change its cover.
+  private func observeFeedRefreshes() {
+    syncCompletedObserver = NotificationCenter.default.addObserver(
+      forName: .podcastSyncCompleted, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        self?.refreshMirroredMetadata()
+      }
+    }
+  }
+
+  /// One pass over the mirror, writing only rows that actually changed — a
+  /// no-op save would churn CloudKit on every sync round for no benefit.
+  func refreshMirroredMetadata() {
+    guard let context else { return }
+
+    let subscribed =
+      (try? context.fetch(
+        FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.isSubscribed })
+      )) ?? []
+    guard !subscribed.isEmpty else { return }
+
+    let byRSS = Dictionary(
+      subscribed.compactMap { $0.rssUrl.isEmpty ? nil : ($0.rssUrl, $0) },
+      uniquingKeysWith: { first, _ in first }
+    )
+
+    let rows = (try? context.fetch(FetchDescriptor<SubscribedPodcastModel>())) ?? []
+    var changed = 0
+    for row in rows {
+      guard let podcast = byRSS[row.rssUrl] else { continue }
+      guard row.title != podcast.title
+        || row.imageURL != podcast.imageURL
+        || row.latestEpisodeDate != podcast.latestEpisodeDate
+      else { continue }
+      row.title = podcast.title
+      row.imageURL = podcast.imageURL
+      row.latestEpisodeDate = podcast.latestEpisodeDate
+      changed += 1
+    }
+    guard changed > 0 else { return }
+
+    do {
+      try context.save()
+      logger.info("Refreshed \(changed, privacy: .public) mirrored subscription(s)")
+    } catch {
+      logger.error("Mirror refresh failed: \(error.localizedDescription, privacy: .public)")
+    }
+  }
 
   private func observeRemoteChanges() {
     remoteChangeObserver = NotificationCenter.default.addObserver(
