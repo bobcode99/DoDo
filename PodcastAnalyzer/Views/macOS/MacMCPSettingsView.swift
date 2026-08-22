@@ -148,7 +148,7 @@ struct MacMCPSettingsView: View {
   @ViewBuilder
   private var headlessSection: some View {
     Section {
-      Toggle("Run as menubar app (hide dock icon)", isOn: $headless)
+      Toggle("Keep running in the menubar when windows close", isOn: $headless)
         .onChange(of: headless) { _, newValue in
           applyActivationPolicy(headless: newValue)
         }
@@ -159,7 +159,7 @@ struct MacMCPSettingsView: View {
     } header: {
       Text("Headless")
     } footer: {
-      Text("Menubar mode keeps the server running without a dock icon. Click the menubar icon to reopen the main window. Open at Login auto-starts the app (and server, if enabled) after macOS login.")
+      Text("Closing the last window drops the dock icon and leaves the app in the menubar, so playback, downloads and the server keep going. Opening the app always brings the window back. Open at Login starts the app in the background after macOS login.")
     }
   }
 
@@ -292,7 +292,11 @@ struct MacMCPSettingsView: View {
   }
 
   private func applyActivationPolicy(headless: Bool) {
-    NSApp.setActivationPolicy(headless ? .accessory : .regular)
+    // Deliberately not `setActivationPolicy(.accessory)` directly: this
+    // Preferences window is itself a window, and yanking the dock icon out
+    // from under it left the app with no menu bar mid-session. The switch now
+    // takes effect when the last window closes.
+    MacBackgroundMode.apply()
     MCPMenubarController.shared.refresh()
   }
 

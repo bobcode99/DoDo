@@ -25,6 +25,13 @@ struct PodcastAnalyzerApp: App {
   @Environment(\.scenePhase) private var scenePhase
   @State private var languageManager = LanguageManager.shared
 
+  #if os(macOS)
+  /// Owns launch and reopen. SwiftUI alone answers neither: a WindowGroup does
+  /// not distinguish a login-item launch from a double-click, and it has no
+  /// hook at all for "the app is already running and someone opened it again".
+  @NSApplicationDelegateAdaptor private var appDelegate: MacAppDelegate
+  #endif
+
   /// Whether to auto-present the expanded player when the user brings the app
   /// to the foreground while it is still playing. This is how Apple Podcasts
   /// makes tapping the Dynamic Island / Now Playing controls land on the
@@ -146,14 +153,10 @@ struct PodcastAnalyzerApp: App {
     // so playback gating later sees an accurate value.
     _ = NetworkMonitor.shared
 
-    // Flip to accessory (no dock icon) before the first window is ever shown.
-    // Doing this later (e.g. in WindowGroup.task, after the first frame) lets
-    // the dock icon flash on every launch even with headless mode enabled.
-    #if os(macOS)
-    if UserDefaults.standard.bool(forKey: MCPMenubarController.keyHeadless) {
-      NSApplication.shared.setActivationPolicy(.accessory)
-    }
-    #endif
+    // Activation policy is deliberately not touched here. Setting .accessory
+    // during init — before any window exists — hid the app on every launch,
+    // including the ones the user asked for. MacAppDelegate decides it from
+    // the launch reason instead.
   }
 
   /// Set after a ".dodotranscript" file import attempt; drives the result alert.
@@ -203,9 +206,6 @@ struct PodcastAnalyzerApp: App {
           #if os(macOS)
           MCPServerManager.shared.bootstrap(modelContainer: sharedModelContainer)
           MCPMenubarController.shared.bootstrap()
-          if UserDefaults.standard.bool(forKey: MCPMenubarController.keyHeadless) {
-            NSApp.setActivationPolicy(.accessory)
-          }
           #endif
 
           // Handle any pending widget toggle (pause) flag from cold launch.

@@ -157,18 +157,7 @@ final class MCPMenubarController {
   }
 
   @objc private func openMainWindow() {
-    // Bring app forward and open or focus the main window.
-    NSApp.setActivationPolicy(.regular)
-    NSApp.activate(ignoringOtherApps: true)
-    // The first WindowGroup window is typically already created; if hidden,
-    // bring it forward. If it was closed in accessory mode, recreate it.
-    for window in NSApp.windows where !(window is NSPanel) {
-      window.makeKeyAndOrderFront(nil)
-    }
-    if NSApp.windows.allSatisfy({ ($0 is NSPanel) || !$0.isVisible }) {
-      // No visible window — ask the runtime to open one for our default scene.
-      NSDocumentController.shared.newDocument(nil)
-    }
+    MacBackgroundMode.presentMainWindow()
   }
 
   @objc private func quitApp() {
