@@ -339,9 +339,36 @@ struct PlayerInteractionFlowTests {
             manager.addToQueue(episode(title: "A"))
             manager.addToQueue(episode(title: "B"))
 
+            // Queue writes are debounced, so nothing has been stored yet — the
+            // app flushes on backgrounding, tests flush explicitly.
+            #expect(coordinator.restoreQueue().isEmpty, "the write is debounced, not immediate")
+
+            coordinator.flushQueueWrites(manager.queue)
+
             let restored = coordinator.restoreQueue()
             #expect(restored.map(\.title) == ["A", "B"], "order is restored, not just membership")
             #expect(restored.first?.audioURL == "https://example.com/A.mp3")
+        }
+    }
+
+    @Test("A burst of queue mutations is written once, in final order")
+    func queueWritesCoalesce() throws {
+        let reset = stageRestoredEpisode(episode(title: "Now Playing"))
+        defer { reset() }
+        let manager = EnhancedAudioManager.shared
+        manager.queue = []
+
+        try withQueueStore { coordinator in
+            // Three mutations inside one debounce window. Without coalescing
+            // each would rewrite every row — into the CloudKit-backed store.
+            manager.addToQueue(episode(title: "A"))
+            manager.addToQueue(episode(title: "B"))
+            manager.playNext(episode(title: "B"))
+
+            #expect(coordinator.restoreQueue().isEmpty, "no write landed mid-burst")
+
+            coordinator.flushQueueWrites(manager.queue)
+            #expect(coordinator.restoreQueue().map(\.title) == ["B", "A"], "the single write holds the final order")
         }
     }
 
@@ -353,8 +380,14 @@ struct PlayerInteractionFlowTests {
         manager.queue = []
 
         try withQueueStore { coordinator in
+            // Land the add first, or the final assertion passes for the wrong
+            // reason: an empty store proves nothing if nothing was ever stored.
             manager.addToQueue(episode(title: "A"))
+            coordinator.flushQueueWrites(manager.queue)
+            #expect(coordinator.restoreQueue().count == 1)
+
             manager.clearQueue()
+            coordinator.flushQueueWrites(manager.queue)
 
             #expect(manager.queue.isEmpty)
             #expect(coordinator.restoreQueue().isEmpty)

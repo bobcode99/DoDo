@@ -355,6 +355,8 @@ class BackgroundSyncManager {
         }
         await AutoDownloadCoordinator.shared.updatePendingEpisodes(autoDownloadCandidates)
         await AutoDownloadCoordinator.shared.run(reason: .feedRefresh)
+
+        await enqueueAutoAddEpisodes(newEpisodeDetails, podcasts: podcasts)
       }
 
       // Send push notification if there are new episodes and enabled
@@ -500,6 +502,64 @@ class BackgroundSyncManager {
   func checkNotificationPermission() async {
     let settings = await UNUserNotificationCenter.current().notificationSettings()
     notificationPermissionStatus = settings.authorizationStatus
+  }
+
+  /// Add newly-found episodes to the play queue for shows configured to do so.
+  ///
+  /// Pocket Casts stages these in a table because its refresh and its
+  /// post-refresh processing are separate operations; ours is one function, so
+  /// the candidates are still in hand and no staging is needed.
+  @MainActor
+  private func enqueueAutoAddEpisodes(
+    _ details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)],
+    podcasts: [PodcastInfoModel]
+  ) async {
+    var settings: [String: AutoAddToQueueSetting] = [:]
+    for podcast in podcasts {
+      guard let setting = AutoAddToQueueSetting(rawValue: podcast.autoAddToQueueSetting),
+        setting != .off
+      else { continue }
+      settings[podcast.title] = setting
+    }
+    guard !settings.isEmpty else { return }
+
+    let audioManager = EnhancedAudioManager.shared
+    // Oldest first, so a show set to "top" ends up with its newest episode
+    // nearest the front rather than buried under the rest of the batch.
+    for detail in details.reversed() {
+      guard let setting = settings[detail.podcastTitle],
+        let audioURL = detail.audioURL, !audioURL.isEmpty
+      else { continue }
+
+      // Stop quietly at the cap rather than going through the adding path,
+      // which alerts the user — correct for a menu tap, wrong for a sync.
+      guard audioManager.queueHasRoom else {
+        logger.info("Auto-add stopped: queue is full")
+        return
+      }
+
+      let id = "\(detail.podcastTitle)\u{1F}\(detail.episodeTitle)"
+      guard !audioManager.queue.contains(where: { $0.id == id }),
+        audioManager.currentEpisode?.id != id
+      else { continue }
+
+      let episode = PlaybackEpisode(
+        id: id,
+        title: detail.episodeTitle,
+        podcastTitle: detail.podcastTitle,
+        audioURL: audioURL,
+        imageURL: detail.imageURL
+      )
+
+      // Stop-adding at the cap, which is Pocket Casts' `.stopAdding` policy.
+      // Their ring-buffer alternative can wait until someone asks for it.
+      if setting == .top {
+        audioManager.playNext(episode)
+      } else {
+        audioManager.addToQueue(episode)
+      }
+      logger.info("Auto-added to queue (\(setting.rawValue)): \(detail.episodeTitle, privacy: .public)")
+    }
   }
 
   private func sendNewEpisodesNotification(

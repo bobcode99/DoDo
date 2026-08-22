@@ -22,6 +22,7 @@ struct EpisodeMenuActions: View {
   let onDeleteDownload: () -> Void
   let onShare: () -> Void
   var onPlayNext: (() -> Void)? = nil
+  var onAddToQueue: (() -> Void)? = nil
   /// Apple-Podcasts-style "Remove from Up Next". When non-nil the menu appends
   /// a destructive remove button after Share. Only the Up Next list passes
   /// this closure — other call sites leave it nil.
@@ -50,10 +51,18 @@ struct EpisodeMenuActions: View {
 
     Divider()
 
-    // Play Next option
-    if let onPlayNext = onPlayNext, audioURL != nil {
-      Button(action: onPlayNext) {
-        Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+    // Queue options
+    if audioURL != nil, onPlayNext != nil || onAddToQueue != nil {
+      if let onPlayNext {
+        Button(action: onPlayNext) {
+          Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+        }
+      }
+
+      if let onAddToQueue {
+        Button(action: onAddToQueue) {
+          Label("Add to Queue", systemImage: "text.line.last.and.arrowtriangle.forward")
+        }
       }
 
       Divider()

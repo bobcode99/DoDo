@@ -123,7 +123,7 @@ struct AutoTranscribeManagementView: View {
         for podcast in subscribedPodcasts where podcast.autoTranscribeNewEpisodes {
           podcast.autoTranscribeNewEpisodes = false
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
       }
       Button("Cancel", role: .cancel) { }
     } message: {
@@ -157,7 +157,7 @@ struct AutoTranscribeManagementView: View {
         get: { podcast.autoTranscribeNewEpisodes },
         set: { newValue in
           podcast.autoTranscribeNewEpisodes = newValue
-          try? modelContext.save()
+          modelContext.saveOrLog()
         }
       ))
       .labelsHidden()

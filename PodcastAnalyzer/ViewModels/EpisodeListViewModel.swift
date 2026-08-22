@@ -424,7 +424,7 @@ final class EpisodeListViewModel {
          let size = attrs[.size] as? Int64 {
         existingModel.fileSize = size
       }
-      try? context.save()
+      context.saveOrLog()
     } else {
       // Find the episode to get its audio URL
       guard let episode = podcastInfo.episodes.first(where: { $0.title == episodeTitle }),
@@ -446,7 +446,7 @@ final class EpisodeListViewModel {
         model.fileSize = size
       }
       context.insert(model)
-      try? context.save()
+      context.saveOrLog()
       episodeModels[episodeKey] = model
     }
   }
@@ -603,9 +603,13 @@ final class EpisodeListViewModel {
 
   func togglePlayed(for episode: PodcastEpisodeInfo) {
     guard let model = ensureModel(for: episode) else { return }
+    // Pause before marking: see EnhancedAudioManager.pauseIfCurrent.
+    if !model.isCompleted {
+      EnhancedAudioManager.shared.pauseIfCurrent(episodeId: model.id)
+    }
     model.setCompleted(!model.isCompleted)
     model.lastPlaybackPosition = 0
-    try? modelContext?.save()
+    modelContext?.saveOrLog()
   }
 
   // MARK: - Cleanup

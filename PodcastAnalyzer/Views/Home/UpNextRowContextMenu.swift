@@ -17,6 +17,7 @@ struct UpNextRowContextMenu: View {
 
   var body: some View {
     let checker = EpisodeStatusChecker(episode: episode)
+    let isQueued = EnhancedAudioManager.shared.queue.contains { $0.id == episode.id }
     UpNextContextMenu(
       episode: episode,
       isStarred: episode.isStarred,
@@ -26,19 +27,12 @@ struct UpNextRowContextMenu: View {
       onToggleStar: { viewModel.toggleStar(for: episode) },
       onTogglePlayed: { viewModel.togglePlayed(for: episode) },
       onPlayNext: {
-        guard let audioURL = episode.episodeInfo.audioURL else { return }
-        let playbackEpisode = PlaybackEpisode(
-          id: episode.id,
-          title: episode.episodeInfo.title,
-          podcastTitle: episode.podcastTitle,
-          audioURL: audioURL,
-          imageURL: episode.imageURL,
-          episodeDescription: episode.episodeInfo.podcastEpisodeDescription,
-          pubDate: episode.episodeInfo.pubDate,
-          duration: episode.episodeInfo.duration,
-          guid: episode.episodeInfo.guid
-        )
+        guard let playbackEpisode = PlaybackEpisode(episode) else { return }
         EnhancedAudioManager.shared.playNext(playbackEpisode)
+      },
+      onAddToQueue: {
+        guard let playbackEpisode = PlaybackEpisode(episode) else { return }
+        EnhancedAudioManager.shared.addToQueue(playbackEpisode)
       },
       onDownload: {
         DownloadManager.shared.downloadEpisode(
@@ -66,7 +60,13 @@ struct UpNextRowContextMenu: View {
           language: episode.language
         )
       },
-      onRemoveFromUpNext: { viewModel.dismissFromUpNext(episode) }
+      onRemoveFromQueue: isQueued
+        ? {
+          guard let playbackEpisode = PlaybackEpisode(episode) else { return }
+          EnhancedAudioManager.shared.removeFromQueue(playbackEpisode)
+        }
+        : nil,
+      onDismissSuggestion: { viewModel.dismissFromUpNext(episode) }
     )
   }
 }

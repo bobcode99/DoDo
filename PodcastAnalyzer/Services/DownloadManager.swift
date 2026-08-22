@@ -207,6 +207,29 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
       return
     }
 
+    // Reject non-audio payloads before they reach the library. A feed whose
+    // enclosure 404s commonly returns an HTML error page with 200, which
+    // URLSession happily "downloads" — storing it as .downloaded means the row
+    // looks fine until playback silently fails much later.
+    let fileSize = (try? FileManager.default.attributesOfItem(atPath: ourTempFile.path)[.size] as? Int64) ?? nil
+    let contentType = (downloadTask.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
+    if let reason = DownloadPayloadValidator.rejectionReason(
+      fileSize: fileSize ?? 0, contentType: contentType
+    ) {
+      logger.error("Rejected download payload: \(reason, privacy: .public)")
+      try? FileManager.default.removeItem(at: ourTempFile)
+      Task {
+        if let episodeKey = await downloadTracker.getDownloadKey(for: downloadTask) {
+          await downloadTracker.removeDownload(for: episodeKey)
+          await MainActor.run {
+            DownloadManager.shared.inFlightProgress.removeValue(forKey: episodeKey)
+            DownloadManager.shared.downloadStates[episodeKey] = .failed(error: reason)
+          }
+        }
+      }
+      return
+    }
+
     // Now do the rest asynchronously - the file is safely copied
     Task {
       guard let episodeKey = await downloadTracker.getDownloadKey(for: downloadTask) else {
@@ -273,7 +296,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
             )
             if let epModel = try? ctx.fetch(descriptor).first {
               epModel.autoDownloadEnabled = false
-              try? ctx.save()
+              ctx.saveOrLog()
             }
             // Remove from coordinator's pending list.
             Task { await AutoDownloadCoordinator.shared.removePending(podcastTitle: podcastTitle, episodeTitle: episodeTitle) }
@@ -488,7 +511,7 @@ final class DownloadManager {
       deleted += 1
     }
     if deleted > 0 {
-      try? context.save()
+      context.saveOrLog()
       logger.info("Auto-deleted \(deleted) played download(s)")
     }
   }
@@ -570,7 +593,7 @@ final class DownloadManager {
       model.fileSize = size
     }
 
-    try? context.save()
+    context.saveOrLog()
   }
 
   // MARK: - State Restoration

@@ -441,7 +441,7 @@ final class AIAnalysisCoordinator {
         cloudModel = fallback
         if !audioURL.isEmpty, fallback.episodeAudioURL != audioURL {
           fallback.episodeAudioURL = audioURL
-          try? context.save()
+          context.saveOrLog()
         }
       }
     }
@@ -464,7 +464,7 @@ final class AIAnalysisCoordinator {
         tagsModel = fallback
         if !audioURL.isEmpty, fallback.episodeAudioURL != audioURL {
           fallback.episodeAudioURL = audioURL
-          try? context.save()
+          context.saveOrLog()
         }
       }
     }

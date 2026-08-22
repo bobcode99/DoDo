@@ -33,6 +33,10 @@ extension Notification.Name {
   /// fires when a remote URL is requested with no network connection and no
   /// local copy is available.
   static let audioPlaybackUnavailable = Notification.Name("audioPlaybackUnavailable")
+  /// Posted when an episode could not be queued because the queue is at
+  /// `maxQueueSize`. userInfo["message"] holds a user-facing string. Without
+  /// this the add silently did nothing, which reads as a broken menu item.
+  static let queueLimitReached = Notification.Name("queueLimitReached")
 }
 
 struct PlaybackPositionUpdate: Sendable {
@@ -113,6 +117,12 @@ class EnhancedAudioManager: NSObject {
   var hasRestoredLastEpisode: Bool = false
   private let maxQueueSize = 50
 
+  /// Whether another episode would fit. Callers that add without the user
+  /// asking (auto-add on sync) check this instead of letting the add fail,
+  /// because the failure path raises an alert and a background sync has no
+  /// business interrupting anyone.
+  var queueHasRoom: Bool { queue.count < maxQueueSize }
+
   // Auto-play candidates (unplayed episodes that can be randomly selected)
   var autoPlayCandidates: [PlaybackEpisode] = []
 
@@ -146,6 +156,17 @@ class EnhancedAudioManager: NSObject {
   private var routeChangeTask: Task<Void, Never>?
   private var playerEndedTask: Task<Void, Never>?
   private var playerStalledTask: Task<Void, Never>?
+  private var playerFailedTask: Task<Void, Never>?
+
+  /// Playback overrides for the show currently loaded. Refreshed on every
+  /// `play`, so it always matches `currentEpisode`.
+  private var currentOverrides: PodcastPlaybackOverrides = .none
+
+  /// A failure this close to the end, after this much has played, is treated as
+  /// a finished episode rather than an error — a corrupt tail is far more
+  /// common than a genuine failure three minutes from the end.
+  private static let nearEndTolerance: TimeInterval = 180
+  private static let nearEndMinimumPlayed: TimeInterval = 60
   private var artworkFetchTask: Task<Void, Never>?
   private var durationLoadTask: Task<Void, Never>?
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "AudioManager")
@@ -432,7 +453,22 @@ private func handleAudioInterruption(_ notification: Notification) {
     guard let initialURL = URL(string: audioURL) else { return }
 
     if currentEpisode?.id == episode.id, player != nil {
-      if isPlaying { pause() } else { resume() }
+      if isPlaying {
+        pause()
+      } else {
+        // The loaded episode may have been marked played since it was paused,
+        // in which case the playhead is still sitting where the user stopped
+        // but the stored position was reset to 0. Resuming in place would
+        // ignore that and continue mid-episode — "mark as played" would appear
+        // to do nothing. Rewind first, so a played episode restarts.
+        if PlaybackStateCoordinator.shared?.isCompleted(episodeId: episode.id) == true,
+          currentTime > 0
+        {
+          logger.info("Restarting completed episode \(episode.title, privacy: .public) from the beginning")
+          seek(to: 0)
+        }
+        resume()
+      }
       return
     }
 
@@ -485,13 +521,25 @@ private func handleAudioInterruption(_ notification: Notification) {
     }
     currentTime = startTime > 0 ? startTime : 0
 
+    // Per-show playback overrides. A show the user has set to 1.5x should open
+    // at 1.5x without disturbing the global default other shows use.
+    let overrides = PlaybackStateCoordinator.shared?
+      .playbackOverrides(forPodcastTitle: episode.podcastTitle) ?? .none
+    currentOverrides = overrides
+
     // Apply default speed from settings for new episodes
     if useDefaultSpeed {
       let defaultSpeed = UserDefaults.standard.float(forKey: Keys.defaultPlaybackSpeed)
-      if defaultSpeed > 0 {
+      if overrides.speed > 0 {
+        // Deliberately not written back to Keys.playbackRate: a per-show speed
+        // must not leak into the global default when the next show starts.
+        playbackRate = overrides.speed
+      } else if defaultSpeed > 0 {
         playbackRate = defaultSpeed
         UserDefaults.standard.set(defaultSpeed, forKey: Keys.playbackRate)
       }
+    } else if overrides.speed > 0 {
+      playbackRate = overrides.speed
     }
 
     let playerItem = AVPlayerItem(url: url)
@@ -506,9 +554,13 @@ private func handleAudioInterruption(_ notification: Notification) {
     // before the first playing tick of the periodic observer lands.
     loadRealDuration(from: url)
 
-    if startTime > 0 {
+    // Skip-intro applies only to a fresh start. Resuming mid-episode must land
+    // where the user left off, even if that is inside the intro.
+    let effectiveStart = startTime > 0 ? startTime : overrides.skipIntro
+    if effectiveStart > 0 {
+      currentTime = effectiveStart
       player?.seek(
-        to: CMTime(seconds: startTime, preferredTimescale: 600),
+        to: CMTime(seconds: effectiveStart, preferredTimescale: 600),
         toleranceBefore: .zero,
         toleranceAfter: .zero
       )
@@ -683,26 +735,44 @@ private func handleAudioInterruption(_ notification: Notification) {
     PlaybackStateCoordinator.shared?.saveQueue(queue)
   }
 
-  func addToQueue(_ episode: PlaybackEpisode) {
+  /// Returns false when the episode was not queued — already present, already
+  /// playing, or the queue is full.
+  @discardableResult
+  func addToQueue(_ episode: PlaybackEpisode) -> Bool {
     // Don't add if already in queue or is current episode
     guard !queue.contains(where: { $0.id == episode.id }),
       currentEpisode?.id != episode.id
     else {
       logger.info("Episode already in queue or currently playing")
-      return
+      return false
     }
     // Enforce queue size limit
     guard queue.count < maxQueueSize else {
-      logger.info("Queue is full (max \(self.maxQueueSize) episodes)")
-      return
+      postQueueFull()
+      return false
     }
     queue.append(episode)
     onQueueChanged()
     logger.info("Added to queue: \(episode.title) (\(self.queue.count)/\(self.maxQueueSize))")
+    return true
   }
 
-  /// Add an episode to play next (first position in queue)
-  func playNext(_ episode: PlaybackEpisode) {
+  private func postQueueFull() {
+    logger.info("Queue is full (max \(self.maxQueueSize) episodes)")
+    NotificationCenter.default.post(
+      name: .queueLimitReached,
+      object: nil,
+      userInfo: [
+        "message":
+          "Your queue is full at \(maxQueueSize) episodes. Remove something from Up Next to add more."
+      ]
+    )
+  }
+
+  /// Add an episode to play next (first position in queue).
+  /// Returns false when the episode was not queued.
+  @discardableResult
+  func playNext(_ episode: PlaybackEpisode) -> Bool {
     // Check if already in queue (will be moved, not added)
     let wasInQueue = queue.contains(where: { $0.id == episode.id })
     // Remove if already in queue
@@ -710,16 +780,28 @@ private func handleAudioInterruption(_ notification: Notification) {
     // Don't add if currently playing
     guard currentEpisode?.id != episode.id else {
       logger.info("Episode is currently playing")
-      return
+      return false
     }
     // Enforce queue size limit (only if adding new, not moving existing)
     if !wasInQueue && queue.count >= maxQueueSize {
-      logger.info("Queue is full (max \(self.maxQueueSize) episodes)")
-      return
+      postQueueFull()
+      return false
     }
     queue.insert(episode, at: 0)
     onQueueChanged()
     logger.info("Play next: \(episode.title) (\(self.queue.count)/\(self.maxQueueSize))")
+    return true
+  }
+
+  /// Stop the loaded episode because the user just marked it played.
+  ///
+  /// Must be called *before* the model is marked: `pause()` force-writes the
+  /// current position, and a position write against an already-completed
+  /// episode below 90% is treated as a replay and clears the played flag —
+  /// so marking played while listening would silently undo itself.
+  func pauseIfCurrent(episodeId: String) {
+    guard currentEpisode?.id == episodeId, isPlaying else { return }
+    pause()
   }
 
   /// Remove an episode from the queue
@@ -1447,6 +1529,16 @@ private func handleAudioInterruption(_ notification: Notification) {
         // once with the player's pre-reset time and clobber the 0.
         guard self.isPlaying, !self.suppressTimeObserverUntilSeekLands else { return }
 
+        // Per-show skip-outro: end the episode early so the trailing promo
+        // isn't sat through, while still marking it played and advancing the
+        // queue exactly as a natural end would.
+        let skipOutro = self.currentOverrides.skipOutro
+        if skipOutro > 0, self.duration > 0, newTime >= self.duration - skipOutro {
+          self.logger.info("Skip-outro reached, ending episode \(Int(skipOutro))s early")
+          self.handlePlaybackEnded()
+          return
+        }
+
         // Throttle currentTime writes — only update when changed by >0.2s
         if abs(newTime - self.currentTime) > 0.2 {
           self.currentTime = newTime
@@ -1478,6 +1570,7 @@ private func handleAudioInterruption(_ notification: Notification) {
     // Cancel any existing player observer tasks
     playerEndedTask?.cancel()
     playerStalledTask?.cancel()
+    playerFailedTask?.cancel()
 
     // Observe playback end using Task-based async sequence
     playerEndedTask = Task { @MainActor [weak self, weak playerItem] in
@@ -1494,10 +1587,116 @@ private func handleAudioInterruption(_ notification: Notification) {
         self?.logger.warning("Playback stalled")
       }
     }
+
+    // Observe hard failures. Without this an unplayable item just stops, with
+    // no error, no advance, and no message — the episode appears to hang.
+    playerFailedTask = Task { @MainActor [weak self, weak playerItem] in
+      guard let playerItem else { return }
+      for await notification in NotificationCenter.default.notifications(
+        named: .AVPlayerItemFailedToPlayToEndTime, object: playerItem)
+      {
+        let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+        self?.handlePlaybackFailure(error: error)
+      }
+    }
+  }
+
+  // MARK: - Failure Recovery
+
+  /// Episode we have already retried after refreshing its feed. One attempt per
+  /// episode: a genuinely dead URL must not become a reload loop.
+  private var lastRetriedEpisodeId: String?
+
+  private func handlePlaybackFailure(error: Error?) {
+    guard let episode = currentEpisode else { return }
+    let nsError = error as NSError?
+    logger.error(
+      "Playback failed for \(episode.title, privacy: .public): \(error?.localizedDescription ?? "unknown", privacy: .public)")
+
+    isPlaying = false
+
+    // A file whose tail is corrupt fails within seconds of the end. Treating
+    // that as an error strands the episode at 97% forever and never advances
+    // the queue; treat it as finished instead.
+    if duration > 0, currentTime >= Self.nearEndMinimumPlayed,
+      currentTime + Self.nearEndTolerance >= duration
+    {
+      logger.info("Failure landed within \(Int(Self.nearEndTolerance))s of the end — completing instead")
+      handlePlaybackEnded()
+      return
+    }
+
+    // Feed authors re-point enclosure URLs after publishing, which leaves our
+    // stored URL dead until the next sync. Refresh this podcast's feed once and
+    // retry with whatever URL it advertises now.
+    if nsError?.domain == NSURLErrorDomain,
+      nsError?.code != NSURLErrorNotConnectedToInternet,
+      lastRetriedEpisodeId != episode.id
+    {
+      lastRetriedEpisodeId = episode.id
+      Task { @MainActor in await retryAfterFeedRefresh(episode: episode) }
+      return
+    }
+
+    surfacePlaybackFailure(episode: episode, error: error)
+  }
+
+  /// Re-fetch the podcast feed and, if the episode now advertises a different
+  /// enclosure URL, play that instead.
+  private func retryAfterFeedRefresh(episode: PlaybackEpisode) async {
+    logger.info("Refreshing feed for \(episode.podcastTitle, privacy: .public) before retrying playback")
+    guard let rssUrl = PlaybackStateCoordinator.shared?.feedURL(forPodcastTitle: episode.podcastTitle),
+      let refreshed = try? await PodcastRssService().fetchPodcast(from: rssUrl),
+      let match = refreshed.episodes.first(where: { $0.title == episode.title }),
+      let freshURL = match.audioURL,
+      freshURL != episode.audioURL
+    else {
+      logger.info("Feed refresh produced no new URL for \(episode.title, privacy: .public)")
+      surfacePlaybackFailure(episode: episode, error: nil)
+      return
+    }
+
+    logger.info("Retrying \(episode.title, privacy: .public) with refreshed enclosure URL")
+    let resumeAt = currentTime
+    currentEpisode = nil  // force `play` past its same-episode early return
+    play(episode: episode, audioURL: freshURL, startTime: resumeAt)
+  }
+
+  private func surfacePlaybackFailure(episode: PlaybackEpisode, error: Error?) {
+    let message: String
+    switch (error as NSError?)?.code {
+    case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost:
+      message = "Lost the connection while playing \"\(episode.title)\". Download it to listen offline."
+    case NSURLErrorFileDoesNotExist, NSURLErrorResourceUnavailable, NSURLErrorBadServerResponse:
+      message = "\"\(episode.title)\" is no longer available from this podcast's server."
+    default:
+      message = "Couldn't play \"\(episode.title)\". The audio may be corrupt or unavailable."
+    }
+    NotificationCenter.default.post(
+      name: .audioPlaybackUnavailable,
+      object: nil,
+      userInfo: ["message": message, "episodeTitle": episode.title])
   }
 
   private func handlePlaybackEnded() {
     logger.info("Playback ended")
+
+    // The completion write and the queue advance below happen exactly when iOS
+    // is most willing to suspend us — audio just stopped, so the background
+    // audio assertion that had been keeping the process alive is gone. Hold a
+    // task assertion across the transition or the episode can be left unmarked
+    // and the next one never starts.
+    #if os(iOS)
+    var bgTask: UIBackgroundTaskIdentifier = .invalid
+    bgTask = UIApplication.shared.beginBackgroundTask(withName: "PlaybackEnded") {
+      UIApplication.shared.endBackgroundTask(bgTask)
+      bgTask = .invalid
+    }
+    defer {
+      if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) }
+    }
+    #endif
+
     isPlaying = false
 
     // Persist a final position == duration so PlaybackStateCoordinator flips
@@ -1591,6 +1790,8 @@ private func handleAudioInterruption(_ notification: Notification) {
     playerEndedTask = nil
     playerStalledTask?.cancel()
     playerStalledTask = nil
+    playerFailedTask?.cancel()
+    playerFailedTask = nil
     artworkFetchTask?.cancel()
     artworkFetchTask = nil
     durationLoadTask?.cancel()

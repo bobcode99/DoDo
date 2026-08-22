@@ -19,6 +19,13 @@ class PlaybackStateCoordinator {
 
   private var modelContext: ModelContext?
   private var notificationTask: Task<Void, Never>?
+
+  /// Pending debounced queue write. `saveQueue` rewrites every `QueueItemModel`
+  /// row, and those rows live in the CloudKit-backed store, so a burst of
+  /// mutations (drag-reorder, or Play Next tapped several times) would
+  /// otherwise replicate N deletes + N inserts per tap. Coalesce them.
+  private var queueWriteTask: Task<Void, Never>?
+  private static let queueWriteDebounce = Duration.seconds(1)
   private let logger = Logger(
     subsystem: "com.podcast.analyzer", category: "PlaybackStateCoordinator")
 
@@ -60,9 +67,77 @@ class PlaybackStateCoordinator {
     return model.lastPlaybackPosition
   }
 
+  // MARK: - Feed Lookup
+
+  /// RSS URL for a subscribed podcast, by title.
+  ///
+  /// Lives here rather than on `EnhancedAudioManager` because that type has no
+  /// SwiftData dependency and is better off keeping none — this coordinator is
+  /// already its persistence collaborator.
+  func feedURL(forPodcastTitle title: String) -> String? {
+    guard let context = modelContext else { return nil }
+    var descriptor = FetchDescriptor<PodcastInfoModel>(
+      predicate: #Predicate { $0.title == title }
+    )
+    descriptor.fetchLimit = 1
+    guard let url = try? context.fetch(descriptor).first?.rssUrl, !url.isEmpty else { return nil }
+    return url
+  }
+
+  /// Per-show playback overrides, or nil when the show isn't stored.
+  /// Same rationale as `feedURL`: the audio manager stays free of SwiftData.
+  func playbackOverrides(forPodcastTitle title: String) -> PodcastPlaybackOverrides? {
+    guard let context = modelContext else { return nil }
+    var descriptor = FetchDescriptor<PodcastInfoModel>(
+      predicate: #Predicate { $0.title == title }
+    )
+    descriptor.fetchLimit = 1
+    guard let model = try? context.fetch(descriptor).first else { return nil }
+    return PodcastPlaybackOverrides(
+      speed: model.playbackSpeedOverride,
+      skipIntro: TimeInterval(model.skipIntroSeconds),
+      skipOutro: TimeInterval(model.skipOutroSeconds)
+    )
+  }
+
+  /// Whether the stored episode is marked played. Separate from
+  /// `savedPlaybackPosition`, which folds completion into a 0 and so can't tell
+  /// "finished" apart from "never started".
+  func isCompleted(episodeId: String) -> Bool {
+    guard let context = modelContext else { return false }
+    var descriptor = FetchDescriptor<EpisodeDownloadModel>(
+      predicate: #Predicate { $0.id == episodeId }
+    )
+    descriptor.fetchLimit = 1
+    return (try? context.fetch(descriptor).first)?.isCompleted ?? false
+  }
+
   // MARK: - Queue Persistence
 
+  /// Debounced. The queue lives in memory on `EnhancedAudioManager`, so a
+  /// delayed write costs nothing until the app is killed — and `flushQueueWrites`
+  /// covers backgrounding, which is the case that actually matters.
   func saveQueue(_ queue: [PlaybackEpisode]) {
+    queueWriteTask?.cancel()
+    queueWriteTask = Task { [weak self] in
+      try? await Task.sleep(for: Self.queueWriteDebounce)
+      guard !Task.isCancelled else { return }
+      self?.writeQueue(queue)
+    }
+  }
+
+  /// Write any pending queue mutation immediately. Call on background/terminate
+  /// so a debounce in flight isn't lost with the process.
+  func flushQueueWrites(_ queue: [PlaybackEpisode]) {
+    guard queueWriteTask != nil else { return }
+    queueWriteTask?.cancel()
+    queueWriteTask = nil
+    writeQueue(queue)
+  }
+
+  /// Internal (not private) so tests can drive the persistence step directly
+  /// without waiting out the debounce.
+  func writeQueue(_ queue: [PlaybackEpisode]) {
     guard let context = modelContext else { return }
 
     // Delete all existing queue items

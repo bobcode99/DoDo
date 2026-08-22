@@ -200,7 +200,7 @@ struct TrendingEpisodeContextMenu: View {
       )
       modelContext.insert(model)
     }
-    try? modelContext.save()
+    modelContext.saveOrLog()
   }
 
   private func togglePlayed() {
@@ -209,7 +209,13 @@ struct TrendingEpisodeContextMenu: View {
       predicate: #Predicate { $0.id == key }
     )
     if let model = try? modelContext.fetch(descriptor).first {
+      // Pause before marking: see EnhancedAudioManager.pauseIfCurrent.
+      if !model.isCompleted {
+        EnhancedAudioManager.shared.pauseIfCurrent(episodeId: key)
+      }
       model.setCompleted(!model.isCompleted)
+      // Match every other Mark as Played: a played episode restarts next time.
+      model.lastPlaybackPosition = 0
     } else {
       let model = EpisodeDownloadModel(
         episodeTitle: episodeTitle,
@@ -221,7 +227,7 @@ struct TrendingEpisodeContextMenu: View {
       )
       modelContext.insert(model)
     }
-    try? modelContext.save()
+    modelContext.saveOrLog()
     NotificationCenter.default.post(name: .episodeCompletionChanged, object: nil)
   }
 

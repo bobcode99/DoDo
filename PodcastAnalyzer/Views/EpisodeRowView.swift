@@ -445,21 +445,31 @@ struct EpisodeRowView: View {
         shareEpisode()
       },
       onPlayNext: {
-        guard let audioURL = episode.audioURL else { return }
-        let playbackEpisode = PlaybackEpisode(
-          id: episodeKey,
-          title: episode.title,
-          podcastTitle: podcastTitle,
-          audioURL: audioURL,
-          imageURL: episode.imageURL ?? fallbackImageURL,
-          episodeDescription: episode.podcastEpisodeDescription,
-          pubDate: episode.pubDate,
-          duration: episode.duration,
-          guid: episode.guid
-        )
+        guard let playbackEpisode else { return }
         audioManager.playNext(playbackEpisode)
       },
+      onAddToQueue: {
+        guard let playbackEpisode else { return }
+        audioManager.addToQueue(playbackEpisode)
+      },
       onRemoveFromUpNext: onRemoveFromUpNext
+    )
+  }
+
+  /// Queue shape of this row. `nil` when the episode has no audio URL, which
+  /// is the same guard every queue action needs.
+  private var playbackEpisode: PlaybackEpisode? {
+    guard let audioURL = episode.audioURL else { return nil }
+    return PlaybackEpisode(
+      id: episodeKey,
+      title: episode.title,
+      podcastTitle: podcastTitle,
+      audioURL: audioURL,
+      imageURL: episode.imageURL ?? fallbackImageURL,
+      episodeDescription: episode.podcastEpisodeDescription,
+      pubDate: episode.pubDate,
+      duration: episode.duration,
+      guid: episode.guid
     )
   }
 

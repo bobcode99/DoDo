@@ -78,7 +78,18 @@ struct UpNextListView: View {
         showDeleteConfirmation = true
       },
       onTogglePlayed: { onTogglePlayed(episode) },
-      onRemoveFromUpNext: episode.id == nowPlayingId ? nil : { onDismiss(episode) }
+      // "Remove from Up Next" now means "get this off the list", and the list
+      // holds two kinds of row: a queued episode is dequeued, a suggested one
+      // is dismissed. The now-playing row can't be removed from either.
+      onRemoveFromUpNext: episode.id == nowPlayingId
+        ? nil
+        : {
+          if let queued = EnhancedAudioManager.shared.queue.first(where: { $0.id == episode.id }) {
+            EnhancedAudioManager.shared.removeFromQueue(queued)
+          } else {
+            onDismiss(episode)
+          }
+        }
     )
     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
   }

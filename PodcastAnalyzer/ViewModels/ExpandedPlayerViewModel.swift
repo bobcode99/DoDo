@@ -259,11 +259,18 @@ final class ExpandedPlayerViewModel {
 
     // Persist to SwiftData
     guard let model = getOrCreateEpisodeModel() else { return }
-    model.setCompleted(isCompleted)
-    if !isCompleted {
-      model.lastPlaybackPosition = 0
+    // Marking the episode you're listening to as played stops it — and the
+    // pause has to land before the flag is set, or the position it writes
+    // reads as a replay and clears the flag again.
+    if isCompleted {
+      EnhancedAudioManager.shared.pauseIfCurrent(episodeId: model.id)
     }
-    try? modelContext?.save()
+    model.setCompleted(isCompleted)
+    // Reset in both directions: played means "start over next time", unplayed
+    // means "I haven't heard this". Previously only the unplayed branch reset,
+    // so marking played here left the old position behind.
+    model.lastPlaybackPosition = 0
+    modelContext?.saveOrLog()
   }
 
   // MARK: - Sleep Timer

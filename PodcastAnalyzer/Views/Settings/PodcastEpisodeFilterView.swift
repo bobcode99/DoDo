@@ -63,7 +63,7 @@ struct PodcastEpisodeFilterView: View {
             podcast.episodeFilterInclude = includeTerms.trimmingCharacters(in: .whitespaces)
             podcast.episodeFilterExclude = excludeTerms.trimmingCharacters(in: .whitespaces)
             podcast.episodeFilterMinDuration = minDurationMinutes * 60
-            try? modelContext.save()
+            modelContext.saveOrLog()
             onSave?()
             dismiss()
           }

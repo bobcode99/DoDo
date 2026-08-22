@@ -684,6 +684,10 @@ final class EpisodeDetailViewModel {
       logger.warning("Cannot toggle played: no episode model available")
       return
     }
+    // Pause before marking: see EnhancedAudioManager.pauseIfCurrent.
+    if !model.isCompleted {
+      EnhancedAudioManager.shared.pauseIfCurrent(episodeId: model.id)
+    }
     model.setCompleted(!model.isCompleted)
     model.lastPlaybackPosition = 0
 

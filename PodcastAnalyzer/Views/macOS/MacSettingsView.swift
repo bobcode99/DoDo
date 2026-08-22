@@ -869,7 +869,7 @@ struct StorageSettingsTab: View {
           episode.downloadedDate = nil
           episode.fileSize = 0
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
       }
 
       await FileStorageManager.shared.clearAllAudioFiles()
@@ -903,7 +903,7 @@ struct StorageSettingsTab: View {
         for analysis in analyses {
           modelContext.delete(analysis)
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
       }
 
       let tagsDescriptor = FetchDescriptor<EpisodeQuickTagsModel>()
@@ -911,7 +911,7 @@ struct StorageSettingsTab: View {
         for tag in tags {
           modelContext.delete(tag)
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
       }
 
       isClearingData = false

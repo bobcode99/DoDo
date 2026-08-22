@@ -17,6 +17,23 @@ enum AutoDownloadSetting: String, CaseIterable {
   }
 }
 
+// MARK: - AutoAddToQueueSetting
+
+/// Where new episodes of a show go in the play queue when a sync finds them.
+enum AutoAddToQueueSetting: String, CaseIterable {
+  case off    = "off"
+  case top    = "top"
+  case bottom = "bottom"
+
+  var displayName: String {
+    switch self {
+    case .off:    "Off"
+    case .top:    "Add to Top"
+    case .bottom: "Add to Bottom"
+    }
+  }
+}
+
 // MARK: - Library Ordering
 
 /// The order the Library grids present subscribed shows in: newest episode
@@ -122,6 +139,23 @@ class PodcastInfoModel {
   /// Three-state auto-download setting (AntennaPod pattern).
   /// "enabled" | "disabled" | "inheritGlobal".
   var autoDownloadSetting: String = AutoDownloadSetting.inheritGlobal.rawValue
+
+  /// Playback speed for this show, overriding the global default.
+  /// 0 = use the global default (a real speed is never 0, so no separate flag).
+  var playbackSpeedOverride: Float = 0
+
+  /// Seconds to skip at the start of every episode of this show — the fixed
+  /// sponsor read or theme tune. 0 = play from the beginning.
+  var skipIntroSeconds: Int = 0
+
+  /// Seconds to treat as the end of every episode of this show, so the trailing
+  /// credits/promo don't have to be sat through and the episode still marks
+  /// played. 0 = play to the real end.
+  var skipOutroSeconds: Int = 0
+
+  /// Whether new episodes of this show are added to the play queue on sync, and
+  /// at which end. Mirrors `autoDownloadSetting`'s raw-string three-state shape.
+  var autoAddToQueueSetting: String = AutoAddToQueueSetting.off.rawValue
 
   /// Comma-separated include terms (case-insensitive). Empty = no filter.
   var episodeFilterInclude: String = ""

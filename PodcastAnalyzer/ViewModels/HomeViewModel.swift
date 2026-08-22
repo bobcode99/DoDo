@@ -151,6 +151,9 @@ final class HomeViewModel {
   // Track current playing episode to detect changes
   @ObservationIgnored
   private var lastCurrentEpisodeId: String?
+  /// Queue contents at the last Up Next reload. Compared by id list so a
+  /// reorder counts as a change but an unrelated player tick does not.
+  private var lastQueueIds: [String] = []
 
   // Use Unit Separator (U+001F) as delimiter
   private static let episodeKeyDelimiter = "\u{1F}"
@@ -163,6 +166,36 @@ final class HomeViewModel {
   private static func isEpisodeInProgress(model: EpisodeDownloadModel?) -> Bool {
     guard let model else { return false }
     return model.lastPlaybackPosition > UpNextSuggestionEngine.inProgressMinSeconds
+  }
+
+  /// Build an Up Next row for an episode the scored pool doesn't contain —
+  /// the now-playing episode or a queued one from an unsubscribed show.
+  /// `language` is empty because a `PlaybackEpisode` doesn't carry one; only
+  /// transcription reads it, and these rows are never a transcription source.
+  private static func makeLibraryEpisode(
+    from playbackEpisode: PlaybackEpisode,
+    model: EpisodeDownloadModel?
+  ) -> LibraryEpisode {
+    LibraryEpisode(
+      id: playbackEpisode.id,
+      podcastTitle: playbackEpisode.podcastTitle,
+      imageURL: playbackEpisode.imageURL,
+      language: "",
+      episodeInfo: PodcastEpisodeInfo(
+        title: playbackEpisode.title,
+        podcastEpisodeDescription: playbackEpisode.episodeDescription,
+        pubDate: playbackEpisode.pubDate,
+        audioURL: playbackEpisode.audioURL,
+        imageURL: playbackEpisode.imageURL,
+        duration: playbackEpisode.duration,
+        guid: playbackEpisode.guid
+      ),
+      isStarred: model?.isStarred ?? false,
+      isDownloaded: hasLocalAudioFile(model?.localAudioPath),
+      isCompleted: false,
+      lastPlaybackPosition: model?.lastPlaybackPosition ?? 0,
+      savedDuration: model?.duration ?? 0
+    )
   }
 
   /// Whether the "For You" section should be shown (cached from UserDefaults)
@@ -207,21 +240,28 @@ final class HomeViewModel {
     // Observers are started lazily in restartObserversIfNeeded() (called from setModelContext),
     // so they survive tab-switch cleanup/onAppear cycles without creating duplicates.
 
-    // Refresh Up Next when the currently playing episode changes
+    // Refresh Up Next when the currently playing episode or the queue changes
     startCurrentEpisodeObserver()
   }
 
-  /// Observe EnhancedAudioManager.currentEpisode for changes and reload Up Next
+  /// Observe `EnhancedAudioManager` for changes that reorder Up Next and reload it.
+  ///
+  /// Tracks the queue as well as the current episode: queued episodes lead the
+  /// Up Next list, so a Play Next / Add to Queue / remove has to be reflected
+  /// immediately — otherwise the row only appears at the next unrelated reload
+  /// and the menu action looks like it did nothing.
   private func startCurrentEpisodeObserver() {
-    // Use withObservationTracking to detect when currentEpisode changes
     withObservationTracking {
       _ = EnhancedAudioManager.shared.currentEpisode
+      _ = EnhancedAudioManager.shared.queue
     } onChange: { [weak self] in
       Task { @MainActor [weak self] in
         guard let self else { return }
         let newId = EnhancedAudioManager.shared.currentEpisode?.id
-        if newId != self.lastCurrentEpisodeId {
+        let newQueueIds = EnhancedAudioManager.shared.queue.map(\.id)
+        if newId != self.lastCurrentEpisodeId || newQueueIds != self.lastQueueIds {
           self.lastCurrentEpisodeId = newId
+          self.lastQueueIds = newQueueIds
           await self.loadUpNextEpisodes()
         }
         // Re-register for next change
@@ -470,38 +510,44 @@ final class HomeViewModel {
 
     var result: [LibraryEpisode] = flat.map(\.episode)
 
+    // ── Prepend the real play queue ───────────────────────────────────────────
+    // Play Next / Add to Queue used to drop an episode into a queue this
+    // surface never rendered, so explicit intent vanished from the screen where
+    // it was expressed. Queued episodes lead the list, in queue order, ahead of
+    // anything the scoring engine inferred. A queued episode may come from an
+    // unsubscribed show and so be absent from the scored pool entirely — hence
+    // the synthetic fallback.
+    let queuedEpisodes = EnhancedAudioManager.shared.queue
+    if !queuedEpisodes.isEmpty {
+      var queuedRows: [LibraryEpisode] = []
+      for (index, playbackEpisode) in queuedEpisodes.enumerated() {
+        let key = playbackEpisode.id
+        guard key != currentKey else { continue }
+        let model = modelsByKey[key]
+        let libraryEpisode = scoredByKey[key]?.episode
+          ?? Self.makeLibraryEpisode(from: playbackEpisode, model: model)
+        queuedRows.append(libraryEpisode)
+        // Overwrite any scored entry: the badge should say the episode is
+        // queued, which is more useful than why the engine would have picked it.
+        scoredByKey[key] = ScoredEpisode(
+          episode: libraryEpisode,
+          downloadModel: model,
+          score: .infinity,
+          reason: .inQueue(position: index + 1),
+          progressRatio: scoredByKey[key]?.progressRatio ?? 0
+        )
+      }
+      result = UpNextSuggestionEngine.merge(queued: queuedRows, scored: result)
+    }
+
     // ── Prepend Tier 1 ────────────────────────────────────────────────────────
     if let currentEpisode {
       let key = currentKey!
       let currentModel = modelsByKey[key]
       if currentModel?.isCompleted != true {
         result.removeAll { $0.id == key }
-        let libraryEpisode: LibraryEpisode
-        if let existing = scoredByKey[key]?.episode {
-          libraryEpisode = existing
-        } else {
-          let episodeInfo = PodcastEpisodeInfo(
-            title: currentEpisode.title,
-            podcastEpisodeDescription: currentEpisode.episodeDescription,
-            pubDate: currentEpisode.pubDate,
-            audioURL: currentEpisode.audioURL,
-            imageURL: currentEpisode.imageURL,
-            duration: currentEpisode.duration,
-            guid: currentEpisode.guid
-          )
-          libraryEpisode = LibraryEpisode(
-            id: key,
-            podcastTitle: currentEpisode.podcastTitle,
-            imageURL: currentEpisode.imageURL,
-            language: "",
-            episodeInfo: episodeInfo,
-            isStarred: currentModel?.isStarred ?? false,
-            isDownloaded: Self.hasLocalAudioFile(currentModel?.localAudioPath),
-            isCompleted: false,
-            lastPlaybackPosition: currentModel?.lastPlaybackPosition ?? 0,
-            savedDuration: currentModel?.duration ?? 0
-          )
-        }
+        let libraryEpisode = scoredByKey[key]?.episode
+          ?? Self.makeLibraryEpisode(from: currentEpisode, model: currentModel)
         result.insert(libraryEpisode, at: 0)
         // Ensure the injected entry is scoreable by the view
         if scoredByKey[key] == nil {
@@ -586,7 +632,7 @@ final class HomeViewModel {
     if let model = try? context.fetch(descriptor).first {
       model.setCompleted(true)
       model.lastPlaybackPosition = 0
-      try? context.save()
+      context.saveOrLog()
     } else {
       // Create new model if doesn't exist
       let model = EpisodeDownloadModel(
@@ -598,7 +644,7 @@ final class HomeViewModel {
         pubDate: episode.episodeInfo.pubDate
       )
       context.insert(model)
-      try? context.save()
+      context.saveOrLog()
     }
     // Post notification — the completion observer will reload Up Next
     NotificationCenter.default.post(name: .episodeCompletionChanged, object: nil)
@@ -627,7 +673,7 @@ final class HomeViewModel {
       )
       context.insert(model)
     }
-    try? context.save()
+    context.saveOrLog()
     NotificationCenter.default.post(name: .episodeCompletionChanged, object: nil)
   }
 
@@ -1005,7 +1051,7 @@ final class HomeViewModel {
 
     if let model = try? context.fetch(descriptor).first {
       model.isStarred.toggle()
-      try? context.save()
+      context.saveOrLog()
     } else {
       // Create new model if doesn't exist
       let model = EpisodeDownloadModel(
@@ -1017,7 +1063,7 @@ final class HomeViewModel {
         pubDate: episode.episodeInfo.pubDate
       )
       context.insert(model)
-      try? context.save()
+      context.saveOrLog()
     }
   }
 
@@ -1032,9 +1078,15 @@ final class HomeViewModel {
     )
 
     if let model = try? context.fetch(descriptor).first {
+      // Stop the episode first if it's the one playing — pause writes the live
+      // position, and that write must land before the played flag is set or it
+      // reads as a replay and clears it again.
+      if !model.isCompleted {
+        EnhancedAudioManager.shared.pauseIfCurrent(episodeId: key)
+      }
       model.setCompleted(!model.isCompleted)
       model.lastPlaybackPosition = 0
-      try? context.save()
+      context.saveOrLog()
     } else {
       // Create new model if doesn't exist
       let model = EpisodeDownloadModel(
@@ -1046,7 +1098,7 @@ final class HomeViewModel {
         pubDate: episode.episodeInfo.pubDate
       )
       context.insert(model)
-      try? context.save()
+      context.saveOrLog()
     }
 
     // Post notification — the completion observer will reload Up Next

@@ -370,6 +370,98 @@ struct ListeningJourneyTests {
         #expect((ranked.first?.score ?? 0) < UpNextSuggestionEngine.bonusInProgressBase)
     }
 
+    // MARK: - Mark as played sticks
+
+    @Test("Marking played mid-listen is not undone by the position write that follows")
+    func markPlayedSurvivesTrailingPositionWrite() throws {
+        let container = try makeContainer()
+        try withCoordinator(container) { coordinator, context in
+            // Listening, well short of the end.
+            coordinator.savePlaybackPosition(update: update(position: 600, duration: 1800))
+            #expect(fetchEpisode(context)?.isCompleted == false)
+
+            // Pausing force-writes the live position. That write has to land
+            // *before* the played flag is set — which is what the pause-first
+            // ordering in every togglePlayed call site guarantees.
+            coordinator.savePlaybackPosition(update: update(position: 600, duration: 1800))
+
+            let model = try #require(fetchEpisode(context))
+            model.setCompleted(true)
+            model.lastPlaybackPosition = 0
+            try context.save()
+
+            // No further position writes arrive, because playback was stopped.
+            #expect(fetchEpisode(context)?.isCompleted == true, "the mark must stick")
+            #expect(fetchEpisode(context)?.lastPlaybackPosition == 0, "and it restarts next time")
+        }
+    }
+
+    @Test("A position write arriving after the mark still undoes it — hence pause-first")
+    func markPlayedIsUndoneByALaterPositionWrite() throws {
+        let container = try makeContainer()
+        try withCoordinator(container) { coordinator, context in
+            coordinator.savePlaybackPosition(update: update(position: 600, duration: 1800))
+            let model = try #require(fetchEpisode(context))
+            model.setCompleted(true)
+            model.lastPlaybackPosition = 0
+            try context.save()
+
+            // This is the bug the pause-first ordering exists to prevent: a
+            // still-playing episode ticks its position in after the mark, and
+            // the replay heuristic clears the flag. Pinned so nobody "fixes"
+            // the ordering away without noticing what it was protecting.
+            coordinator.savePlaybackPosition(update: update(position: 601, duration: 1800))
+            #expect(
+                fetchEpisode(context)?.isCompleted == false,
+                "a live position write below 90% still reads as a replay"
+            )
+        }
+    }
+
+    // MARK: - The queue leads Up Next
+
+    @Test("A queued episode outranks every scored suggestion and is listed once")
+    func upNextPutsTheQueueFirst() {
+        // "Queued" is also the strongest scoring candidate here (in-progress),
+        // so if precedence were left to the engine the assertion would pass for
+        // the wrong reason. Rank it last by score and queue it anyway.
+        let cold = libraryEpisode(title: "Cold", position: 0, duration: 1800)
+        let started = libraryEpisode(title: "Started", position: 300, duration: 1800)
+        let scored = [started, cold]
+
+        let ordered = UpNextSuggestionEngine.merge(queued: [cold], scored: scored)
+
+        #expect(ordered.first?.episodeInfo.title == "Cold", "what the user queued outranks what the engine picked")
+        #expect(ordered.count == 2, "an episode that is both queued and scored is listed once")
+        #expect(ordered.map(\.episodeInfo.title) == ["Cold", "Started"])
+    }
+
+    @Test("Queue order is preserved ahead of the suggestions")
+    func upNextKeepsQueueOrder() {
+        let first = libraryEpisode(title: "First", position: 0, duration: 1800)
+        let second = libraryEpisode(title: "Second", position: 0, duration: 1800)
+        let suggestion = libraryEpisode(title: "Suggested", position: 600, duration: 1800)
+
+        let ordered = UpNextSuggestionEngine.merge(queued: [first, second], scored: [suggestion])
+
+        #expect(ordered.map(\.episodeInfo.title) == ["First", "Second", "Suggested"])
+    }
+
+    @Test("An empty queue leaves the scored order untouched")
+    func upNextWithEmptyQueueIsUnchanged() {
+        let a = libraryEpisode(title: "A", position: 300, duration: 1800)
+        let b = libraryEpisode(title: "B", position: 0, duration: 1800)
+
+        let ordered = UpNextSuggestionEngine.merge(queued: [], scored: [a, b])
+
+        #expect(ordered.map(\.episodeInfo.title) == ["A", "B"])
+    }
+
+    @Test("The In Queue badge reads as explicit intent")
+    func inQueueReasonLabel() {
+        #expect(SuggestionReason.inQueue(position: 1).label == "In Queue")
+    }
+
     // MARK: - Marking played from the Library
 
     @Test("Marking an episode played from the Library clears its progress")

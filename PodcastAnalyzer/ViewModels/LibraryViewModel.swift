@@ -57,6 +57,28 @@ struct LibraryEpisode: Identifiable, Hashable {
   }
 }
 
+// MARK: - Playback Conversion
+
+extension PlaybackEpisode {
+  /// The queue/playback shape of a library row. `nil` when the episode has no
+  /// audio URL — every caller already has to guard that case, so the failable
+  /// init keeps the check in one place instead of at each menu action.
+  init?(_ episode: LibraryEpisode) {
+    guard let audioURL = episode.episodeInfo.audioURL else { return nil }
+    self.init(
+      id: episode.id,
+      title: episode.episodeInfo.title,
+      podcastTitle: episode.podcastTitle,
+      audioURL: audioURL,
+      imageURL: episode.imageURL,
+      episodeDescription: episode.episodeInfo.podcastEpisodeDescription,
+      pubDate: episode.episodeInfo.pubDate,
+      duration: episode.episodeInfo.duration,
+      guid: episode.episodeInfo.guid
+    )
+  }
+}
+
 // MARK: - Downloading Episode Model
 
 struct DownloadingEpisode: Identifiable {
@@ -645,7 +667,7 @@ final class LibraryViewModel {
     for duplicate in duplicates {
       context.delete(duplicate)
     }
-    try? context.save()
+    context.saveOrLog()
     logger.warning("Removed \(duplicates.count) duplicate PodcastInfoModel entries")
   }
 
@@ -781,7 +803,7 @@ final class LibraryViewModel {
       }
       self.podcastTitleMap = titleMap
       self.podcastInfoByTitle = infoByTitle
-      if didBackfill { try? context.save() }
+      if didBackfill { context.saveOrLog() }
 
       logger.info("Loaded \(self.allPodcasts.count) total podcasts for episode lookups")
     } catch {
@@ -955,7 +977,7 @@ final class LibraryViewModel {
       for model in allModels where !keptIds.contains(ObjectIdentifier(model)) {
         context.delete(model)
       }
-      try? context.save()
+      context.saveOrLog()
       logger.warning("Removed \(duplicateCount) duplicate EpisodeDownloadModel entries")
     }
 
@@ -1039,7 +1061,7 @@ final class LibraryViewModel {
     }
 
     if pathChanges > 0 || discoveredCount > 0 {
-      try? context.save()
+      context.saveOrLog()
       logger.info("Sync: updated \(pathChanges) paths, discovered \(discoveredCount) new models")
     }
   }

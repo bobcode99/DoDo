@@ -16,6 +16,11 @@ struct UpNextCard: View {
   let episode: LibraryEpisode
   let onPlay: () -> Void
   var reason: SuggestionReason = .none
+
+  private var isQueued: Bool {
+    if case .inQueue = reason { return true }
+    return false
+  }
   @Environment(\.modelContext) private var modelContext
   @State private var statusObserver: EpisodeStatusObserver?
 
@@ -56,7 +61,7 @@ struct UpNextCard: View {
 
       // Suggestion reason badge
       switch reason {
-      case .inProgress, .starred, .downloaded:
+      case .inQueue, .inProgress, .starred, .downloaded:
         HStack(spacing: 3) {
           Image(systemName: reason.systemImage)
             .font(.system(size: 9))
@@ -64,7 +69,9 @@ struct UpNextCard: View {
             .font(.system(size: 10))
             .lineLimit(1)
         }
-        .foregroundStyle(.secondary)
+        // Queued rows are there because the user put them there — tint the
+        // badge so explicit intent reads differently from an inferred reason.
+        .foregroundStyle(isQueued ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         .padding(.top, 1)
       default:
         Spacer(minLength: 0)

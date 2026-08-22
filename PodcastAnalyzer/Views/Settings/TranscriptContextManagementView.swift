@@ -419,6 +419,6 @@ struct TranscriptContextEditorView: View {
       .filter { !$0.isEmpty }
     guard cleaned != podcast.transcriptionTerms else { return }
     podcast.transcriptionTerms = cleaned
-    try? modelContext.save()
+    modelContext.saveOrLog()
   }
 }

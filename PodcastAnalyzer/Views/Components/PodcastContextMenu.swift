@@ -16,6 +16,7 @@ struct PodcastContextMenu: ViewModifier {
 
   @State private var showUnsubscribeConfirmation = false
   @State private var showEpisodeFilterSheet = false
+  @State private var showPlaybackSettingsSheet = false
   @State private var showTranscribeBackfillSheet = false
 
   func body(content: Content) -> some View {
@@ -49,7 +50,7 @@ struct PodcastContextMenu: ViewModifier {
           set: { newValue in
             let wasOff = !podcast.autoTranscribeNewEpisodes
             podcast.autoTranscribeNewEpisodes = newValue
-            try? modelContext.save()
+            modelContext.saveOrLog()
             if newValue && wasOff {
               showTranscribeBackfillSheet = true
             }
@@ -63,7 +64,7 @@ struct PodcastContextMenu: ViewModifier {
           ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
             Button {
               podcast.autoDownloadSetting = setting.rawValue
-              try? modelContext.save()
+              modelContext.saveOrLog()
             } label: {
               // Branch rather than passing "" as the systemImage: Label always
               // builds an Image(systemName:), so the empty string is a real
@@ -88,6 +89,12 @@ struct PodcastContextMenu: ViewModifier {
           Label("Episode Filter…", systemImage: "line.3.horizontal.decrease.circle")
         }
 
+        Button {
+          showPlaybackSettingsSheet = true
+        } label: {
+          Label("Playback…", systemImage: "speedometer")
+        }
+
         Divider()
 
         Button(role: .destructive) {
@@ -98,6 +105,9 @@ struct PodcastContextMenu: ViewModifier {
       }
       .sheet(isPresented: $showEpisodeFilterSheet) {
         PodcastEpisodeFilterView(podcast: podcast, modelContext: modelContext)
+      }
+      .sheet(isPresented: $showPlaybackSettingsSheet) {
+        PodcastPlaybackSettingsView(podcast: podcast, modelContext: modelContext)
       }
       .sheet(isPresented: $showTranscribeBackfillSheet) {
         TranscribeBackfillSheet(

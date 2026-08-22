@@ -13,6 +13,11 @@ import Foundation
 /// Why an episode was surfaced in Up Next.
 /// The highest-priority applicable reason is shown as a badge on the card.
 enum SuggestionReason: Equatable {
+    /// The user explicitly queued this episode. Not produced by scoring — the
+    /// view model stamps it on rows taken from `EnhancedAudioManager.queue`,
+    /// which are ordered ahead of every scored suggestion. Explicit intent
+    /// outranks anything the engine can infer.
+    case inQueue(position: Int)
     case inProgress(percentComplete: Int)  // "32% done"
     case starred                            // "Saved"
     case downloaded                         // "Downloaded"
@@ -23,6 +28,7 @@ enum SuggestionReason: Equatable {
 
     var label: String {
         switch self {
+        case .inQueue:             return "In Queue"
         case .inProgress(let pct): return "\(pct)% done"
         case .starred:             return "Saved"
         case .downloaded:          return "Downloaded"
@@ -35,6 +41,7 @@ enum SuggestionReason: Equatable {
 
     var systemImage: String {
         switch self {
+        case .inQueue:       return "text.line.first.and.arrowtriangle.forward"
         case .inProgress:    return "play.circle.fill"
         case .starred:       return "star.fill"
         case .downloaded:    return "arrow.down.circle.fill"
@@ -147,6 +154,21 @@ struct UpNextSuggestionEngine {
             .sorted { $0.score > $1.score }
             .prefix(limit)
             .map { $0 }
+    }
+
+    /// Final Up Next ordering: explicitly queued episodes first, in queue
+    /// order, then the scored suggestions — with nothing listed twice.
+    ///
+    /// Kept here beside the scoring it overrides, and kept pure (no player, no
+    /// store) so the precedence rule is testable on its own: what the user
+    /// queued outranks anything the engine inferred.
+    static func merge(queued: [LibraryEpisode], scored: [LibraryEpisode]) -> [LibraryEpisode] {
+        var seen = Set<String>()
+        var ordered: [LibraryEpisode] = []
+        for episode in queued + scored where seen.insert(episode.id).inserted {
+            ordered.append(episode)
+        }
+        return ordered
     }
 
     // MARK: - Private: per-episode scoring

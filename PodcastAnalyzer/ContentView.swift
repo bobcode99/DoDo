@@ -33,7 +33,10 @@ struct iOSContentView: View {
   @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
   @State private var coordinator = TabNavigationCoordinator()
-  @State private var playbackAlertMessage: String?
+  /// Transient playback/queue problem to surface. Carries its own title so one
+  /// alert can serve every such notification instead of stacking a modifier per
+  /// message kind.
+  @State private var playbackAlert: (title: String, message: String)?
 
   var body: some View {
     // `visibleTab` is driven by TabView's own selection rather than by an
@@ -119,20 +122,31 @@ struct iOSContentView: View {
         named: .audioPlaybackUnavailable)
       {
         if let message = notification.userInfo?["message"] as? String {
-          playbackAlertMessage = message
+          playbackAlert = (title: "Can't Play Offline", message: message)
+        }
+      }
+    }
+    .task {
+      // Adding to a full queue used to no-op silently, which reads as a broken
+      // menu item rather than a limit.
+      for await notification in NotificationCenter.default.notifications(
+        named: .queueLimitReached)
+      {
+        if let message = notification.userInfo?["message"] as? String {
+          playbackAlert = (title: "Queue Is Full", message: message)
         }
       }
     }
     .alert(
-      "Can't Play Offline",
+      playbackAlert?.title ?? "",
       isPresented: Binding(
-        get: { playbackAlertMessage != nil },
-        set: { if !$0 { playbackAlertMessage = nil } }
+        get: { playbackAlert != nil },
+        set: { if !$0 { playbackAlert = nil } }
       )
     ) {
-      Button("OK", role: .cancel) { playbackAlertMessage = nil }
+      Button("OK", role: .cancel) { playbackAlert = nil }
     } message: {
-      Text(playbackAlertMessage ?? "")
+      Text(playbackAlert?.message ?? "")
     }
   }
 

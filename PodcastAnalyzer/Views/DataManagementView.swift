@@ -458,7 +458,7 @@ struct DataManagementView: View {
             episode.fileSize = 0
           }
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
       }
       downloadedAudioSize = "0 KB"
       isClearingData = false
@@ -488,7 +488,7 @@ struct DataManagementView: View {
         for analysis in analyses {
           modelContext.delete(analysis)
         }
-        try? modelContext.save()
+        modelContext.saveOrLog()
       }
       aiAnalysisCount = 0
       isClearingData = false

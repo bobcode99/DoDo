@@ -481,7 +481,7 @@ struct EpisodeListView: View {
               ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
                 Button {
                   podcastModel?.autoDownloadSetting = setting.rawValue
-                  try? modelContext.save()
+                  modelContext.saveOrLog()
                 } label: {
                   if podcastModel?.autoDownloadSetting == setting.rawValue {
                     Label(setting.displayName, systemImage: "checkmark")
@@ -498,7 +498,7 @@ struct EpisodeListView: View {
             Button {
               let wasOff = podcastModel?.autoTranscribeNewEpisodes != true
               podcastModel?.autoTranscribeNewEpisodes.toggle()
-              try? modelContext.save()
+              modelContext.saveOrLog()
               if wasOff && podcastModel?.autoTranscribeNewEpisodes == true {
                 showTranscribeBackfillSheet = true
               }

@@ -19,26 +19,31 @@ struct UpNextContextMenu: View {
   let onToggleStar: () -> Void
   let onTogglePlayed: () -> Void
   let onPlayNext: () -> Void
+  let onAddToQueue: () -> Void
   let onDownload: () -> Void
   let onCancelDownload: () -> Void
   let onDeleteDownload: () -> Void
   let onRetryDownload: () -> Void
-  /// Optional Apple-Podcasts-style "Remove from Up Next". When non-nil the
-  /// menu shows a destructive remove button after Share. Hide the episode
-  /// from Up Next without marking it played; replaying resurfaces it because
-  /// `lastPlayedDate` overtakes `upNextDismissedAt`.
-  var onRemoveFromUpNext: (() -> Void)? = nil
+  /// Optional "Remove from Queue". Non-nil only when this episode is actually
+  /// in `EnhancedAudioManager.queue` — the caller decides, because the menu
+  /// itself has no business observing the player.
+  var onRemoveFromQueue: (() -> Void)? = nil
+  /// Optional "Not Interested". Hides the episode from the Up Next
+  /// *suggestions* without marking it played; replaying resurfaces it because
+  /// `lastPlayedDate` overtakes `upNextDismissedAt`. Deliberately distinct
+  /// from `onRemoveFromQueue`: this one never touches the play queue.
+  var onDismissSuggestion: (() -> Void)? = nil
 
   var body: some View {
     goToShowSection
     starSection
     playedSection
     Divider()
-    playNextSection
+    queueSection
     downloadSection
     Divider()
     shareSection
-    removeFromUpNextSection
+    removeSections
   }
 
   // MARK: - Go to Show
@@ -80,15 +85,21 @@ struct UpNextContextMenu: View {
     }
   }
 
-  // MARK: - Play Next
+  // MARK: - Queue
 
   @ViewBuilder
-  private var playNextSection: some View {
+  private var queueSection: some View {
     if episode.episodeInfo.audioURL != nil {
       Button {
         onPlayNext()
       } label: {
         Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+      }
+
+      Button {
+        onAddToQueue()
+      } label: {
+        Label("Add to Queue", systemImage: "text.line.last.and.arrowtriangle.forward")
       }
 
       Divider()
@@ -146,14 +157,27 @@ struct UpNextContextMenu: View {
     }
   }
 
-  // MARK: - Remove from Up Next
+  // MARK: - Remove
 
+  /// Two different removals, deliberately worded apart. "Remove from Queue"
+  /// empties the episode out of the play queue; "Not Interested" only hides it
+  /// from the scored suggestions. Conflating them under one "Remove from Up
+  /// Next" label made the menu lie about which list it acted on.
   @ViewBuilder
-  private var removeFromUpNextSection: some View {
-    if let onRemoveFromUpNext {
+  private var removeSections: some View {
+    if onRemoveFromQueue != nil || onDismissSuggestion != nil {
       Divider()
-      Button(role: .destructive, action: onRemoveFromUpNext) {
-        Label("Remove from Up Next", systemImage: "text.badge.minus")
+    }
+
+    if let onRemoveFromQueue {
+      Button(role: .destructive, action: onRemoveFromQueue) {
+        Label("Remove from Queue", systemImage: "text.badge.minus")
+      }
+    }
+
+    if let onDismissSuggestion {
+      Button(action: onDismissSuggestion) {
+        Label("Not Interested", systemImage: "minus.circle")
       }
     }
   }
@@ -191,6 +215,7 @@ struct UpNextContextMenu: View {
       onToggleStar: {},
       onTogglePlayed: {},
       onPlayNext: {},
+      onAddToQueue: {},
       onDownload: {},
       onCancelDownload: {},
       onDeleteDownload: {},

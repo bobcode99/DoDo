@@ -29,7 +29,7 @@ enum LibraryEpisodeActions {
   ) {
     if let model = episodeModels[episode.id] {
       model.isStarred.toggle()
-      try? context.save()
+      context.saveOrLog()
     } else if createIfMissing, let audioURL = episode.episodeInfo.audioURL {
       let model = EpisodeDownloadModel(
         episodeTitle: episode.episodeInfo.title,
@@ -40,7 +40,7 @@ enum LibraryEpisodeActions {
       )
       model.isStarred = true
       context.insert(model)
-      try? context.save()
+      context.saveOrLog()
       episodeModels[episode.id] = model
     }
   }
@@ -54,9 +54,14 @@ enum LibraryEpisodeActions {
     createIfMissing: Bool = false
   ) {
     if let model = episodeModels[episode.id] {
+      // See HomeViewModel.togglePlayed: pause before marking, so the position
+      // write pause triggers can't be mistaken for a replay and undo the mark.
+      if !model.isCompleted {
+        EnhancedAudioManager.shared.pauseIfCurrent(episodeId: episode.id)
+      }
       model.setCompleted(!model.isCompleted)
       model.lastPlaybackPosition = 0
-      try? context.save()
+      context.saveOrLog()
     } else if createIfMissing, let audioURL = episode.episodeInfo.audioURL {
       let model = EpisodeDownloadModel(
         episodeTitle: episode.episodeInfo.title,
@@ -67,7 +72,7 @@ enum LibraryEpisodeActions {
       )
       context.insert(model)
       model.setCompleted(true)
-      try? context.save()
+      context.saveOrLog()
       episodeModels[episode.id] = model
     }
   }
@@ -93,7 +98,7 @@ enum LibraryEpisodeActions {
     )
     if let model = episodeModels[episode.id] {
       model.localAudioPath = nil
-      try? context.save()
+      context.saveOrLog()
     }
   }
 }

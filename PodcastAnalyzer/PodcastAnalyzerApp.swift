@@ -101,16 +101,32 @@ struct PodcastAnalyzerApp: App {
     } catch {
       // The project intentionally ships no schema migrations — a schema change
       // is allowed to reset the local store (see CLAUDE.md). Rather than brick
-      // the app on a migration failure, delete the incompatible stores (and their
-      // -wal/-shm sidecars) and rebuild them from scratch. This is what makes
+      // the app on a migration failure, move the incompatible stores (and their
+      // -wal/-shm sidecars) aside and rebuild from scratch. This is what makes
       // future schema changes (indexes, #Unique, new properties) safe to ship.
+      //
+      // Quarantine rather than delete: recovery is identical either way, but a
+      // moved-aside store can still be pulled off the device and read when a
+      // user reports losing data, which a deleted one cannot.
       logger.error("ModelContainer init failed, rebuilding store: \(error.localizedDescription, privacy: .public)")
       let fm = FileManager.default
+      let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
       for configuration in [localConfiguration, cloudConfiguration] {
         let storeURL = configuration.url
-        try? fm.removeItem(at: storeURL)
-        try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-wal"))
-        try? fm.removeItem(at: URL(fileURLWithPath: storeURL.path + "-shm"))
+        for path in [storeURL.path, storeURL.path + "-wal", storeURL.path + "-shm"] {
+          let source = URL(fileURLWithPath: path)
+          guard fm.fileExists(atPath: path) else { continue }
+          let quarantined = source.deletingLastPathComponent()
+            .appendingPathComponent("quarantined-\(stamp)-\(source.lastPathComponent)")
+          do {
+            try fm.moveItem(at: source, to: quarantined)
+          } catch {
+            // Quarantine is best-effort — a store we cannot move must still be
+            // removed, or the rebuild below fails for the same reason again.
+            logger.error("Quarantine failed for \(source.lastPathComponent, privacy: .public), deleting instead: \(error.localizedDescription, privacy: .public)")
+            try? fm.removeItem(at: source)
+          }
+        }
       }
       do {
         return try ModelContainer(for: fullSchema, configurations: [localConfiguration, cloudConfiguration])
@@ -292,6 +308,9 @@ struct PodcastAnalyzerApp: App {
         wasPlayingOnBackground = false
         #endif
       case .background:
+        // Land any debounced Up Next queue write before the process can be
+        // suspended and lose it.
+        PlaybackStateCoordinator.shared?.flushQueueWrites(EnhancedAudioManager.shared.queue)
         // App going to background - stop foreground timer, schedule background task
         BackgroundSyncManager.shared.stopForegroundSync()
         if BackgroundSyncManager.shared.isBackgroundSyncEnabled {
