@@ -69,18 +69,15 @@ final class MCPMenubarController {
       guard let item = statusItem else { return }
 
       if let button = item.button {
-        let symbolName: String
-        if case .error = mgr.status {
-          symbolName = "exclamationmark.triangle"
-        } else if mgr.isRunning {
-          symbolName = "network"
-        } else {
-          symbolName = "network.slash"
-        }
-        button.image = NSImage(
-          systemSymbolName: symbolName,
-          accessibilityDescription: "PodcastAnalyzer MCP"
-        )
+        // The DoDo mark, not SF Symbols' `network` globe. This item now stands
+        // for the app itself — headless mode means the app is running with no
+        // window — so a generic networking glyph named the wrong thing. Server
+        // trouble is a badge on the mark; the tooltip and the menu header carry
+        // the detail.
+        var isError = false
+        if case .error = mgr.status { isError = true }
+        button.image = DoDoMenubarIcon.image(showsBadge: isError)
+        button.image?.accessibilityDescription = isError ? "DoDo — server error" : "DoDo"
         button.toolTip = tooltip(for: mgr)
       }
       item.menu = buildMenu(for: mgr)
