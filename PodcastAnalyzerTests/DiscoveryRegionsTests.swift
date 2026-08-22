@@ -132,6 +132,21 @@ struct DiscoveryRegionsTests {
 
     // MARK: - Accent colour
 
+    @Test("Theme maps to the scheme preferredColorScheme expects")
+    func themeMapping() {
+        // nil is not "no preference expressed" here — it is what
+        // preferredColorScheme takes to mean "follow the device".
+        #expect(AppTheme.system.colorScheme == nil)
+        #expect(AppTheme.light.colorScheme == .light)
+        #expect(AppTheme.dark.colorScheme == .dark)
+    }
+
+    @Test("An unrecognised stored theme falls back to System")
+    func themeFallback() {
+        #expect(AppTheme(rawValue: "sepia") == nil, "unknown values resolve to nil, and the root then follows the device")
+        #expect(AppTheme(rawValue: AppTheme.dark.rawValue) == .dark)
+    }
+
     @Test("A filled button labels itself readably whatever the accent")
     func accentContrast() {
         // The bug this exists to prevent: .borderedProminent labels in white

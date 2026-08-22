@@ -195,10 +195,38 @@ struct GeneralSettingsTab: View {
 struct AppearanceSettingsTab: View {
   let viewModel: SettingsViewModel
 
+  @AppStorage(AppThemeDefaults.key) private var themeRaw = AppTheme.system.rawValue
+  @AppStorage(AppAccentColorDefaults.key) private var accentRaw = ""
+
+  private var accentColor: Color {
+    AppAccentColorDefaults.decode(accentRaw) ?? .accentColor
+  }
+
   var body: some View {
     @Bindable var viewModel = viewModel
 
     Form {
+      Section {
+        Picker("Appearance", selection: $themeRaw) {
+          ForEach(AppTheme.allCases) { theme in
+            Label(theme.titleKey, systemImage: theme.systemImage).tag(theme.rawValue)
+          }
+        }
+
+        ColorPicker("Accent Colour", selection: Binding(
+          get: { accentColor },
+          set: { accentRaw = AppAccentColorDefaults.encode($0) }
+        ), supportsOpacity: false)
+
+        if !accentRaw.isEmpty {
+          Button("Use System Default") { accentRaw = "" }
+        }
+      } header: {
+        Text("Theme")
+      } footer: {
+        Text("System follows your Mac's Light/Dark setting.")
+      }
+
       Section {
         Toggle("Show Episode Artwork", isOn: $viewModel.showEpisodeArtwork)
           .onChange(of: viewModel.showEpisodeArtwork) { _, newValue in
@@ -908,14 +936,6 @@ struct StorageSettingsTab: View {
       if let analyses = try? modelContext.fetch(descriptor) {
         for analysis in analyses {
           modelContext.delete(analysis)
-        }
-        modelContext.saveOrLog()
-      }
-
-      let tagsDescriptor = FetchDescriptor<EpisodeQuickTagsModel>()
-      if let tags = try? modelContext.fetch(tagsDescriptor) {
-        for tag in tags {
-          modelContext.delete(tag)
         }
         modelContext.saveOrLog()
       }

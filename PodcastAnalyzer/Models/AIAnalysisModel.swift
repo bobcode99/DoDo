@@ -153,51 +153,6 @@ struct QAEntry: Codable, Sendable {
     }
 }
 
-// MARK: - Episode Quick Tags (On-Device)
-
-@Model
-final class EpisodeQuickTagsModel {
-    #Index<EpisodeQuickTagsModel>([\.episodeAudioURL])
-
-    // Link to episode
-    var episodeAudioURL: String = ""
-    var episodeTitle: String = ""
-
-    // Tags data
-    var tags: [String] = []
-    var primaryCategory: String = ""
-    var secondaryCategory: String?
-    var contentType: String = ""
-    var difficulty: String = ""
-
-    // Brief summary
-    var briefSummary: String?
-
-    // Timestamps
-    var generatedAt: Date = Date()
-
-    init(
-        episodeAudioURL: String,
-        episodeTitle: String,
-        tags: [String],
-        primaryCategory: String,
-        secondaryCategory: String?,
-        contentType: String,
-        difficulty: String,
-        briefSummary: String? = nil
-    ) {
-        self.episodeAudioURL = episodeAudioURL
-        self.episodeTitle = episodeTitle
-        self.tags = tags
-        self.primaryCategory = primaryCategory
-        self.secondaryCategory = secondaryCategory
-        self.contentType = contentType
-        self.difficulty = difficulty
-        self.briefSummary = briefSummary
-        self.generatedAt = Date()
-    }
-}
-
 // MARK: - Q&A Highlight
 
 /// A structured Q&A pair extracted from a podcast episode

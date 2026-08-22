@@ -376,9 +376,33 @@ struct TranscriptContextEditorView: View {
 
   private struct TermEntry: Identifiable { let id = UUID(); var text: String }
   @State private var entries: [TermEntry] = []
+  @State private var hosts: [TermEntry] = []
 
   var body: some View {
     List {
+      Section {
+        ForEach($hosts) { $host in
+          TextField("Host name", text: $host.text)
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.words)
+            #endif
+        }
+        .onDelete { hosts.remove(atOffsets: $0) }
+
+        Button {
+          hosts.append(TermEntry(text: ""))
+        } label: {
+          Label("Add host", systemImage: "plus.circle.fill")
+        }
+      } header: {
+        Text("Hosts")
+      } footer: {
+        // One entry, two jobs — worth saying, because otherwise a user who has
+        // already listed hosts below would reasonably skip this section.
+        Text("Who presents this show. Used to tell the AI who is speaking, and to help the recognizer spell their names right.")
+      }
+
       Section {
         ForEach($entries) { $entry in
           TextField("Name or term", text: $entry.text)
@@ -400,7 +424,7 @@ struct TranscriptContextEditorView: View {
         Text("One name or term per row — e.g. host and guest names, companies, or jargon the recognizer tends to get wrong. Leave empty to remove this show's context.")
       }
     }
-    .navigationTitle("Edit Terms")
+    .navigationTitle("Show Context")
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
     #endif
@@ -411,14 +435,37 @@ struct TranscriptContextEditorView: View {
   private func load() {
     entries = podcast.transcriptionTerms.map { TermEntry(text: $0) }
     if entries.isEmpty { entries = [TermEntry(text: "")] }  // one empty starter row
+    // Seed from whatever the feed credited, so a show publishing
+    // <podcast:person> or itunes:author needs no typing at all.
+    let seeded = podcast.hostNames.isEmpty
+      ? (podcast.feedHostNames.isEmpty
+          ? (podcast.feedAuthor.isEmpty ? [] : [podcast.feedAuthor])
+          : podcast.feedHostNames)
+      : podcast.hostNames
+    hosts = seeded.map { TermEntry(text: $0) }
+    if hosts.isEmpty { hosts = [TermEntry(text: "")] }
   }
 
   private func save() {
-    let cleaned = entries
+    var changed = false
+
+    let cleanedTerms = entries
       .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
-    guard cleaned != podcast.transcriptionTerms else { return }
-    podcast.transcriptionTerms = cleaned
+    if cleanedTerms != podcast.transcriptionTerms {
+      podcast.transcriptionTerms = cleanedTerms
+      changed = true
+    }
+
+    let cleanedHosts = hosts
+      .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    if cleanedHosts != podcast.hostNames {
+      podcast.hostNames = cleanedHosts
+      changed = true
+    }
+
+    guard changed else { return }
     modelContext.saveOrLog()
   }
 }

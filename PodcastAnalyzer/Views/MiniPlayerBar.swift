@@ -77,16 +77,31 @@ struct MiniPlayerBar: View {
 
             // Episode info
             VStack(alignment: .leading, spacing: 2) {
-              MarqueeText(
-                text: audioManager.currentEpisode?.title ?? "Not Playing",
-                font: .subheadline,
-                fontWeight: .medium
-              )
+              // Branch rather than `?? String(localized:)`: a literal reaching
+              // Text/LocalizedStringKey resolves through the environment locale,
+              // and so follows the in-app language. A String fallback resolves
+              // against the *system* language and stayed Chinese on a Chinese
+              // device even with the app set to English.
+              if let title = audioManager.currentEpisode?.title {
+                MarqueeText(text: title, font: .subheadline, fontWeight: .medium)
+              } else {
+                Text("Not Playing")
+                  .font(.subheadline)
+                  .fontWeight(.medium)
+                  .lineLimit(1)
+              }
 
-              Text(audioManager.currentEpisode?.podcastTitle ?? "Select an episode to play")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+              if let podcastTitle = audioManager.currentEpisode?.podcastTitle {
+                Text(podcastTitle)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  .lineLimit(1)
+              } else {
+                Text("Select an episode to play")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  .lineLimit(1)
+              }
             }
           }
           .allowsHitTesting(false)

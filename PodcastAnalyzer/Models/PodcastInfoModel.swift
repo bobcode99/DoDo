@@ -164,6 +164,49 @@ class PodcastInfoModel {
   /// Minimum episode duration in seconds; 0 = no minimum.
   var episodeFilterMinDuration: Int = 0
 
+  /// `itunes:author` as published. Often a company rather than a person, so it
+  /// is only used as a host when nothing better names one.
+  var feedAuthor: String = ""
+
+  /// Hosts credited by `<podcast:person>` at channel level.
+  /// Distinct from `hostNames`, which the user maintains and which wins.
+  var feedHostNames: [String] = []
+
+  /// Episode GUID → guest names, as JSON.
+  ///
+  /// A `[String: [String]]` stored property crashes when SwiftData materializes
+  /// the model, so this follows the same JSON-column shape as
+  /// `EpisodeTranscriptModel.segmentsJSON`.
+  var episodeGuestsJSON: String = ""
+
+  /// Decoded view of `episodeGuestsJSON`.
+  var episodeGuestNames: [String: [String]] {
+    get {
+      guard let data = episodeGuestsJSON.data(using: .utf8),
+            let decoded = try? JSONDecoder().decode([String: [String]].self, from: data)
+      else { return [:] }
+      return decoded
+    }
+    set {
+      guard !newValue.isEmpty,
+            let data = try? JSONEncoder().encode(newValue),
+            let json = String(data: data, encoding: .utf8)
+      else {
+        episodeGuestsJSON = ""
+        return
+      }
+      episodeGuestsJSON = json
+    }
+  }
+
+  /// The show's regular hosts, in speaking prominence order.
+  ///
+  /// Feeds the AI analysis prompt so the model knows who is in the room, and is
+  /// appended to the speech recognizer's contextual strings so the same names
+  /// come out spelled correctly — one entry, both benefits. Kept apart from
+  /// `transcriptionTerms` because those are jargon with no speaking role.
+  var hostNames: [String] = []
+
   /// Per-podcast transcription vocabulary: proper nouns / jargon (host & guest
   /// names, companies, terms) applied to the SpeechAnalyzer as contextual
   /// strings so on-device transcription spells them correctly. User-edited and
@@ -184,6 +227,11 @@ class PodcastInfoModel {
     self.imageURL = podcastInfo.imageURL
     self.episodeCount = podcastInfo.episodes.count
     self.latestEpisodeDate = podcastInfo.episodes.lazy.compactMap(\.pubDate).max()
+    self.feedAuthor = podcastInfo.author ?? ""
+    self.feedHostNames = podcastInfo.people.filter(\.isHost).map(\.name)
+    self.episodeGuestNames = podcastInfo.episodePeople.mapValues { people in
+      people.filter { $0.role == "guest" }.map(\.name)
+    }.filter { !$0.value.isEmpty }
   }
 
   /// The single funnel for replacing the stored podcast snapshot. SwiftData
@@ -195,6 +243,11 @@ class PodcastInfoModel {
   /// the podcast snapshot through here so the query mirrors stay in sync.
   func applyPodcastInfo(_ info: PodcastInfo) {
     self.podcastInfo = info
+    self.feedAuthor = info.author ?? ""
+    self.feedHostNames = info.people.filter(\.isHost).map(\.name)
+    self.episodeGuestNames = info.episodePeople.mapValues { people in
+      people.filter { $0.role == "guest" }.map(\.name)
+    }.filter { !$0.value.isEmpty }
     self.title = info.title
     self.rssUrl = info.rssUrl
     self.imageURL = info.imageURL

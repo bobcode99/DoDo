@@ -170,11 +170,21 @@ struct MacHomeContentView: View {
 
   // MARK: - For You Section
 
+  private static func emptyMessage(for failure: RecommendationFailure?) -> LocalizedStringKey {
+    switch failure {
+    case .noHistory:       "Play an episode or two and suggestions will appear here."
+    case .modelUnavailable: "Apple Intelligence isn't available on this device right now."
+    case .noCandidates:    "Nothing new to suggest — you're caught up on your shows."
+    case .generationFailed, .none: "Couldn't build suggestions just now. Try again."
+    }
+  }
+
   @available(macOS 26.0, *)
   @ViewBuilder
   private var forYouSection: some View {
-    if viewModel.showForYouRecommendations
-      && (!viewModel.recommendedEpisodes.isEmpty || viewModel.isLoadingRecommendations) {
+    // Only the toggle hides this — see ForYouSection for why an empty list
+    // must not.
+    if viewModel.showForYouRecommendations {
       VStack(alignment: .leading, spacing: 12) {
         HStack {
           Image(systemName: "star.leadinghalf.filled")
@@ -210,10 +220,18 @@ struct MacHomeContentView: View {
           }
           .frame(maxWidth: .infinity)
           .padding(.vertical, 24)
+        } else if viewModel.recommendedEpisodes.isEmpty {
+          Text(Self.emptyMessage(for: viewModel.recommendationFailure))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
         } else {
           ScrollView(.horizontal) {
             HStack(spacing: 14) {
-              ForEach(viewModel.recommendedEpisodes) { episode in
+              ForEach(viewModel.recommendedEpisodes) { recommendation in
+                let episode = recommendation.episode
                 NavigationLink(
                   value: EpisodeDetailRoute(
                     episode: episode.episodeInfo,
@@ -222,7 +240,7 @@ struct MacHomeContentView: View {
                     podcastLanguage: episode.language
                   )
                 ) {
-                  ForYouCard(episode: episode)
+                  ForYouCard(episode: episode, reason: recommendation.reason)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {

@@ -44,3 +44,36 @@ final class LanguageManager {
     AppLanguage(id: "zh-Hans", displayName: "简体中文"),
   ]
 }
+
+// MARK: - Localizing for String-typed APIs
+
+extension LanguageManager {
+  /// Bundle carrying the app-language strings, or nil to use the default.
+  ///
+  /// Selecting a language means selecting a *bundle*: `String(localized:)` reads
+  /// the system language, and its `locale:` argument only controls how numbers
+  /// and dates inside the string are formatted — it does not choose the table.
+  var stringsBundle: Bundle? {
+    guard appLanguage != "system",
+          let path = Bundle.main.path(forResource: appLanguage, ofType: "lproj"),
+          let bundle = Bundle(path: path)
+    else { return nil }
+    return bundle
+  }
+}
+
+extension String {
+  /// Localize against the app's own language setting.
+  ///
+  /// SwiftUI views taking a `LocalizedStringKey` don't need this — they resolve
+  /// through `\.environment(\.locale)` already. Use it only where an API
+  /// genuinely requires a `String`, and prefer restructuring so the literal
+  /// reaches a `Text` instead.
+  @MainActor
+  static func appLocalized(_ key: String) -> String {
+    guard let bundle = LanguageManager.shared.stringsBundle else {
+      return Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+    }
+    return bundle.localizedString(forKey: key, value: nil, table: nil)
+  }
+}

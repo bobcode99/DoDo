@@ -60,7 +60,6 @@ final class BackupService {
             FetchDescriptor<QueueItemModel>(sortBy: [SortDescriptor(\.position)])
         )) ?? []
         let analysisModels = (try? ctx.fetch(FetchDescriptor<EpisodeAIAnalysis>())) ?? []
-        let quickTagsModels = (try? ctx.fetch(FetchDescriptor<EpisodeQuickTagsModel>())) ?? []
 
         progress = 0.5
         status = "Encoding…"
@@ -74,7 +73,6 @@ final class BackupService {
             episodes: episodeModels.map(BackupEpisode.init(from:)),
             queue: queueModels.map(BackupQueueItem.init(from:)),
             aiAnalyses: analysisModels.map(BackupAIAnalysis.init(from:)),
-            quickTags: quickTagsModels.map(BackupQuickTags.init(from:)),
             settings: BackupSettings.snapshotSafe(),
             aiFormatHints: AISettingsManager.shared.allFormatHints
         )
@@ -106,7 +104,6 @@ final class BackupService {
         var episodesUpdated: Int = 0
         var queueReplaced: Int = 0
         var analysesUpserted: Int = 0
-        var quickTagsUpserted: Int = 0
         var settingsApplied: Int = 0
         var formatHintsRestored: Int = 0
         var warnings: [String] = []
@@ -197,9 +194,6 @@ final class BackupService {
         progress = 0.93
         for ba in archive.aiAnalyses {
             upsertAIAnalysis(ba, in: ctx, summary: &summary)
-        }
-        for bq in archive.quickTags {
-            upsertQuickTags(bq, in: ctx, summary: &summary)
         }
 
         // 5b. Per-podcast AI "Show Format" hints — restore via existing setter (overwrites on conflict).
@@ -391,45 +385,6 @@ final class BackupService {
         }
     }
 
-    private func upsertQuickTags(
-        _ bq: BackupQuickTags,
-        in ctx: ModelContext,
-        summary: inout ImportSummary
-    ) {
-        let url = bq.episodeAudioURL
-        let title = bq.episodeTitle
-        let existing = try? ctx.fetch(FetchDescriptor<EpisodeQuickTagsModel>(
-            predicate: #Predicate { $0.episodeAudioURL == url && $0.episodeTitle == title }
-        )).first
-
-        guard let e = existing else {
-            let m = EpisodeQuickTagsModel(
-                episodeAudioURL: bq.episodeAudioURL,
-                episodeTitle: bq.episodeTitle,
-                tags: bq.tags,
-                primaryCategory: bq.primaryCategory,
-                secondaryCategory: bq.secondaryCategory,
-                contentType: bq.contentType,
-                difficulty: bq.difficulty,
-                briefSummary: bq.briefSummary
-            )
-            m.generatedAt = bq.generatedAt
-            ctx.insert(m)
-            summary.quickTagsUpserted += 1
-            return
-        }
-
-        if bq.generatedAt > e.generatedAt {
-            e.tags = bq.tags
-            e.primaryCategory = bq.primaryCategory
-            e.secondaryCategory = bq.secondaryCategory
-            e.contentType = bq.contentType
-            e.difficulty = bq.difficulty
-            e.briefSummary = bq.briefSummary
-            e.generatedAt = bq.generatedAt
-            summary.quickTagsUpserted += 1
-        }
-    }
 
     func dismissProgressSheet() {
         showProgressSheet = false
@@ -510,19 +465,6 @@ extension BackupAIAnalysis {
     }
 }
 
-extension BackupQuickTags {
-    init(from m: EpisodeQuickTagsModel) {
-        self.episodeAudioURL = m.episodeAudioURL
-        self.episodeTitle = m.episodeTitle
-        self.tags = m.tags
-        self.primaryCategory = m.primaryCategory
-        self.secondaryCategory = m.secondaryCategory
-        self.contentType = m.contentType
-        self.difficulty = m.difficulty
-        self.briefSummary = m.briefSummary
-        self.generatedAt = m.generatedAt
-    }
-}
 
 extension BackupSettings {
     /// Read every safelisted UserDefaults key, drop entries the deny list rejects.

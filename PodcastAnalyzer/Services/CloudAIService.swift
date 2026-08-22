@@ -97,6 +97,7 @@ final class CloudAIService {
         analysisType: CloudAnalysisType,
         podcastLanguage: String? = nil,
         formatHint: String? = nil,
+        speakerBlock: String = "",
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
     ) async throws -> CloudAnalysisResult {
         progressCallback?("Starting Shortcuts analysis...", 0.2)
@@ -112,7 +113,8 @@ final class CloudAIService {
             podcastTitle: podcastTitle,
             analysisType: analysisType,
             podcastLanguage: podcastLanguage,
-            formatHint: formatHint
+            formatHint: formatHint,
+            speakerBlock: speakerBlock,
         )
 
         progressCallback?("Running shortcut...", 0.4)
@@ -280,7 +282,8 @@ final class CloudAIService {
         podcastTitle: String,
         analysisType: CloudAnalysisType,
         podcastLanguage: String? = nil,
-        formatHint: String? = nil
+        formatHint: String? = nil,
+        speakerBlock: String = ""
     ) -> String {
         let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\nLanguage: \(languageInstruction)"
@@ -330,7 +333,7 @@ final class CloudAIService {
             "entertainingMoments": ["moment1"] or null,
             "qaHighlights": [{"question": "question text", "answer": "answer text"}] or null if no Q&A section exists,
             "conclusion": "Overall assessment and who would benefit from this episode"
-        }\(quotesNote)\(formatHintLine)\(languageLine)
+        }\(quotesNote)\(formatHintLine)\(speakerBlock)\(languageLine)
 
         Transcript:
         \(transcript)
@@ -354,6 +357,7 @@ final class CloudAIService {
         analysisType: CloudAnalysisType,
         podcastLanguage: String? = nil,
         formatHint: String? = nil,
+        speakerBlock: String = "",
         transcriptSegments: [QuotesFinder.Segment] = [],
         onChunk: @escaping @Sendable (String) -> Void,
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
@@ -377,6 +381,7 @@ final class CloudAIService {
                 analysisType: analysisType,
                 podcastLanguage: podcastLanguage,
                 formatHint: formatHint,
+                speakerBlock: speakerBlock,
                 progressCallback: progressCallback
             )
             return Self.enrichQuotes(in: result, segments: transcriptSegments)
@@ -398,6 +403,7 @@ final class CloudAIService {
             for: analysisType,
             podcastLanguage: podcastLanguage,
             formatHint: formatHint,
+            speakerBlock: speakerBlock,
             transcriptFormatOverride: analyzeFormat
         )
         let userPrompt = buildUserPrompt(
@@ -406,6 +412,7 @@ final class CloudAIService {
             podcastTitle: podcastTitle,
             analysisType: analysisType,
             formatHint: formatHint,
+            speakerBlock: speakerBlock,
             transcriptFormatOverride: analyzeFormat
         )
 
@@ -509,6 +516,7 @@ final class CloudAIService {
         analysisType: CloudAnalysisType,
         podcastLanguage: String? = nil,
         formatHint: String? = nil,
+        speakerBlock: String = "",
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
     ) async throws -> CloudAnalysisResult {
         let provider = settings.selectedProvider
@@ -526,13 +534,14 @@ final class CloudAIService {
         // Format transcript based on user's preference (segment-based vs sentence-based)
         let formattedTranscript = settings.transcriptFormat.formatTranscript(transcript)
 
-        let systemPrompt = buildSystemPrompt(for: analysisType, podcastLanguage: podcastLanguage, formatHint: formatHint)
+        let systemPrompt = buildSystemPrompt(for: analysisType, podcastLanguage: podcastLanguage, formatHint: formatHint, speakerBlock: speakerBlock)
         let userPrompt = buildUserPrompt(
             transcript: formattedTranscript,
             episodeTitle: episodeTitle,
             podcastTitle: podcastTitle,
             analysisType: analysisType,
-            formatHint: formatHint
+            formatHint: formatHint,
+            speakerBlock: speakerBlock,
         )
 
         progressCallback?("Sending to \(provider.displayName)...", 0.3)
@@ -771,6 +780,7 @@ final class CloudAIService {
         podcastTitle: String,
         podcastLanguage: String? = nil,
         formatHint: String? = nil,
+        speakerBlock: String = "",
         transcriptFormatOverride: TranscriptFormatForAI? = nil,
         plainText: Bool = false
     ) -> (system: String, user: String) {
@@ -782,6 +792,7 @@ final class CloudAIService {
             for: type,
             podcastLanguage: podcastLanguage,
             formatHint: formatHint,
+            speakerBlock: speakerBlock,
             transcriptFormatOverride: effectiveFormat,
             plainText: plainText
         )
@@ -791,6 +802,7 @@ final class CloudAIService {
             podcastTitle: podcastTitle,
             analysisType: type,
             formatHint: formatHint,
+            speakerBlock: speakerBlock,
             transcriptFormatOverride: effectiveFormat
         )
         return (system, user)
@@ -798,7 +810,7 @@ final class CloudAIService {
 
     // MARK: - Private: Build Prompts
 
-    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil, transcriptFormatOverride: TranscriptFormatForAI? = nil, plainText: Bool = false) -> String {
+    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil, speakerBlock: String = "", transcriptFormatOverride: TranscriptFormatForAI? = nil, plainText: Bool = false) -> String {
         // Get language instruction based on user setting
         let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
@@ -825,7 +837,7 @@ final class CloudAIService {
                 return """
                 You are an expert podcast analyst. Answer in clear, readable plain text — use short headings and bullet points where helpful. Do NOT return JSON or code blocks; write it as if explaining the episode to a curious listener.
 
-                Cover: a 2–3 paragraph overview; the main topics with their key points; key takeaways and insights; notable people, organizations, products, and resources mentioned; highlights; memorable quotes\(quoteTimestampNote); any action items; and a short conclusion on who would benefit.\(formatHintLine)\(languageLine)
+                Cover: a 2–3 paragraph overview; the main topics with their key points; key takeaways and insights; notable people, organizations, products, and resources mentioned; highlights; memorable quotes\(quoteTimestampNote); any action items; and a short conclusion on who would benefit.\(formatHintLine)\(speakerBlock)\(languageLine)
                 """
             }
 
@@ -866,7 +878,7 @@ final class CloudAIService {
                 "entertainingMoments": ["moment1"] or null,
                 "qaHighlights": [{"question": "question text", "answer": "answer text"}] or null if no Q&A section exists,
                 "conclusion": "Overall assessment and who would benefit from this episode"
-            }\(quotesNote)\(formatHintLine)\(languageLine)
+            }\(quotesNote)\(formatHintLine)\(speakerBlock)\(languageLine)
             """
         }
     }
@@ -877,6 +889,7 @@ final class CloudAIService {
         podcastTitle: String,
         analysisType: CloudAnalysisType,
         formatHint: String? = nil,
+        speakerBlock: String = "",
         transcriptFormatOverride: TranscriptFormatForAI? = nil
     ) -> String {
         let instruction: String

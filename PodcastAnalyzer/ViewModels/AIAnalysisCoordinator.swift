@@ -37,9 +37,6 @@ final class AIAnalysisCoordinator {
 
   // MARK: - On-Device State
 
-  var onDeviceAIAvailability: FoundationModelsAvailability = .unavailable(reason: "Checking...")
-  var quickTagsState: AnalysisState = .idle
-  var quickTagsCache: CachedQuickTags = CachedQuickTags()
 
   // MARK: - Cloud State
 
@@ -96,9 +93,6 @@ final class AIAnalysisCoordinator {
 
   // MARK: - Task Ownership
 
-  @ObservationIgnored private var onDeviceAICheckTask: Task<Void, Never>?
-  @ObservationIgnored private var quickTagsTask: Task<Void, Never>?
-  @ObservationIgnored private var briefSummaryTask: Task<Void, Never>?
   @ObservationIgnored private var cloudQuestionTask: Task<Void, Never>?
   @ObservationIgnored private var cloudJobObserverTask: Task<Void, Never>?
 
@@ -154,111 +148,6 @@ final class AIAnalysisCoordinator {
     }
   }
 
-  // MARK: - On-Device AI (Quick Tags from Metadata)
-
-  /// Check if on-device Foundation Models are available
-  func checkOnDeviceAIAvailability() {
-    if #available(iOS 26.0, macOS 26.0, *) {
-      onDeviceAICheckTask?.cancel()
-      onDeviceAICheckTask = Task { [weak self] in
-        let service = AppleFoundationModelsService()
-        let availability = await service.checkAvailability()
-        guard !Task.isCancelled, let self else { return }
-        self.onDeviceAIAvailability = availability
-      }
-    } else {
-      onDeviceAIAvailability = .unavailable(reason: "Requires iOS 26 or later")
-    }
-  }
-
-  /// Generate quick tags from episode metadata (on-device, fast)
-  func generateQuickTags() {
-    guard #available(iOS 26.0, macOS 26.0, *) else {
-      quickTagsState = .error("Requires iOS 26 or later")
-      return
-    }
-
-    guard onDeviceAIAvailability.isAvailable else {
-      quickTagsState = .error(onDeviceAIAvailability.message ?? "On-device AI unavailable")
-      return
-    }
-
-    quickTagsTask?.cancel()
-    quickTagsTask = Task { [weak self] in
-      guard let self else { return }
-      do {
-        self.quickTagsState = .analyzing(progress: 0, message: "Generating tags...")
-
-        let service = AppleFoundationModelsService()
-        let tags = try await service.generateQuickTags(
-          title: self.episode.title,
-          description: self.episode.podcastEpisodeDescription ?? "",
-          podcastTitle: self.podcastTitle,
-          duration: self.episode.duration.map { TimeInterval($0) },
-          releaseDate: self.episode.pubDate,
-          progressCallback: { [weak self] message, progress in
-            Task { @MainActor in
-              self?.quickTagsState = .analyzing(progress: progress, message: message)
-            }
-          }
-        )
-
-        guard !Task.isCancelled else { return }
-        self.quickTagsCache.tags = tags
-        self.quickTagsCache.generatedAt = Date()
-        self.quickTagsState = .completed
-
-        self.saveQuickTagsToSwiftData(tags: tags)
-
-        logger.info("Quick tags generated successfully")
-      } catch {
-        self.quickTagsState = .error("Failed: \(error.localizedDescription)")
-        logger.error("Quick tags generation failed: \(error.localizedDescription, privacy: .public)")
-      }
-    }
-  }
-
-  /// Generate brief summary from metadata (on-device, fast)
-  func generateBriefSummary() {
-    guard #available(iOS 26.0, macOS 26.0, *) else {
-      quickTagsState = .error("Requires iOS 26 or later")
-      return
-    }
-
-    guard onDeviceAIAvailability.isAvailable else {
-      quickTagsState = .error(onDeviceAIAvailability.message ?? "On-device AI unavailable")
-      return
-    }
-
-    briefSummaryTask?.cancel()
-    briefSummaryTask = Task { [weak self] in
-      guard let self else { return }
-      do {
-        self.quickTagsState = .analyzing(progress: 0, message: "Creating summary...")
-
-        let service = AppleFoundationModelsService()
-        let summary = try await service.generateBriefSummary(
-          title: self.episode.title,
-          description: self.episode.podcastEpisodeDescription ?? "",
-          progressCallback: { [weak self] message, progress in
-            Task { @MainActor in
-              self?.quickTagsState = .analyzing(progress: progress, message: message)
-            }
-          }
-        )
-
-        guard !Task.isCancelled else { return }
-        self.quickTagsCache.briefSummary = summary
-        self.quickTagsCache.generatedAt = Date()
-        self.quickTagsState = .completed
-        logger.info("Brief summary generated successfully")
-      } catch {
-        self.quickTagsState = .error("Failed: \(error.localizedDescription)")
-        logger.error("Brief summary generation failed: \(error.localizedDescription, privacy: .public)")
-      }
-    }
-  }
-
   // MARK: - Cloud AI (BYOK)
 
   /// Generate cloud-based transcript analysis with streaming.
@@ -307,6 +196,7 @@ final class AIAnalysisCoordinator {
       type: type,
       podcastLanguage: podcastLanguage,
       formatHint: formatHint,
+      speakerBlock: resolveSpeakerContext().promptBlock,
       modelContext: context
     )
   }
@@ -401,8 +291,6 @@ final class AIAnalysisCoordinator {
 
   /// Clear all AI results
   func clearAllAIResults() {
-    quickTagsCache.clear()
-    quickTagsState = .idle
     cloudAnalysisCache.clearAll()
     CloudAnalysisJobCoordinator.shared.cancel(audioURL: cloudJobKey)
     cloudAnalysisState = .idle
@@ -450,27 +338,45 @@ final class AIAnalysisCoordinator {
       restoreCloudAnalysisFromModel(cloudModel)
     }
 
-    // Load quick tags (same fallback pattern; EpisodeQuickTagsModel only
-    // carries episodeTitle, so the fallback key is title-only).
-    let tagsDescriptor = FetchDescriptor<EpisodeQuickTagsModel>(
-      predicate: #Predicate { $0.episodeAudioURL == audioURL }
-    )
-    var tagsModel = (try? context.fetch(tagsDescriptor))?.first
-    if tagsModel == nil, !episodeTitle.isEmpty {
-      let titleDescriptor = FetchDescriptor<EpisodeQuickTagsModel>(
-        predicate: #Predicate { $0.episodeTitle == episodeTitle }
+  }
+
+  /// Assemble who is speaking, cheapest source first.
+  ///
+  /// The show roster is user-maintained and authoritative; `podcast:person` is
+  /// exact where a feed publishes it; `itunes:author` is a weak host fallback.
+  /// Transcript labels are the only source proving who actually speaks, but the
+  /// analyze path flattens the transcript to sentences before sending it, so
+  /// `transcriptIsLabelled` stays false and the prompt says so explicitly.
+  private func resolveSpeakerContext() -> SpeakerContext {
+    var roster: [String] = []
+    var author: String?
+    var feedPeople: [PodcastPerson] = []
+
+    if let context = modelContext {
+      let title = podcastTitle
+      var descriptor = FetchDescriptor<PodcastInfoModel>(
+        predicate: #Predicate { $0.title == title }
       )
-      if let fallback = (try? context.fetch(titleDescriptor))?.first {
-        tagsModel = fallback
-        if !audioURL.isEmpty, fallback.episodeAudioURL != audioURL {
-          fallback.episodeAudioURL = audioURL
-          context.saveOrLog()
+      descriptor.fetchLimit = 1
+      if let model = (try? context.fetch(descriptor))?.first {
+        roster = model.hostNames
+        author = model.feedAuthor
+        feedPeople = model.feedHostNames.map {
+          PodcastPerson(name: $0, role: "host", group: nil)
+        }
+        if let guid = episode.guid, let guests = model.episodeGuestNames[guid] {
+          feedPeople += guests.map { PodcastPerson(name: $0, role: "guest", group: nil) }
         }
       }
     }
-    if let tagsModel {
-      restoreQuickTagsFromModel(tagsModel)
-    }
+
+    return SpeakerContext.build(
+      roster: roster,
+      feedPeople: feedPeople,
+      author: author,
+      transcriptNames: [],
+      transcriptIsLabelled: false
+    )
   }
 
   /// Restore cloud analysis cache from SwiftData model
@@ -499,60 +405,6 @@ final class AIAnalysisCoordinator {
       )
     }
     cloudAnalysisCache.questionAnswers = model.qaHistory
-  }
-
-  /// Restore quick tags cache from SwiftData model
-  private func restoreQuickTagsFromModel(_ model: EpisodeQuickTagsModel) {
-    let tags = EpisodeQuickTags(
-      tags: model.tags,
-      primaryCategory: model.primaryCategory,
-      secondaryCategory: model.secondaryCategory,
-      contentType: model.contentType,
-      difficulty: model.difficulty
-    )
-    quickTagsCache.tags = tags
-    quickTagsCache.briefSummary = model.briefSummary
-    quickTagsCache.generatedAt = model.generatedAt
-  }
-
-  /// Save quick tags to SwiftData
-  private func saveQuickTagsToSwiftData(tags: EpisodeQuickTags) {
-    guard let context = modelContext else { return }
-    guard let audioURL = episode.audioURL else { return }
-
-    let descriptor = FetchDescriptor<EpisodeQuickTagsModel>(
-      predicate: #Predicate { $0.episodeAudioURL == audioURL }
-    )
-
-    do {
-      let results = try context.fetch(descriptor)
-      if let existing = results.first {
-        existing.tags = tags.tags
-        existing.primaryCategory = tags.primaryCategory
-        existing.secondaryCategory = tags.secondaryCategory
-        existing.contentType = tags.contentType
-        existing.difficulty = tags.difficulty
-        existing.briefSummary = quickTagsCache.briefSummary
-        existing.generatedAt = Date()
-      } else {
-        let model = EpisodeQuickTagsModel(
-          episodeAudioURL: audioURL,
-          episodeTitle: episode.title,
-          tags: tags.tags,
-          primaryCategory: tags.primaryCategory,
-          secondaryCategory: tags.secondaryCategory,
-          contentType: tags.contentType,
-          difficulty: tags.difficulty,
-          briefSummary: quickTagsCache.briefSummary
-        )
-        context.insert(model)
-      }
-
-      try context.save()
-      logger.info("Quick tags saved to SwiftData")
-    } catch {
-      logger.error("Failed to save quick tags: \(error.localizedDescription, privacy: .public)")
-    }
   }
 
   /// Save Q&A to SwiftData
@@ -617,12 +469,6 @@ final class AIAnalysisCoordinator {
   /// not cancelled so an in-flight answer can finish and persist; the
   /// background-task wrapping inside `askCloudQuestion` bounds suspension on iOS.
   func cleanup() {
-    onDeviceAICheckTask?.cancel()
-    onDeviceAICheckTask = nil
-    quickTagsTask?.cancel()
-    quickTagsTask = nil
-    briefSummaryTask?.cancel()
-    briefSummaryTask = nil
     cloudJobObserverTask?.cancel()
     cloudJobObserverTask = nil
   }

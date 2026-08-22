@@ -141,7 +141,10 @@ public actor PodcastRssService {
       }
 
       logger.info("Parsed RSS feed bytes: \(data.count) from \(rssUrl, privacy: .public)")
-      return buildPodcastInfo(from: channel, rssUrl: rssUrl)
+      // FeedKit's podcast namespace covers guid and transcript only, so
+      // <podcast:person> needs its own pass over the same bytes.
+      let namespace = PodcastNamespaceParser().parse(from: data)
+      return buildPodcastInfo(from: channel, rssUrl: rssUrl, namespace: namespace)
     } catch let error as PodcastServiceError {
       throw error
     } catch {
@@ -151,7 +154,11 @@ public actor PodcastRssService {
   }
 
   /// Builds a `PodcastInfo` from a parsed RSS channel.
-  private func buildPodcastInfo(from channel: RSSFeedChannel, rssUrl: String) -> PodcastInfo {
+  private func buildPodcastInfo(
+    from channel: RSSFeedChannel,
+    rssUrl: String,
+    namespace: PodcastNamespaceData = PodcastNamespaceData(transcripts: [:], showPeople: [], episodePeople: [:])
+  ) -> PodcastInfo {
     let items = channel.items ?? []
     let episodes = items.compactMap { item -> PodcastEpisodeInfo? in
       guard let title = item.title else { return nil }
@@ -182,7 +189,10 @@ public actor PodcastRssService {
       episodes: episodes,
       rssUrl: rssUrl,
       imageURL: channel.iTunes?.image?.attributes?.href ?? "",
-      language: channel.language ?? ""
+      language: channel.language ?? "",
+      author: channel.iTunes?.author,
+      people: namespace.showPeople,
+      episodePeople: namespace.episodePeople
     )
   }
 

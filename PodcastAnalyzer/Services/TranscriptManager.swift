@@ -84,13 +84,14 @@ class TranscriptManager {
 
   /// Per-podcast transcription vocabulary, looked up by title from SwiftData.
   /// Empty when no container is set or the podcast/terms aren't found.
-  private func transcriptionTerms(for podcastTitle: String) -> [String] {
-    guard let context = modelContainer?.mainContext else { return [] }
+  private func transcriptionTerms(for podcastTitle: String) -> (terms: [String], hosts: [String]) {
+    guard let context = modelContainer?.mainContext else { return ([], []) }
     var descriptor = FetchDescriptor<PodcastInfoModel>(
       predicate: #Predicate { $0.title == podcastTitle }
     )
     descriptor.fetchLimit = 1
-    return (try? context.fetch(descriptor))?.first?.transcriptionTerms ?? []
+    guard let model = (try? context.fetch(descriptor))?.first else { return ([], []) }
+    return (model.transcriptionTerms, model.hostNames)
   }
 
   var activeJobs: [String: TranscriptJob] = [:]
@@ -453,9 +454,9 @@ class TranscriptManager {
 
         // Bias on-device recognition toward this show's proper nouns / jargon,
         // from the per-podcast Transcription Context vocabulary (PodcastInfoModel).
-        let contextTerms = transcriptionTerms(for: job.podcastTitle)
+        let context = transcriptionTerms(for: job.podcastTitle)
         let contextualStrings = TranscriptService.buildContextualStrings(
-          podcastTitle: job.podcastTitle, terms: contextTerms)
+          podcastTitle: job.podcastTitle, terms: context.terms, hostNames: context.hosts)
         let transcriptService = TranscriptService(
           language: job.language ?? "en-us", contextualStrings: contextualStrings)
 

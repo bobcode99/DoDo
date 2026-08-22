@@ -1,9 +1,13 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Notification Names
 
 extension Notification.Name {
   static let podcastRegionChanged = Notification.Name("podcastRegionChanged")
+  /// Posted when the For You toggle changes. Home listens so switching it on
+  /// fills the section straight away rather than at the next load.
+  static let forYouSettingChanged = Notification.Name("forYouSettingChanged")
   static let episodeDownloadCompleted = Notification.Name("episodeDownloadCompleted")
   /// Posted by NetworkMonitor when connectivity is restored (offline → online).
   /// Lets discovery surfaces (Home) refresh stale cached content automatically.
@@ -12,11 +16,18 @@ extension Notification.Name {
 
 struct Constants {
 
-  static let homeString = "Home"
-  static let libraryString = "Library"
-  static let analysisString = "Analysis"
-  static let settingsString = "Settings"
-  static let searchString = "Search"
+  // LocalizedStringKey, not String(localized:). These are resolved by SwiftUI
+  // against the environment locale, which is where LanguageManager's in-app
+  // language override lives. `String(localized:)` bypasses that entirely and
+  // reads the *system* language, so on a Chinese device the tabs came out in
+  // Chinese even with the app set to English — and being `static let`, the
+  // value was resolved once per process, so changing the language never
+  // updated it either.
+  static let homeString: LocalizedStringKey = "Home"
+  static let libraryString: LocalizedStringKey = "Library"
+  static let analysisString: LocalizedStringKey = "Analysis"
+  static let settingsString: LocalizedStringKey = "Settings"
+  static let searchString: LocalizedStringKey = "Search"
 
   static let homeIconName = "house.fill"
   static let libraryIconName = "books.vertical.fill"

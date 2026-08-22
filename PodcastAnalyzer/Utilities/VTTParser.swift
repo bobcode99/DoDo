@@ -176,6 +176,28 @@ struct VTTParser: Sendable {
     return String(format: "%02d:%02d:%02d,%03d", hours, minutes, seconds, milliseconds)
   }
 
+  /// Speaker names carried by `<v Name>` voice tags, in first-appearance order.
+  ///
+  /// These used to be stripped and thrown away with the rest of the markup, which
+  /// discarded the only per-line speaker attribution a transcript can carry. The
+  /// tag is still removed from the visible text — only the name is kept.
+  public nonisolated static func speakerNames(in vtt: String) -> [String] {
+    guard let regex = try? NSRegularExpression(pattern: "<v\\s+([^>]+)>") else { return [] }
+    let range = NSRange(vtt.startIndex..., in: vtt)
+    var seen = Set<String>()
+    var names: [String] = []
+    for match in regex.matches(in: vtt, range: range) {
+      guard match.numberOfRanges > 1,
+            let nameRange = Range(match.range(at: 1), in: vtt) else { continue }
+      // A cue can be `<v Bob Chen>` or `<v.loud Bob Chen>`; the class suffix
+      // lives on the tag name, so what's captured here is already just the name.
+      let name = String(vtt[nameRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }
+      names.append(name)
+    }
+    return names
+  }
+
   /// Strip VTT formatting tags from text
   /// Handles: <v Speaker>, <c.class>, <b>, <i>, <u>, etc.
   private nonisolated static func stripVTTTags(_ text: String) -> String {

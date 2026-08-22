@@ -88,6 +88,7 @@ final class CloudAnalysisJobCoordinator {
         type: CloudAnalysisType,
         podcastLanguage: String?,
         formatHint: String?,
+        speakerBlock: String = "",
         modelContext: ModelContext
     ) {
         tasks[audioURL]?.cancel()
@@ -127,6 +128,7 @@ final class CloudAnalysisJobCoordinator {
                     analysisType: type,
                     podcastLanguage: podcastLanguage,
                     formatHint: formatHint,
+                    speakerBlock: speakerBlock,
                     transcriptSegments: transcriptSegments,
                     onChunk: { [weak self] text in
                         Task { @MainActor in

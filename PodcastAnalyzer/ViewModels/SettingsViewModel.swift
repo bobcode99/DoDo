@@ -184,6 +184,7 @@ final class SettingsViewModel {
   func setShowForYouRecommendations(_ show: Bool) {
     showForYouRecommendations = show
     UserDefaults.standard.set(show, forKey: Keys.showForYouRecommendations)
+    NotificationCenter.default.post(name: .forYouSettingChanged, object: show)
     logger.info("Show For You recommendations set to \(show)")
   }
 

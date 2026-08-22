@@ -203,10 +203,19 @@ public actor TranscriptService {
   /// user-curated Transcription Context vocabulary (proper nouns / jargon).
   /// Trims, drops sentence-length fragments, dedupes, and caps the list so the
   /// bias stays focused.
-  public static func buildContextualStrings(podcastTitle: String, terms: [String]) -> [String] {
+  public static func buildContextualStrings(
+    podcastTitle: String,
+    terms: [String],
+    hostNames: [String] = []
+  ) -> [String] {
     var phrases: [String] = []
     let title = podcastTitle.trimmingCharacters(in: .whitespacesAndNewlines)
     if !title.isEmpty { phrases.append(title) }
+    // Hosts first: they are said in every episode, so they are the names the
+    // recognizer has the most chances to get wrong.
+    phrases.append(contentsOf: hostNames
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty && $0.count <= 60 })
     phrases.append(contentsOf: terms
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty && $0.count <= 60 })

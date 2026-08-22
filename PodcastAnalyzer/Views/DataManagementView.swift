@@ -669,7 +669,6 @@ struct BackupProgressSheet: View {
       Section("Other") {
         statRow("Queue items", value: "\(s.queueReplaced)")
         statRow("AI analyses", value: "\(s.analysesUpserted)")
-        statRow("Quick tags", value: "\(s.quickTagsUpserted)")
         statRow("Settings", value: "\(s.settingsApplied)")
       }
       if !s.warnings.isEmpty {

@@ -92,7 +92,18 @@ final class HomeViewModel {
 
   // For You recommendations (on-device AI)
   var isLoadingRecommendations = false
-  var recommendedEpisodes: [LibraryEpisode] = []
+  var recommendedEpisodes: [RecommendedEpisode] = []
+  /// Why the section has nothing to show. Non-nil means "render an explanation",
+  /// which is the difference between an honest empty state and the section
+  /// silently not existing.
+  var recommendationFailure: RecommendationFailure?
+  /// Guards the loading flag against a cancelled task's `defer`.
+  @ObservationIgnored private var recommendationGeneration: UInt = 0
+  /// Inputs the current recommendations were built from. Every `loadAll()` used
+  /// to re-run a full on-device inference even when nothing had changed; this
+  /// makes ordinary navigation free and leaves pull-to-refresh explicit.
+  @ObservationIgnored private var recommendationSignature: String?
+  @ObservationIgnored private var forYouObserverTask: Task<Void, Never>?
 
   @ObservationIgnored
   private var recommendationsTask: Task<Void, Never>?
@@ -305,6 +316,19 @@ final class HomeViewModel {
       completionObserverTask = Task {
         for await _ in NotificationCenter.default.notifications(named: .episodeCompletionChanged) {
           await loadUpNextEpisodes()
+        }
+      }
+    }
+    if forYouObserverTask == nil {
+      forYouObserverTask = Task { [weak self] in
+        for await notification in NotificationCenter.default.notifications(named: .forYouSettingChanged) {
+          guard let self else { return }
+          if notification.object as? Bool == true {
+            if #available(iOS 26.0, macOS 26.0, *) { loadRecommendations() }
+          } else {
+            recommendedEpisodes = []
+            recommendationFailure = nil
+          }
         }
       }
     }
@@ -882,27 +906,38 @@ final class HomeViewModel {
   @available(iOS 26.0, macOS 26.0, *)
   func refreshRecommendations() {
     recommendedEpisodes = []
+    recommendationSignature = nil  // an explicit refresh must actually re-infer
     loadRecommendations()
   }
 
   @available(iOS 26.0, macOS 26.0, *)
   func loadRecommendations() {
-    guard !isLoadingRecommendations else { return }
     guard showForYouRecommendations else {
       recommendedEpisodes = []
+      recommendationFailure = nil
       return
     }
     guard let context = modelContext else { return }
 
     recommendationsTask?.cancel()
     isLoadingRecommendations = true
+    recommendationFailure = nil
+
+    // Captured so the `defer` below only clears the flag if this task is still
+    // the current one — otherwise a cancelled task's defer lands after its
+    // replacement has already set it true, and the spinner never appears.
+    let generation = recommendationGeneration &+ 1
+    recommendationGeneration = generation
 
     recommendationsTask = Task { [weak self] in
       guard let self else { return }
-      defer { isLoadingRecommendations = false }
+      defer { if recommendationGeneration == generation { isLoadingRecommendations = false } }
 
       let service = AppleFoundationModelsService()
-      guard await service.checkAvailability().isAvailable else { return }
+      guard await service.checkAvailability().isAvailable else {
+        recommendationFailure = .modelUnavailable
+        return
+      }
 
       // Single fetch: feeds the listening-history signal, the completed-episode
       // filter, and the result-card hydration below — no second pass.
@@ -914,26 +949,23 @@ final class HomeViewModel {
       for model in allModels { modelsByKey[model.id] = model }
 
       let playedModels = allModels.filter { $0.playCount > 0 || $0.lastPlayedDate != nil }
-      let listeningHistory = playedModels.prefix(10).map {
+      let listeningHistory = playedModels.prefix(AppleFoundationModelsService.maxHistory).map {
         (title: $0.episodeTitle, podcastTitle: $0.podcastTitle, completed: $0.isCompleted)
       }
-      guard !listeningHistory.isEmpty else { return }
-
-      // Ordered candidate list (recent, unplayed). Keep each episode + its
-      // podcast so the model's chosen list numbers map straight back to real
-      // episodes — no brittle title-string matching.
-      var candidates: [(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)] = []
-      for podcastModel in podcastInfoModelList {
-        let info = podcastModel.podcastInfo
-        for episode in info.episodes.prefix(5) {
-          let key = Self.makeEpisodeKey(podcastTitle: info.title, episodeTitle: episode.title)
-          if modelsByKey[key]?.isCompleted != true {
-            candidates.append((episode, podcastModel))
-          }
-        }
+      guard !listeningHistory.isEmpty else {
+        recommendationFailure = .noHistory
+        return
       }
-      let limited = Array(candidates.prefix(15))
-      guard !limited.isEmpty else { return }
+
+      let limited = Self.candidatePool(
+        from: podcastInfoModelList,
+        modelsByKey: modelsByKey,
+        limit: AppleFoundationModelsService.maxCandidates
+      )
+      guard !limited.isEmpty else {
+        recommendationFailure = .noCandidates
+        return
+      }
 
       let availableEpisodes = limited.map {
         (title: $0.episode.title,
@@ -941,20 +973,67 @@ final class HomeViewModel {
          description: $0.episode.podcastEpisodeDescription ?? "")
       }
 
+      // Same history and same candidates means the same answer — don't pay for
+      // the inference again just because Home was rebuilt.
+      let signature = (listeningHistory.map(\.title) + limited.map(\.episode.title))
+        .joined(separator: "\u{1F}")
+      if signature == recommendationSignature, !recommendedEpisodes.isEmpty { return }
+
       guard !Task.isCancelled else { return }
 
       do {
         let result = try await service.generateEpisodeRecommendations(
           listeningHistory: listeningHistory,
-          availableEpisodes: availableEpisodes
+          availableEpisodes: availableEpisodes,
+          // Reasons are shown to the user, so they need to be in the language
+          // the user reads — not English for a Mandarin library.
+          language: limited.first?.podcast.podcastInfo.language
         )
         guard !Task.isCancelled else { return }
         recommendedEpisodes = Self.buildRecommendedEpisodes(
-          from: result.recommendedNumbers, candidates: limited, modelsByKey: modelsByKey)
+          from: result.recommendedNumbers,
+          reasons: result.reasons,
+          candidates: limited,
+          modelsByKey: modelsByKey)
+        recommendationSignature = signature
+        if recommendedEpisodes.isEmpty { recommendationFailure = .noCandidates }
       } catch {
+        recommendationFailure = .generationFailed
         logger.error("Failed to generate recommendations: \(error.localizedDescription, privacy: .public)")
       }
     }
+  }
+
+  /// One episode per show in rotation, rather than the first five of each feed
+  /// in turn. The old shape spent the whole budget on the first three shows, so
+  /// later subscriptions were never offered to the model at all.
+  private static func candidatePool(
+    from podcasts: [PodcastInfoModel],
+    modelsByKey: [String: EpisodeDownloadModel],
+    limit: Int
+  ) -> [(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)] {
+    var perShow: [[(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)]] = []
+    for podcastModel in podcasts {
+      let info = podcastModel.podcastInfo
+      let unplayed = info.episodes.prefix(10).filter { episode in
+        let key = makeEpisodeKey(podcastTitle: info.title, episodeTitle: episode.title)
+        return modelsByKey[key]?.isCompleted != true
+      }
+      if !unplayed.isEmpty {
+        perShow.append(unplayed.map { ($0, podcastModel) })
+      }
+    }
+
+    var pool: [(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)] = []
+    var round = 0
+    while pool.count < limit, perShow.contains(where: { $0.count > round }) {
+      for show in perShow where show.count > round {
+        pool.append(show[round])
+        if pool.count == limit { break }
+      }
+      round += 1
+    }
+    return pool
   }
 
   /// Maps the model's 1-based list numbers back to real episodes, skipping
@@ -962,19 +1041,23 @@ final class HomeViewModel {
   /// truncated title can't silently drop a recommendation.
   private static func buildRecommendedEpisodes(
     from numbers: [Int],
+    reasons: [String],
     candidates: [(episode: PodcastEpisodeInfo, podcast: PodcastInfoModel)],
     modelsByKey: [String: EpisodeDownloadModel]
-  ) -> [LibraryEpisode] {
-    var resolved: [LibraryEpisode] = []
+  ) -> [RecommendedEpisode] {
+    var resolved: [RecommendedEpisode] = []
     var seen = Set<Int>()
-    for number in numbers {
+    for (position, number) in numbers.enumerated() {
       let index = number - 1  // the model is shown a 1-based list
       guard candidates.indices.contains(index), seen.insert(index).inserted else { continue }
+      // Reasons arrive parallel to numbers; a short array just means no reason
+      // for the tail, which is preferable to dropping the recommendation.
+      let reason = reasons.indices.contains(position) ? reasons[position] : nil
       let (episode, podcastModel) = candidates[index]
       let info = podcastModel.podcastInfo
       let key = makeEpisodeKey(podcastTitle: info.title, episodeTitle: episode.title)
       let model = modelsByKey[key]
-      resolved.append(LibraryEpisode(
+      resolved.append(RecommendedEpisode(reason: reason, episode: LibraryEpisode(
         id: key,
         podcastTitle: info.title,
         imageURL: episode.imageURL ?? info.imageURL,
@@ -985,7 +1068,7 @@ final class HomeViewModel {
         isCompleted: model?.isCompleted ?? false,
         lastPlaybackPosition: model?.lastPlaybackPosition ?? 0,
         savedDuration: model?.duration ?? 0
-      ))
+      )))
     }
     return resolved
   }
@@ -1045,6 +1128,8 @@ final class HomeViewModel {
     subscribeTask = nil
     completionObserverTask?.cancel()
     completionObserverTask = nil
+    forYouObserverTask?.cancel()
+    forYouObserverTask = nil
     reconnectObserverTask?.cancel()
     reconnectObserverTask = nil
     syncObserverTask?.cancel()

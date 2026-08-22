@@ -534,6 +534,15 @@ struct SubscriptionsSettingsScreen: View {
         .navigationTitle("Import from Apple Podcasts")
         .platformToolbarTitleDisplayMode()
         .toolbar {
+          // An inline title is one line and truncates; with Done beside it
+          // "Import from Apple Podcasts" became "Import from App…". A principal
+          // item can shrink to fit instead of clipping.
+          ToolbarItem(placement: .principal) {
+            Text("Import from Apple Podcasts")
+              .font(.subheadline.weight(.semibold))
+              .lineLimit(1)
+              .minimumScaleFactor(0.7)
+          }
           ToolbarItem(placement: .confirmationAction) {
             Button("Done") { showImportInstructions = false }
           }
@@ -593,11 +602,32 @@ struct AppearanceSettingsScreen: View {
   /// Empty = System Default. Stored here rather than read through the
   /// environment because this screen is the one place that writes it.
   @AppStorage(AppAccentColorDefaults.key) private var accentRaw = ""
+  @AppStorage(AppThemeDefaults.key) private var themeRaw = AppTheme.system.rawValue
 
   private var accentColor: Color {
     AppAccentColorDefaults.decode(accentRaw) ?? .accentColor
   }
 
+
+  // MARK: - Theme
+
+  private var themeSection: some View {
+    Section {
+      Picker("Appearance", selection: $themeRaw) {
+        ForEach(AppTheme.allCases) { theme in
+          Label(theme.titleKey, systemImage: theme.systemImage).tag(theme.rawValue)
+        }
+      }
+      #if os(iOS)
+      .pickerStyle(.segmented)
+      .labelsHidden()
+      #endif
+    } header: {
+      Text("Appearance")
+    } footer: {
+      Text("System follows your device's Light/Dark setting.")
+    }
+  }
 
   // MARK: - Accent
 
@@ -644,6 +674,7 @@ struct AppearanceSettingsScreen: View {
 
   var body: some View {
     List {
+      themeSection
       accentSection
 
       Section {

@@ -52,7 +52,6 @@ struct PodcastAnalyzerApp: App {
       PodcastInfoModel.self,
       EpisodeDownloadModel.self,
       EpisodeAIAnalysis.self,
-      EpisodeQuickTagsModel.self,
       QueueItemModel.self,
       PlaybackProgressModel.self,
       EpisodeTranscriptModel.self,
@@ -67,7 +66,6 @@ struct PodcastAnalyzerApp: App {
       schema: Schema([
         PodcastInfoModel.self,
         EpisodeDownloadModel.self,
-        EpisodeQuickTagsModel.self,
         EpisodeTranscriptModel.self,
       ]),
       isStoredInMemoryOnly: false,

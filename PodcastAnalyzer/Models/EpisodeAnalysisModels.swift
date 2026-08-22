@@ -3,54 +3,15 @@
 //  PodcastAnalyzer
 //
 //  Models for AI-powered episode analysis
-//  - On-device (Apple Foundation Models): Quick tags from metadata only
+//  - On-device (Apple Foundation Models): episode recommendations from metadata
 //  - Cloud (BYOK): Full transcript analysis via user-provided API keys
 //
 
 import Foundation
 import FoundationModels
 
-// MARK: - On-Device Models (Quick Tags from Metadata)
+// MARK: - On-Device Models
 
-/// Quick tags generated from episode metadata (title, description, duration)
-/// Used by on-device Foundation Models - lightweight operation within 4096 token limit
-@Generable
-struct EpisodeQuickTags {
-    @Guide(description: "List of 5-8 relevant keywords or tags based on the episode title and description")
-    var tags: [String]
-
-    @Guide(description: "Primary category: 'Technology', 'Business', 'Education', 'Health', 'Entertainment', 'News', 'Sports', 'Science', 'Arts', 'Society'")
-    var primaryCategory: String
-
-    @Guide(description: "One secondary category if applicable")
-    var secondaryCategory: String?
-
-    @Guide(description: "Content type: 'interview', 'solo', 'panel', 'documentary', 'tutorial', 'news', 'storytelling'")
-    var contentType: String
-
-    @Guide(description: "Estimated difficulty: 'beginner', 'intermediate', 'advanced'")
-    var difficulty: String
-}
-
-/// Listening history summary generated on-device from episode metadata
-/// Used by Apple Foundation Models - fits within 4096 token limit
-@Generable
-struct ListeningHistorySummary {
-    @Guide(description: "2-3 sentence overview of listening habits")
-    var summary: String
-
-    @Guide(description: "Top 3 topics or themes")
-    var topTopics: [String]
-
-    @Guide(description: "Total listening time described naturally, e.g. '~12 hours'")
-    var totalListeningTime: String
-
-    @Guide(description: "An interesting pattern or insight")
-    var insight: String
-}
-
-/// Episode recommendations generated on-device based on listening history
-/// Used by Apple Foundation Models - fits within 4096 token limit
 @Generable
 struct EpisodeRecommendations {
     @Guide(description: "The numbers (from the numbered Available episodes list) of the 3-5 best episodes, ordered by relevance")
@@ -156,24 +117,5 @@ struct CachedCloudAnalysis {
     mutating func clearAll() {
         analysis = nil
         questionAnswers = []
-    }
-}
-
-// MARK: - Quick Tags Cache
-
-/// Container for cached on-device quick tags
-struct CachedQuickTags {
-    var tags: EpisodeQuickTags?
-    var briefSummary: String?
-    var generatedAt: Date?
-
-    var hasContent: Bool {
-        tags != nil || briefSummary != nil
-    }
-
-    mutating func clear() {
-        tags = nil
-        briefSummary = nil
-        generatedAt = nil
     }
 }

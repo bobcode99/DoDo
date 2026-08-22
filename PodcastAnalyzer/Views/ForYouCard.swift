@@ -14,6 +14,9 @@ import UIKit
 
 struct ForYouCard: View {
   let episode: LibraryEpisode
+  /// Why the model picked this one. nil when it returned fewer reasons than
+  /// picks — the card then reads like any other episode card.
+  var reason: String? = nil
   @Environment(\.modelContext) private var modelContext
   @State private var statusObserver: EpisodeStatusObserver?
 
@@ -80,6 +83,17 @@ struct ForYouCard: View {
         .fontWeight(.medium)
         .lineLimit(2)
         .multilineTextAlignment(.leading)
+
+      // The model's own words for why this episode. This is the only thing on
+      // the card that isn't available from a plain "newest unplayed" sort, so
+      // it is what makes the section worth its inference.
+      if let reason, !reason.isEmpty {
+        Text(reason)
+          .font(.caption2)
+          .foregroundStyle(.tint)
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
+      }
 
       Spacer(minLength: 0)
 

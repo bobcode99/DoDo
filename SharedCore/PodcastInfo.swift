@@ -15,6 +15,15 @@ public struct PodcastInfo: Sendable, Identifiable {
   public let rssUrl: String
   public let imageURL: String
   public let language: String
+  /// `itunes:author`. Often a company, so treated as a weak host hint only.
+  public let author: String?
+  /// `<podcast:person>` credits, as JSON.
+  ///
+  /// A `String`, not `[PodcastPerson]`, because this struct is persisted as a
+  /// SwiftData blob and SwiftData's decoder traps on `decodeIfPresent` of a
+  /// custom type — it only tolerates the primitives already used above. Encoding
+  /// the cast ourselves keeps the blob decodable.
+  public let peopleJSON: String?
 
   nonisolated init() {
     self.id = ""
@@ -24,12 +33,18 @@ public struct PodcastInfo: Sendable, Identifiable {
     self.rssUrl = ""
     self.imageURL = ""
     self.language = ""
+    self.author = nil
+    self.peopleJSON = nil
   }
 
   nonisolated init(
     title: String, description: String?, episodes: [PodcastEpisodeInfo], rssUrl: String,
-    imageURL: String, language: String
+    imageURL: String, language: String,
+    author: String? = nil,
+    people: [PodcastPerson] = [],
+    episodePeople: [String: [PodcastPerson]] = [:]
   ) {
+    self.peopleJSON = PodcastPeoplePayload(show: people, episodes: episodePeople).encoded
     self.id = rssUrl  // Use RSS URL as unique ID
     self.title = title
     self.podcastInfoDescription = description
@@ -37,6 +52,7 @@ public struct PodcastInfo: Sendable, Identifiable {
     self.rssUrl = rssUrl
     self.imageURL = imageURL
     self.language = language
+    self.author = author
   }
 }
 
@@ -67,7 +83,10 @@ extension PodcastInfo {
       episodes: updated.episodes + orphanedUserEpisodes,
       rssUrl: updated.rssUrl,
       imageURL: updated.imageURL,
-      language: updated.language
+      language: updated.language,
+      author: updated.author,
+      people: updated.people,
+      episodePeople: updated.episodePeople
     )
   }
 }
@@ -76,6 +95,7 @@ extension PodcastInfo {
 extension PodcastInfo: Codable {
   private enum CodingKeys: String, CodingKey {
     case id, title, podcastInfoDescription, episodes, rssUrl, imageURL, language
+    case author, peopleJSON
   }
 
   public nonisolated init(from decoder: Decoder) throws {
@@ -87,6 +107,10 @@ extension PodcastInfo: Codable {
     self.rssUrl = try container.decode(String.self, forKey: .rssUrl)
     self.imageURL = try container.decode(String.self, forKey: .imageURL)
     self.language = try container.decode(String.self, forKey: .language)
+    // decodeIfPresent throughout: blobs written before speaker context existed
+    // must still decode, and an absent cast list is simply an unknown one.
+    self.author = try container.decodeIfPresent(String.self, forKey: .author)
+    self.peopleJSON = try container.decodeIfPresent(String.self, forKey: .peopleJSON)
   }
 
   public nonisolated func encode(to encoder: Encoder) throws {
@@ -98,5 +122,42 @@ extension PodcastInfo: Codable {
     try container.encode(rssUrl, forKey: .rssUrl)
     try container.encode(imageURL, forKey: .imageURL)
     try container.encode(language, forKey: .language)
+    try container.encodeIfPresent(author, forKey: .author)
+    try container.encodeIfPresent(peopleJSON, forKey: .peopleJSON)
   }
+}
+
+// MARK: - People
+
+/// Wire shape for `PodcastInfo.peopleJSON`.
+public nonisolated struct PodcastPeoplePayload: Codable, Sendable {
+  public var show: [PodcastPerson]
+  public var episodes: [String: [PodcastPerson]]
+
+  public init(show: [PodcastPerson], episodes: [String: [PodcastPerson]]) {
+    self.show = show
+    self.episodes = episodes
+  }
+
+  /// nil when there is nothing to record, so the field stays absent rather than
+  /// storing an empty envelope.
+  var encoded: String? {
+    guard !show.isEmpty || !episodes.isEmpty,
+          let data = try? JSONEncoder().encode(self)
+    else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+}
+
+nonisolated extension PodcastInfo {
+  private var peoplePayload: PodcastPeoplePayload? {
+    guard let peopleJSON, let data = peopleJSON.data(using: .utf8) else { return nil }
+    return try? JSONDecoder().decode(PodcastPeoplePayload.self, from: data)
+  }
+
+  /// Channel-level credits — the show's regular cast.
+  public var people: [PodcastPerson] { peoplePayload?.show ?? [] }
+
+  /// Episode GUID → that episode's own credits, typically guests.
+  public var episodePeople: [String: [PodcastPerson]] { peoplePayload?.episodes ?? [:] }
 }

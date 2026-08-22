@@ -16,7 +16,6 @@ struct BackupArchive: Codable, Sendable {
     var episodes: [BackupEpisode]
     var queue: [BackupQueueItem]
     var aiAnalyses: [BackupAIAnalysis]
-    var quickTags: [BackupQuickTags]
     var settings: BackupSettings
     var aiFormatHints: [String: String] = [:]
 }
@@ -78,18 +77,6 @@ struct BackupAIAnalysis: Codable, Sendable {
     var generatedAt: Date?
     var createdAt: Date
     var updatedAt: Date
-}
-
-struct BackupQuickTags: Codable, Sendable {
-    var episodeAudioURL: String
-    var episodeTitle: String
-    var tags: [String]
-    var primaryCategory: String
-    var secondaryCategory: String?
-    var contentType: String
-    var difficulty: String
-    var briefSummary: String?
-    var generatedAt: Date
 }
 
 struct BackupSettings: Codable, Sendable {

@@ -13,10 +13,12 @@ struct ContentView: View {
     iOSContentView()
       .episodeRowAppearance()
       .appAccentColor()
+      .appTheme()
     #else
     MacContentView()
       .episodeRowAppearance()
       .appAccentColor()
+      .appTheme()
     #endif
   }
 }

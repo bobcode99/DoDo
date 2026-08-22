@@ -8,6 +8,11 @@
 import SwiftUI
 
 struct YapServerSection: View {
+    /// Setup guide for running a yap server. Linked first in the section: this
+    /// is the one control someone who hasn't installed yap yet can actually use,
+    /// and it is reached from onboarding where that is the common case.
+    private let wikiLink = URL(string: "https://github.com/bobcode99/yap/wiki")!
+
     @Bindable private var settings = YapServerSettings.shared
     @State private var testState: TestState = .idle
     @State private var testTask: Task<Void, Never>?
@@ -21,6 +26,20 @@ struct YapServerSection: View {
 
     var body: some View {
         Section {
+            Link(destination: wikiLink) {
+                HStack {
+                    Image(systemName: "book")
+                        .foregroundStyle(.purple)
+                        .frame(width: 24)
+                    Text("Setup Guide")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             HStack {
                 Image(systemName: "network")
                     .foregroundStyle(.blue)
@@ -83,7 +102,7 @@ struct YapServerSection: View {
         } header: {
             Text("Yap Server")
         } footer: {
-            Text("Enter the address of your running yap server. Leave API Key empty if started without --api-key.")
+            Text("Don't have one yet? The Setup Guide walks through installing and running yap. Leave API Key empty if started without --api-key.")
         }
     }
 
