@@ -3,7 +3,9 @@
 //  PodcastAnalyzer
 //
 //  Trailing navigation-bar toolbar items for EpisodeTranscriptView: just
-//  Search and a transcript-actions menu (info + copy + regenerate).
+//  Search and a transcript-actions menu (info + share/import + copy +
+//  regenerate). With nothing transcribed yet, only the info line and Import
+//  remain — everything else acts on segments that do not exist.
 //  Translation and subtitle settings live on the language chip in the
 //  status strip instead of the nav bar.
 //
@@ -41,10 +43,19 @@ struct TranscriptNavToolbar: ToolbarContent {
         .accessibilityLabel("Search transcript")
     }
 
+    /// Nothing has been transcribed yet. Every action below except importing
+    /// operates on segments that do not exist: sharing writes an empty .srt,
+    /// copying puts nothing on the clipboard, and "Regenerate" offers to redo
+    /// work never done — first-time generation lives on its own screen
+    /// (TranscriptGenerateConfigView), so hiding it here strands nobody.
+    private var isEmpty: Bool { viewModel.transcript.transcriptSegments.isEmpty }
+
     private var transcriptActionsMenu: some View {
         Menu {
             Section {
-                if let date = viewModel.transcript.cachedTranscriptDate {
+                // A stale date beside no segments describes a transcript that
+                // is not there.
+                if let date = viewModel.transcript.cachedTranscriptDate, !isEmpty {
                     Label(
                         "Generated \(Formatters.formatDate(date, time: .shortened))",
                         systemImage: "clock"
@@ -57,24 +68,32 @@ struct TranscriptNavToolbar: ToolbarContent {
             }
 
             Section("Share") {
-                Button {
-                    if let url = TranscriptStore.shared.exportSRTFile(
-                        episodeTitle: viewModel.episode.title, podcastTitle: viewModel.podcastTitle
-                    ) {
-                        PlatformShareSheet.share(url: url)
+                if !isEmpty {
+                    Button {
+                        if let url = TranscriptStore.shared.exportSRTFile(
+                            episodeTitle: viewModel.episode.title,
+                            podcastTitle: viewModel.podcastTitle
+                        ) {
+                            PlatformShareSheet.share(url: url)
+                        }
+                    } label: {
+                        Label("Share as Subtitles (.srt)", systemImage: "square.and.arrow.up")
                     }
-                } label: {
-                    Label("Share as Subtitles (.srt)", systemImage: "square.and.arrow.up")
-                }
-                Button {
-                    if let url = TranscriptStore.shared.exportShareFile(
-                        episodeTitle: viewModel.episode.title, podcastTitle: viewModel.podcastTitle
-                    ) {
-                        PlatformShareSheet.share(url: url)
+                    Button {
+                        if let url = TranscriptStore.shared.exportShareFile(
+                            episodeTitle: viewModel.episode.title,
+                            podcastTitle: viewModel.podcastTitle
+                        ) {
+                            PlatformShareSheet.share(url: url)
+                        }
+                    } label: {
+                        Label("Share for DoDo", systemImage: "square.and.arrow.up.on.square")
                     }
-                } label: {
-                    Label("Share for DoDo", systemImage: "square.and.arrow.up.on.square")
                 }
+
+                // Survives the empty case: it is the one action that still
+                // means something with nothing stored, and the only way to put
+                // a transcript here without running a transcription.
                 Button {
                     showSRTImporter = true
                 } label: {
@@ -82,25 +101,27 @@ struct TranscriptNavToolbar: ToolbarContent {
                 }
             }
 
-            Section("Copy") {
-                Button {
-                    viewModel.transcript.copyTranscriptToClipboard()
-                    showCopySuccess = true
-                } label: {
-                    Label("Copy All (with timestamps)", systemImage: "doc.on.doc")
+            if !isEmpty {
+                Section("Copy") {
+                    Button {
+                        viewModel.transcript.copyTranscriptToClipboard()
+                        showCopySuccess = true
+                    } label: {
+                        Label("Copy All (with timestamps)", systemImage: "doc.on.doc")
+                    }
+                    Button {
+                        PlatformClipboard.string = viewModel.transcript.cleanTranscriptText
+                        showCopySuccess = true
+                    } label: {
+                        Label("Copy Text Only", systemImage: "text.alignleft")
+                    }
                 }
-                Button {
-                    PlatformClipboard.string = viewModel.transcript.cleanTranscriptText
-                    showCopySuccess = true
-                } label: {
-                    Label("Copy Text Only", systemImage: "text.alignleft")
-                }
-            }
 
-            Button(role: .destructive) {
-                onShowRegenerateConfirmation()
-            } label: {
-                Label("Regenerate", systemImage: "arrow.clockwise")
+                Button(role: .destructive) {
+                    onShowRegenerateConfirmation()
+                } label: {
+                    Label("Regenerate", systemImage: "arrow.clockwise")
+                }
             }
         } label: {
             Image(systemName: "doc.text")
