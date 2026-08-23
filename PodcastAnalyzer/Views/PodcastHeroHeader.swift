@@ -202,12 +202,19 @@ struct PodcastHeroHeader<Description: View>: View {
   /// concatenated rather than interpolated so the two count strings keep the
   /// keys they are already translated under.
   private var metaText: Text {
-    let counts =
-      language.isEmpty
-      ? Text("\(episodeCount) episodes")
-      : Text("\(episodeCount) episodes · \(language)")
-    guard !artist.isEmpty else { return counts }
-    return Text(verbatim: artist) + Text(verbatim: " · ") + counts
+    if artist.isEmpty {
+      if language.isEmpty {
+        return Text("\(episodeCount) episodes")
+      } else {
+        return Text("\(episodeCount) episodes · \(language)")
+      }
+    } else {
+      if language.isEmpty {
+        return Text("\(artist) · \(episodeCount) episodes")
+      } else {
+        return Text("\(artist) · \(episodeCount) episodes · \(language)")
+      }
+    }
   }
 
   private var actionButtons: some View {
