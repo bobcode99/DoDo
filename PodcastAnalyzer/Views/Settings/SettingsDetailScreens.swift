@@ -713,11 +713,15 @@ struct AppearanceSettingsScreen: View {
       }
 
       Section {
-        Toggle(isOn: Binding(
-          get: { viewModel.showForYouRecommendations },
-          set: { viewModel.setShowForYouRecommendations($0) }
-        )) {
-          Text("For You")
+        // For You needs the on-device model, so on hardware that can never run
+        // it the toggle is absent rather than switchable-but-inert.
+        if FoundationModelsAvailability.isSupported {
+          Toggle(isOn: Binding(
+            get: { viewModel.showForYouRecommendations },
+            set: { viewModel.setShowForYouRecommendations($0) }
+          )) {
+            Text("For You")
+          }
         }
 
         Toggle(isOn: Binding(
@@ -729,7 +733,11 @@ struct AppearanceSettingsScreen: View {
       } header: {
         Text("Home Screen")
       } footer: {
-        Text("For You suggests episodes from your listening history. Trending shows popular episodes from top podcasts.")
+        if FoundationModelsAvailability.isSupported {
+          Text("For You suggests episodes from your listening history. Trending shows popular episodes from top podcasts.")
+        } else {
+          Text("Trending shows popular episodes from top podcasts.")
+        }
       }
     }
     .navigationTitle("Appearance")

@@ -1,10 +1,16 @@
 //
-//  ForYouCard.swift
+//  ForYouRow.swift
 //  PodcastAnalyzer
 //
 //  Created by JunNianLo on 2026/5/16.
 //
-
+//  Was a 140pt-wide card in a horizontal carousel. The model's reason is the
+//  only thing on it that a plain "newest unplayed" sort could not produce, and
+//  at 140pt it had roughly 40 characters of room — so a twelve-word reason
+//  always arrived as "personal interest in tech…". A full-width row gives the
+//  reason ~240pt, which fits the whole thing, and For You only ever returns
+//  three to five picks, so a vertical list costs no scrolling.
+//
 
 import SwiftData
 import SwiftUI
@@ -12,10 +18,10 @@ import SwiftUI
 import UIKit
 #endif
 
-struct ForYouCard: View {
+struct ForYouRow: View {
   let episode: LibraryEpisode
   /// Why the model picked this one. nil when it returned fewer reasons than
-  /// picks — the card then reads like any other episode card.
+  /// picks — the row then reads like any other episode row.
   var reason: String? = nil
   @Environment(\.modelContext) private var modelContext
   @State private var statusObserver: EpisodeStatusObserver?
@@ -50,12 +56,10 @@ struct ForYouCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      // Episode artwork
+    HStack(alignment: .center, spacing: 12) {
       ZStack(alignment: .bottomTrailing) {
-        CachedArtworkImage(urlString: episode.imageURL, size: 140, cornerRadius: 12)
+        CachedArtworkImage(urlString: episode.imageURL, size: 72, cornerRadius: 8)
 
-        // Status icons overlay
         if let observer = statusObserver {
           EpisodeStatusIcons(
             isStarred: episode.isStarred,
@@ -71,40 +75,45 @@ struct ForYouCard: View {
         }
       }
 
-      // Podcast title
-      Text(episode.podcastTitle)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-
-      // Episode title
-      Text(episode.episodeInfo.title)
-        .font(.subheadline)
-        .fontWeight(.medium)
-        .lineLimit(2)
-        .multilineTextAlignment(.leading)
-
-      // The model's own words for why this episode. This is the only thing on
-      // the card that isn't available from a plain "newest unplayed" sort, so
-      // it is what makes the section worth its inference.
-      if let reason, !reason.isEmpty {
-        Text(reason)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(episode.podcastTitle)
           .font(.caption2)
-          .foregroundStyle(.tint)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+
+        Text(episode.episodeInfo.title)
+          .font(.subheadline)
+          .fontWeight(.medium)
           .lineLimit(2)
           .multilineTextAlignment(.leading)
+
+        if let reason, !reason.isEmpty {
+          HStack(alignment: .firstTextBaseline, spacing: 4) {
+            // Only the glyph carries the accent. The reason itself stays
+            // secondary so it reads as a caption rather than competing with the
+            // episode title, and so it survives any accent the user picks.
+            Image(systemName: "sparkles")
+              .font(.caption2)
+              .foregroundStyle(.tint)
+            Text(reason)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(2)
+              .multilineTextAlignment(.leading)
+          }
+          .padding(.top, 1)
+        }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
 
-      Spacer(minLength: 0)
-
-      // Play button
       LivePlaybackButton(
         episode: episode,
         style: .compact,
         action: playEpisode
       )
     }
-    .frame(width: 140, height: 258, alignment: .top)
+    .padding(.vertical, 8)
+    .contentShape(.rect)
     .onAppear {
       if statusObserver == nil {
         statusObserver = EpisodeStatusObserver(episode: episode)

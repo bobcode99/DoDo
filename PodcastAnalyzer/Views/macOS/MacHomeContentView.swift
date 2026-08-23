@@ -182,9 +182,9 @@ struct MacHomeContentView: View {
   @available(macOS 26.0, *)
   @ViewBuilder
   private var forYouSection: some View {
-    // Only the toggle hides this — see ForYouSection for why an empty list
-    // must not.
-    if viewModel.showForYouRecommendations {
+    // The toggle and ineligible hardware hide this — see ForYouSection for why
+    // an empty list must not.
+    if viewModel.showForYouRecommendations, FoundationModelsAvailability.isSupported {
       VStack(alignment: .leading, spacing: 12) {
         HStack {
           Image(systemName: "star.leadinghalf.filled")
@@ -228,29 +228,32 @@ struct MacHomeContentView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
         } else {
-          ScrollView(.horizontal) {
-            HStack(spacing: 14) {
-              ForEach(viewModel.recommendedEpisodes) { recommendation in
-                let episode = recommendation.episode
-                NavigationLink(
-                  value: EpisodeDetailRoute(
-                    episode: episode.episodeInfo,
-                    podcastTitle: episode.podcastTitle,
-                    fallbackImageURL: episode.imageURL,
-                    podcastLanguage: episode.language
-                  )
-                ) {
-                  ForYouCard(episode: episode, reason: recommendation.reason)
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                  upNextContextMenu(for: episode)
-                }
+          // A list, not a carousel — see ForYouRow for why the reason needs the
+          // full width.
+          VStack(spacing: 0) {
+            ForEach(Array(viewModel.recommendedEpisodes.enumerated()), id: \.element.id) { index, recommendation in
+              let episode = recommendation.episode
+              NavigationLink(
+                value: EpisodeDetailRoute(
+                  episode: episode.episodeInfo,
+                  podcastTitle: episode.podcastTitle,
+                  fallbackImageURL: episode.imageURL,
+                  podcastLanguage: episode.language
+                )
+              ) {
+                ForYouRow(episode: episode, reason: recommendation.reason)
+              }
+              .buttonStyle(.plain)
+              .contextMenu {
+                upNextContextMenu(for: episode)
+              }
+
+              if index < viewModel.recommendedEpisodes.count - 1 {
+                Divider()
               }
             }
-            .padding(.horizontal, 24)
           }
-          .scrollIndicators(.never)
+          .padding(.horizontal, 24)
         }
       }
     }

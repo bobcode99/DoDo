@@ -99,10 +99,35 @@ final class HomeViewModel {
   var recommendationFailure: RecommendationFailure?
   /// Guards the loading flag against a cancelled task's `defer`.
   @ObservationIgnored private var recommendationGeneration: UInt = 0
-  /// Inputs the current recommendations were built from. Every `loadAll()` used
-  /// to re-run a full on-device inference even when nothing had changed; this
-  /// makes ordinary navigation free and leaves pull-to-refresh explicit.
-  @ObservationIgnored private var recommendationSignature: String?
+  /// The inputs, picks and reasons of the last run, persisted.
+  ///
+  /// Every `loadAll()` used to re-run a full on-device inference even when
+  /// nothing had changed. Holding this in memory alone fixed navigation but not
+  /// launches: the system model is loaded and the prompt prefilled on the first
+  /// call in a process, which is the expensive part, so a cold start still paid
+  /// it to reproduce an answer it already had. On disk, the inference runs when
+  /// the library or the listening history actually changes — or when the user
+  /// asks, via refresh.
+  private struct RecommendationCache: Codable {
+    let signature: String
+    let numbers: [Int]
+    let reasons: [String]
+  }
+
+  private static let recommendationCacheKey = "forYouRecommendationCache"
+
+  private static func loadRecommendationCache() -> RecommendationCache? {
+    guard let data = UserDefaults.standard.data(forKey: recommendationCacheKey) else { return nil }
+    return try? JSONDecoder().decode(RecommendationCache.self, from: data)
+  }
+
+  private static func saveRecommendationCache(_ cache: RecommendationCache?) {
+    guard let cache, let data = try? JSONEncoder().encode(cache) else {
+      UserDefaults.standard.removeObject(forKey: recommendationCacheKey)
+      return
+    }
+    UserDefaults.standard.set(data, forKey: recommendationCacheKey)
+  }
   @ObservationIgnored private var forYouObserverTask: Task<Void, Never>?
 
   @ObservationIgnored
@@ -906,7 +931,7 @@ final class HomeViewModel {
   @available(iOS 26.0, macOS 26.0, *)
   func refreshRecommendations() {
     recommendedEpisodes = []
-    recommendationSignature = nil  // an explicit refresh must actually re-infer
+    Self.saveRecommendationCache(nil)  // an explicit refresh must actually re-infer
     loadRecommendations()
   }
 
@@ -974,10 +999,20 @@ final class HomeViewModel {
       }
 
       // Same history and same candidates means the same answer — don't pay for
-      // the inference again just because Home was rebuilt.
+      // the inference again just because Home was rebuilt, or relaunched.
       let signature = (listeningHistory.map(\.title) + limited.map(\.episode.title))
         .joined(separator: "\u{1F}")
-      if signature == recommendationSignature, !recommendedEpisodes.isEmpty { return }
+      if let cached = Self.loadRecommendationCache(), cached.signature == signature {
+        if recommendedEpisodes.isEmpty {
+          recommendedEpisodes = Self.buildRecommendedEpisodes(
+            from: cached.numbers,
+            reasons: cached.reasons,
+            candidates: limited,
+            modelsByKey: modelsByKey)
+        }
+        if recommendedEpisodes.isEmpty { recommendationFailure = .noCandidates }
+        return
+      }
 
       guard !Task.isCancelled else { return }
 
@@ -995,7 +1030,11 @@ final class HomeViewModel {
           reasons: result.reasons,
           candidates: limited,
           modelsByKey: modelsByKey)
-        recommendationSignature = signature
+        Self.saveRecommendationCache(
+          RecommendationCache(
+            signature: signature,
+            numbers: result.recommendedNumbers,
+            reasons: result.reasons))
         if recommendedEpisodes.isEmpty { recommendationFailure = .noCandidates }
       } catch {
         recommendationFailure = .generationFailed

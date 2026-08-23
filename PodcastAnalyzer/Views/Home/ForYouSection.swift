@@ -12,11 +12,11 @@ struct ForYouSection: View {
   let viewModel: HomeViewModel
 
   var body: some View {
-    // Only the user's own toggle hides this section. Previously an empty list
-    // hid it too, so an unavailable model, an empty history or a thrown error
-    // all presented as "the feature does not exist" — with the refresh button
-    // gone as well, leaving no way to retry.
-    if viewModel.showForYouRecommendations {
+    // Two things hide this section: the user's own toggle, and hardware that
+    // can never run the model. An empty list must not — an empty history or a
+    // thrown error would then present as "the feature does not exist", with the
+    // refresh button gone too, leaving no way to retry.
+    if viewModel.showForYouRecommendations, FoundationModelsAvailability.isSupported {
       VStack(alignment: .leading, spacing: 12) {
         header
           .padding(.horizontal)
@@ -26,7 +26,7 @@ struct ForYouSection: View {
         } else if viewModel.recommendedEpisodes.isEmpty {
           emptyState
         } else {
-          carousel
+          list
         }
       }
     }
@@ -91,29 +91,32 @@ struct ForYouSection: View {
       .padding(.vertical, 12)
   }
 
-  private var carousel: some View {
-    ScrollView(.horizontal) {
-      LazyHStack(spacing: 12) {
-        ForEach(viewModel.recommendedEpisodes) { recommendation in
-          let episode = recommendation.episode
-          NavigationLink(
-            value: EpisodeDetailRoute(
-              episode: episode.episodeInfo,
-              podcastTitle: episode.podcastTitle,
-              fallbackImageURL: episode.imageURL,
-              podcastLanguage: episode.language
-            )
-          ) {
-            ForYouCard(episode: episode, reason: recommendation.reason)
-          }
-          .buttonStyle(.plain)
-          .contextMenu {
-            UpNextRowContextMenu(episode: episode, viewModel: viewModel)
-          }
+  /// A short vertical list, not a carousel: three to five picks fit on screen,
+  /// and full width is what gives the model's reason room to be read.
+  private var list: some View {
+    VStack(spacing: 0) {
+      ForEach(Array(viewModel.recommendedEpisodes.enumerated()), id: \.element.id) { index, recommendation in
+        let episode = recommendation.episode
+        NavigationLink(
+          value: EpisodeDetailRoute(
+            episode: episode.episodeInfo,
+            podcastTitle: episode.podcastTitle,
+            fallbackImageURL: episode.imageURL,
+            podcastLanguage: episode.language
+          )
+        ) {
+          ForYouRow(episode: episode, reason: recommendation.reason)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+          UpNextRowContextMenu(episode: episode, viewModel: viewModel)
+        }
+
+        if index < viewModel.recommendedEpisodes.count - 1 {
+          Divider()
         }
       }
-      .padding(.horizontal)
     }
-    .scrollIndicators(.never)
+    .padding(.horizontal)
   }
 }

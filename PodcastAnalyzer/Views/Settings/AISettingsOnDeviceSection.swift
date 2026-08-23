@@ -13,9 +13,20 @@
 import SwiftUI
 
 struct AISettingsOnDeviceSection: View {
-    @State private var availability: FoundationModelsAvailability = .checking
+    private var availability: FoundationModelsAvailability { .current }
 
+    // A section describing a feature this device can never run is noise. It is
+    // hidden outright rather than shown with a permanent warning — unlike the
+    // fixable states below, which stay visible because they tell the user what
+    // to change.
+    @ViewBuilder
     var body: some View {
+        if FoundationModelsAvailability.isSupported {
+            section
+        }
+    }
+
+    private var section: some View {
         Section {
             HStack {
                 Image(systemName: "apple.intelligence")
@@ -44,7 +55,6 @@ struct AISettingsOnDeviceSection: View {
             // before any of this runs, which is one of the unavailable reasons.
             Text("Runs on your device — your listening history is never uploaded. The model is downloaded once by the system.")
         }
-        .task { await check() }
     }
 
     // MARK: - Status
@@ -52,14 +62,6 @@ struct AISettingsOnDeviceSection: View {
     @ViewBuilder
     private var statusRow: some View {
         switch availability {
-        case .checking:
-            // Neutral, not a warning: nothing has failed, the check is running.
-            HStack {
-                ProgressView().controlSize(.small)
-                Text("Checking availability…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         case .available:
             HStack {
                 Image(systemName: "checkmark.circle.fill")
@@ -92,14 +94,6 @@ struct AISettingsOnDeviceSection: View {
             "The system is still downloading the model. This can take a few minutes."
         case .other:
             "Apple Intelligence is unavailable right now."
-        }
-    }
-
-    private func check() async {
-        if #available(iOS 26.0, macOS 26.0, *) {
-            availability = await AppleFoundationModelsService().checkAvailability()
-        } else {
-            availability = .unavailable(.deviceNotEligible)
         }
     }
 
