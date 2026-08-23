@@ -75,7 +75,11 @@ struct AISettingsLocalServerSection: View {
             Toggle(isOn: $settings.disableThinkingForLocalModels) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Disable Thinking")
-                    Text("Skips chain-of-thought reasoning for faster responses. Best for DeepSeek-R1 and other reasoning models.")
+                    // Describes the behaviour rather than naming a model. The
+                    // old copy recommended this "for DeepSeek-R1", which dates
+                    // the setting to January 2025 and says nothing useful to
+                    // anyone running a reasoning model released since.
+                    Text("Sends think: false, so models with a thinking mode answer directly. No effect on models without one.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

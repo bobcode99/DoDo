@@ -94,7 +94,11 @@ struct AIModelPicker: View {
             HStack {
                 Text("Model")
                 Spacer()
-                TextField("e.g. llama3.2", text: binding)
+                // No example model id. "e.g. llama3.2" named an October 2024
+                // release, and a placeholder is the one hint a user reads while
+                // guessing what to type — pointing them at a model that may no
+                // longer be the one they have installed is worse than no hint.
+                TextField("Model name", text: binding)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
                     .multilineTextAlignment(.trailing)
