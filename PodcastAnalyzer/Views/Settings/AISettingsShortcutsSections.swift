@@ -183,7 +183,7 @@ struct AISettingsShortcutsSections: View {
         isAddingShortcut = false
     }
 
-    private func instructionRow(number: Int, text: String) -> some View {
+    private func instructionRow(number: Int, text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text("\(number).")
                 .font(.caption)
