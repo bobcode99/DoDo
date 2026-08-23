@@ -10,9 +10,9 @@ enum AutoDownloadSetting: String, CaseIterable {
 
   var displayName: String {
     switch self {
-    case .enabled:       "Always"
-    case .disabled:      "Never"
-    case .inheritGlobal: "Use Global Setting"
+    case .enabled:       String(localized: "Always")
+    case .disabled:      String(localized: "Never")
+    case .inheritGlobal: String(localized: "Use Global Setting")
     }
   }
 }
@@ -27,9 +27,9 @@ enum AutoAddToQueueSetting: String, CaseIterable {
 
   var displayName: String {
     switch self {
-    case .off:    "Off"
-    case .top:    "Add to Top"
-    case .bottom: "Add to Bottom"
+    case .off:    String(localized: "Off")
+    case .top:    String(localized: "Add to Top")
+    case .bottom: String(localized: "Add to Bottom")
     }
   }
 }
