@@ -154,10 +154,11 @@ struct QuestionAnswerTabView: View {
       Text(question)
         .font(.subheadline)
         .fontWeight(.medium)
-        .foregroundStyle(.white)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.tint, in: .rect(cornerRadius: 16))
+        // Was `.foregroundStyle(.white)` over `.background(.tint)` — white on
+        // white once the accent is the monochrome default in dark mode.
+        .accentFilled(in: .rect(cornerRadius: 16))
         .textSelection(.enabled)
       ZStack {
         Circle()

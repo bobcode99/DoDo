@@ -173,10 +173,11 @@ struct EpisodeAIAnalysisView: View {
   // MARK: - Tab Button
 
   private func tabButton(for tab: CloudAnalysisTab) -> some View {
-    Button {
+    let isSelected = uiState.selectedTab == tab
+    return Button {
       uiState.selectedTab = tab
     } label: {
-      HStack(spacing: 6) {
+      let label = HStack(spacing: 6) {
         Image(systemName: tab.icon)
           .font(.system(size: 12))
         Text(tab.rawValue)
@@ -184,11 +185,15 @@ struct EpisodeAIAnalysisView: View {
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 8)
-      .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(uiState.selectedTab == tab ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear))
-      )
-      .foregroundStyle(uiState.selectedTab == tab ? .white : .primary)
+
+      // The selected pill fills with the accent, so its label colour has to be
+      // derived from that fill rather than assumed white — the shipped default
+      // accent is white in dark mode, which made the selected tab unreadable.
+      if isSelected {
+        label.accentFilled(in: .rect(cornerRadius: 8))
+      } else {
+        label.foregroundStyle(.primary)
+      }
     }
     #if os(macOS)
     .buttonStyle(.plain)      // 🔑 THIS fixes the weird macOS behavior
