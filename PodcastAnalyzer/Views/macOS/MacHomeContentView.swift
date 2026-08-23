@@ -20,10 +20,6 @@ struct MacHomeContentView: View {
       VStack(alignment: .leading, spacing: 28) {
         upNextSection
 
-        if #available(macOS 26.0, *) {
-          forYouSection
-        }
-
         trendingEpisodesSection
 
         popularShowsSection
@@ -164,97 +160,6 @@ struct MacHomeContentView: View {
         }
         .scrollIndicators(.never)
         .animation(.default, value: viewModel.scoredUpNextIDs)
-      }
-    }
-  }
-
-  // MARK: - For You Section
-
-  private static func emptyMessage(for failure: RecommendationFailure?) -> LocalizedStringKey {
-    switch failure {
-    case .noHistory:       "Play an episode or two and suggestions will appear here."
-    case .modelUnavailable: "Apple Intelligence isn't available on this device right now."
-    case .noCandidates:    "Nothing new to suggest — you're caught up on your shows."
-    case .generationFailed, .none: "Couldn't build suggestions just now. Try again."
-    }
-  }
-
-  @available(macOS 26.0, *)
-  @ViewBuilder
-  private var forYouSection: some View {
-    // The toggle and ineligible hardware hide this — see ForYouSection for why
-    // an empty list must not.
-    if viewModel.showForYouRecommendations, FoundationModelsAvailability.isSupported {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          Image(systemName: "star.leadinghalf.filled")
-            .foregroundStyle(.purple)
-          Text("For You")
-            .font(.title2)
-            .fontWeight(.bold)
-
-          Spacer()
-
-          if viewModel.isLoadingRecommendations {
-            ProgressView().scaleEffect(0.8)
-          } else {
-            Button {
-              viewModel.refreshRecommendations()
-            } label: {
-              Image(systemName: "arrow.clockwise")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.borderless)
-            .help("Refresh recommendations")
-          }
-        }
-        .padding(.horizontal, 24)
-
-        if viewModel.isLoadingRecommendations && viewModel.recommendedEpisodes.isEmpty {
-          HStack(spacing: 8) {
-            ProgressView().scaleEffect(0.7)
-            Text("Finding episodes for you...")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 24)
-        } else if viewModel.recommendedEpisodes.isEmpty {
-          Text(Self.emptyMessage(for: viewModel.recommendationFailure))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-        } else {
-          // A list, not a carousel — see ForYouRow for why the reason needs the
-          // full width.
-          VStack(spacing: 0) {
-            ForEach(Array(viewModel.recommendedEpisodes.enumerated()), id: \.element.id) { index, recommendation in
-              let episode = recommendation.episode
-              NavigationLink(
-                value: EpisodeDetailRoute(
-                  episode: episode.episodeInfo,
-                  podcastTitle: episode.podcastTitle,
-                  fallbackImageURL: episode.imageURL,
-                  podcastLanguage: episode.language
-                )
-              ) {
-                ForYouRow(episode: episode, reason: recommendation.reason)
-              }
-              .buttonStyle(.plain)
-              .contextMenu {
-                upNextContextMenu(for: episode)
-              }
-
-              if index < viewModel.recommendedEpisodes.count - 1 {
-                Divider()
-              }
-            }
-          }
-          .padding(.horizontal, 24)
-        }
       }
     }
   }

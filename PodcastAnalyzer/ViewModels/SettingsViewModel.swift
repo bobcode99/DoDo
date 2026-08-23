@@ -60,9 +60,6 @@ final class SettingsViewModel {
   // Playback settings
   var autoPlayNextEpisode: Bool = false
 
-  // For You recommendations
-  var showForYouRecommendations: Bool = true
-
   // Auto-download
   var autoDownloadNewEpisodes: Bool = false
 
@@ -79,7 +76,6 @@ final class SettingsViewModel {
     static let selectedPodcastRegion = "selectedPodcastRegion"
     static let showEpisodeArtwork = "showEpisodeArtwork"
     static let autoPlayNextEpisode = "autoPlayNextEpisode"
-    static let showForYouRecommendations = "showForYouRecommendations"
     static let transcriptEngine = "transcriptEngine"
     static let autoDownloadNewEpisodes = "autoDownloadNewEpisodes"
     static let showTrendingEpisodes = "showTrendingEpisodes"
@@ -121,7 +117,6 @@ final class SettingsViewModel {
     loadSelectedRegion()
     loadShowEpisodeArtwork()
     loadAutoPlayNextEpisode()
-    loadShowForYouRecommendations()
     loadTranscriptEngine()
     loadAutoDownloadNewEpisodes()
     loadShowTrendingEpisodes()
@@ -177,24 +172,6 @@ final class SettingsViewModel {
   private func loadAutoPlayNextEpisode() {
     // Default to false if not set
     autoPlayNextEpisode = UserDefaults.standard.bool(forKey: Keys.autoPlayNextEpisode)
-  }
-
-  // MARK: - For You Recommendations Settings
-
-  func setShowForYouRecommendations(_ show: Bool) {
-    showForYouRecommendations = show
-    UserDefaults.standard.set(show, forKey: Keys.showForYouRecommendations)
-    NotificationCenter.default.post(name: .forYouSettingChanged, object: show)
-    logger.info("Show For You recommendations set to \(show)")
-  }
-
-  private func loadShowForYouRecommendations() {
-    // Default to true if not set
-    if UserDefaults.standard.object(forKey: Keys.showForYouRecommendations) == nil {
-      showForYouRecommendations = true
-    } else {
-      showForYouRecommendations = UserDefaults.standard.bool(forKey: Keys.showForYouRecommendations)
-    }
   }
 
   // MARK: - Auto-Download Settings

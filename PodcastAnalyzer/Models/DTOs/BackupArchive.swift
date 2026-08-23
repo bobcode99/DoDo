@@ -156,7 +156,6 @@ enum BackupSettingsSafelist {
         "selectedPodcastRegion",
         "showEpisodeArtwork",
         "autoPlayNextEpisode",
-        "showForYouRecommendations",
         "transcriptEngine",
         "autoDownloadNewEpisodes",
         "showTrendingEpisodes",

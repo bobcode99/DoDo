@@ -2,24 +2,11 @@
 //  EpisodeAnalysisModels.swift
 //  PodcastAnalyzer
 //
-//  Models for AI-powered episode analysis
-//  - On-device (Apple Foundation Models): episode recommendations from metadata
-//  - Cloud (BYOK): Full transcript analysis via user-provided API keys
+//  Models for AI-powered episode analysis. Cloud (BYOK) only: full transcript
+//  analysis via the user's own API key.
 //
 
 import Foundation
-import FoundationModels
-
-// MARK: - On-Device Models
-
-@Generable
-struct EpisodeRecommendations {
-    @Guide(description: "The numbers (from the numbered Available episodes list) of the 3-5 best episodes, ordered by relevance")
-    var recommendedNumbers: [Int]
-
-    @Guide(description: "Brief reason for each recommended number, in the same order")
-    var reasons: [String]
-}
 
 // MARK: - Analysis State
 

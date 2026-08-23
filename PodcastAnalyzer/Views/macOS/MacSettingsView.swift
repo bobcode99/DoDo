@@ -233,14 +233,6 @@ struct AppearanceSettingsTab: View {
             viewModel.setShowEpisodeArtwork(newValue)
           }
 
-        // Absent, not merely off, when the Mac can never run the on-device model.
-        if FoundationModelsAvailability.isSupported {
-          Toggle("For You Recommendations", isOn: $viewModel.showForYouRecommendations)
-            .onChange(of: viewModel.showForYouRecommendations) { _, newValue in
-              viewModel.setShowForYouRecommendations(newValue)
-            }
-        }
-
         Toggle("Trending Episodes", isOn: $viewModel.showTrendingEpisodes)
           .onChange(of: viewModel.showTrendingEpisodes) { _, newValue in
             viewModel.setShowTrendingEpisodes(newValue)

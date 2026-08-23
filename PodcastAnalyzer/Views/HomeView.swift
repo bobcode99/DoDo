@@ -82,10 +82,6 @@ struct HomeView: View {
       VStack(alignment: .leading, spacing: 24) {
         UpNextSection(viewModel: viewModel)
 
-        if #available(iOS 26.0, macOS 26.0, *) {
-          ForYouSection(viewModel: viewModel)
-        }
-
         TrendingEpisodesSection(viewModel: viewModel)
 
         PopularShowsSection(viewModel: viewModel)

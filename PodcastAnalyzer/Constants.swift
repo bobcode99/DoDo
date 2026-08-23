@@ -7,7 +7,6 @@ extension Notification.Name {
   static let podcastRegionChanged = Notification.Name("podcastRegionChanged")
   /// Posted when the For You toggle changes. Home listens so switching it on
   /// fills the section straight away rather than at the next load.
-  static let forYouSettingChanged = Notification.Name("forYouSettingChanged")
   static let episodeDownloadCompleted = Notification.Name("episodeDownloadCompleted")
   /// Posted by NetworkMonitor when connectivity is restored (offline → online).
   /// Lets discovery surfaces (Home) refresh stale cached content automatically.
