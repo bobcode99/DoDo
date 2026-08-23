@@ -10,23 +10,18 @@ import Foundation
 nonisolated struct OpenAICompatibleClient: AIProviderClient {
     let provider: CloudAIProvider
     let baseURL: URL
-    let fallbackModels: [String]
-    let defaultModel: String
     let requiresAPIKey: Bool
-    /// Cheapest model to use for ping (connection test)
-    let pingModel: String
-    /// Custom model filter for fetchAvailableModels (nil = return all models)
-    let modelFilter: (@Sendable (String) -> Bool)?
-    /// Custom model sorter for fetchAvailableModels
-    let modelSorter: (@Sendable (String, String) -> Bool)?
-    /// Max fetched models to surface (nil = no limit). Cloud providers cap at 10
-    /// so their large catalogs stay manageable; local servers default to nil so
-    /// the user actually sees every model they have available.
-    let modelLimit: Int?
 
     // MARK: - Fetch Models
 
     func fetchAvailableModels(apiKey: String) async throws -> [String] {
+        let listings = try await fetchModelListings(apiKey: apiKey)
+        return AIProviderHelpers.presentable(listings)
+    }
+
+    /// `GET /v1/models`. Unlike the chat endpoints this uses `AIProbe.session`,
+    /// so a wrong host fails in seconds rather than sitting on the 60s default.
+    private func fetchModelListings(apiKey: String) async throws -> [AIModelListing] {
         let modelsURL = baseURL.deletingLastPathComponent().appendingPathComponent("models")
 
         var request = URLRequest(url: modelsURL)
@@ -34,93 +29,41 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await AIProbe.session.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return fallbackModels
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CloudAIError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw CloudAIError.apiError(
+                statusCode: httpResponse.statusCode,
+                message: AIProviderHelpers.parseErrorMessage(from: body) ?? body
+            )
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let models = json?["data"] as? [[String: Any]] else {
-            return fallbackModels
+            throw CloudAIError.invalidResponse
         }
 
-        var modelIds = models.compactMap { $0["id"] as? String }
-
-        if let filter = modelFilter {
-            modelIds = modelIds.filter(filter)
+        return models.compactMap { model in
+            guard let id = model["id"] as? String else { return nil }
+            return AIModelListing(id: id, unixSeconds: model["created"])
         }
-
-        if let sorter = modelSorter {
-            modelIds.sort(by: sorter)
-        }
-
-        if modelIds.isEmpty { return fallbackModels }
-        if let limit = modelLimit { return Array(modelIds.prefix(limit)) }
-        return modelIds
     }
 
     // MARK: - Ping
 
+    /// Reachability and auth in one call, via the model list.
+    ///
+    /// This used to POST a one-token completion to a hardcoded `pingModel`
+    /// ("gpt-4o-mini", "grok-2-1212", …). When such an id is retired the test
+    /// reports a broken connection for a perfectly good key, which is the
+    /// opposite of what a connection test is for. `/models` needs no id at all,
+    /// still 401s on a bad key, and costs nothing.
     func ping(apiKey: String) async throws {
-        // Local servers without a default pingModel (e.g. LM Studio) verify
-        // reachability via /v1/models instead — sending a chat request with
-        // an empty model name fails before we ever reach the server.
-        if pingModel.isEmpty {
-            try await pingViaModelsList(apiKey: apiKey)
-            return
-        }
-
-        let chatURL = baseURL
-        var request = URLRequest(url: chatURL)
-        request.httpMethod = "POST"
-        if !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "model": pingModel,
-            "messages": [["role": "user", "content": "ping"]],
-            "max_tokens": 1
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CloudAIError.invalidResponse
-        }
-
-        if httpResponse.statusCode != 200 {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw CloudAIError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
-        }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard json?["choices"] != nil else {
-            throw CloudAIError.invalidResponse
-        }
-    }
-
-    private func pingViaModelsList(apiKey: String) async throws {
-        let modelsURL = baseURL.deletingLastPathComponent().appendingPathComponent("models")
-        var request = URLRequest(url: modelsURL)
-        if !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CloudAIError.invalidResponse
-        }
-
-        if httpResponse.statusCode != 200 {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw CloudAIError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
-        }
+        _ = try await fetchModelListings(apiKey: apiKey)
     }
 
     // MARK: - Send Request
@@ -306,22 +249,7 @@ extension OpenAICompatibleClient {
         OpenAICompatibleClient(
             provider: .openai,
             baseURL: URL(string: "https://api.openai.com/v1/chat/completions")!,
-            fallbackModels: CloudAIProvider.openai.availableModels,
-            defaultModel: CloudAIProvider.openai.defaultModel,
-            requiresAPIKey: true,
-            pingModel: "gpt-4o-mini",
-            modelFilter: { id in
-                (id.contains("gpt-4") || id.contains("gpt-3.5"))
-                && !id.contains("instruct") && !id.contains("vision") && !id.contains("realtime")
-            },
-            modelSorter: { a, b in
-                if a.contains("4.1") && !b.contains("4.1") { return true }
-                if !a.contains("4.1") && b.contains("4.1") { return false }
-                if a.contains("4o") && !b.contains("4o") { return true }
-                if !a.contains("4o") && b.contains("4o") { return false }
-                return a < b
-            },
-            modelLimit: 10
+            requiresAPIKey: true
         )
     }
 
@@ -329,22 +257,7 @@ extension OpenAICompatibleClient {
         OpenAICompatibleClient(
             provider: .groq,
             baseURL: URL(string: "https://api.groq.com/openai/v1/chat/completions")!,
-            fallbackModels: CloudAIProvider.groq.availableModels,
-            defaultModel: CloudAIProvider.groq.defaultModel,
-            requiresAPIKey: true,
-            pingModel: "llama-3.1-8b-instant",
-            modelFilter: { id in
-                (id.contains("llama") || id.contains("mixtral") || id.contains("gemma"))
-                && !id.contains("guard")
-            },
-            modelSorter: { a, b in
-                if a.contains("70b") && !b.contains("70b") { return true }
-                if !a.contains("70b") && b.contains("70b") { return false }
-                if a.contains("90b") && !b.contains("90b") { return true }
-                if !a.contains("90b") && b.contains("90b") { return false }
-                return a > b
-            },
-            modelLimit: 10
+            requiresAPIKey: true
         )
     }
 
@@ -352,40 +265,18 @@ extension OpenAICompatibleClient {
         OpenAICompatibleClient(
             provider: .grok,
             baseURL: URL(string: "https://api.x.ai/v1/chat/completions")!,
-            fallbackModels: CloudAIProvider.grok.availableModels,
-            defaultModel: CloudAIProvider.grok.defaultModel,
-            requiresAPIKey: true,
-            pingModel: "grok-2-1212",
-            modelFilter: { id in
-                id.contains("grok") && !id.contains("vision") && !id.contains("image")
-            },
-            modelSorter: { a, b in
-                if a.contains("4") && !b.contains("4") { return true }
-                if !a.contains("4") && b.contains("4") { return false }
-                if a.contains("3") && !b.contains("3") { return true }
-                if !a.contains("3") && b.contains("3") { return false }
-                return a > b
-            },
-            modelLimit: 10
+            requiresAPIKey: true
         )
     }
 
     /// LM Studio's OpenAI-compatible endpoint. Auth is optional: when the user
     /// has not enabled "Manage Tokens" in LM Studio, pass an empty apiKey and
-    /// the client skips the Authorization header. modelLimit is nil so users
-    /// see every model installed locally (cloud providers cap at 10 to hide
-    /// large catalogs, but LM Studio users explicitly chose what to install).
+    /// the client skips the Authorization header.
     static func lmStudio(baseURL: URL) -> OpenAICompatibleClient {
         OpenAICompatibleClient(
             provider: .lmstudio,
             baseURL: baseURL.appendingPathComponent("v1/chat/completions"),
-            fallbackModels: [],
-            defaultModel: "",
-            requiresAPIKey: false,
-            pingModel: "",
-            modelFilter: nil,
-            modelSorter: nil,
-            modelLimit: nil
+            requiresAPIKey: false
         )
     }
 }

@@ -10,8 +10,6 @@ import Foundation
 
 nonisolated struct OllamaClient: AIProviderClient {
     let provider: CloudAIProvider
-    let fallbackModels: [String] = []
-    let defaultModel: String = ""
     let requiresAPIKey: Bool = false
 
     let baseURL: URL
@@ -19,67 +17,75 @@ nonisolated struct OllamaClient: AIProviderClient {
     // MARK: - Fetch Models (Ollama-specific: /v1/models + /api/tags fallback)
 
     func fetchAvailableModels(apiKey: String) async throws -> [String] {
-        // Try OpenAI-compatible /v1/models first
-        let v1ModelsURL = baseURL.appendingPathComponent("v1/models")
-        if let models = try? await fetchFromV1Models(url: v1ModelsURL), !models.isEmpty {
-            return models
+        do {
+            let models = try await fetchFromV1Models()
+            if !models.isEmpty { return AIProviderHelpers.presentable(models) }
+        } catch {
+            // Nothing listening means the /api/tags fallback would burn the
+            // same connect timeout for the same answer. Fail once.
+            if AIProbe.isUnreachable(error) { throw error }
         }
 
-        // Fallback to Ollama native /api/tags
-        let tagsURL = baseURL.appendingPathComponent("api/tags")
-        return try await fetchFromAPITags(url: tagsURL)
+        return AIProviderHelpers.presentable(try await fetchFromAPITags())
     }
 
-    private func fetchFromV1Models(url: URL) async throws -> [String] {
-        let request = URLRequest(url: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return []
-        }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let models = json?["data"] as? [[String: Any]] else {
-            return []
-        }
-
-        return models.compactMap { $0["id"] as? String }
-    }
-
-    private func fetchFromAPITags(url: URL) async throws -> [String] {
-        let request = URLRequest(url: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return []
-        }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let models = json?["models"] as? [[String: Any]] else {
-            return []
-        }
-
-        return models.compactMap { $0["name"] as? String }
-    }
-
-    // MARK: - Ping (check /api/tags reachability)
-
-    func ping(apiKey: String) async throws {
-        let tagsURL = baseURL.appendingPathComponent("api/tags")
-        let request = URLRequest(url: tagsURL)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
+    private func fetchFromV1Models() async throws -> [AIModelListing] {
+        let url = baseURL.appendingPathComponent("v1/models")
+        let (data, response) = try await AIProbe.session.data(for: URLRequest(url: url))
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CloudAIError.invalidResponse
         }
+        guard httpResponse.statusCode == 200 else {
+            throw CloudAIError.apiError(
+                statusCode: httpResponse.statusCode,
+                message: "Ollama returned HTTP \(httpResponse.statusCode) from /v1/models."
+            )
+        }
 
-        if httpResponse.statusCode != 200 {
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let models = json?["data"] as? [[String: Any]] else {
+            throw CloudAIError.invalidResponse
+        }
+
+        return models.compactMap { model in
+            guard let id = model["id"] as? String else { return nil }
+            return AIModelListing(id: id, unixSeconds: model["created"])
+        }
+    }
+
+    private func fetchFromAPITags() async throws -> [AIModelListing] {
+        let url = baseURL.appendingPathComponent("api/tags")
+        let (data, response) = try await AIProbe.session.data(for: URLRequest(url: url))
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CloudAIError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
             throw CloudAIError.apiError(
                 statusCode: httpResponse.statusCode,
                 message: "Cannot reach Ollama at \(baseURL.absoluteString). Is Ollama running?"
             )
         }
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let models = json?["models"] as? [[String: Any]] else {
+            throw CloudAIError.invalidResponse
+        }
+
+        // `modified_at` is when the blob was pulled, which is the closest thing
+        // Ollama offers to a release date and orders "what I installed lately"
+        // the way a user expects.
+        return models.compactMap { model in
+            guard let name = model["name"] as? String else { return nil }
+            return AIModelListing(id: name, iso8601: model["modified_at"] as? String)
+        }
+    }
+
+    // MARK: - Ping (check /api/tags reachability)
+
+    func ping(apiKey: String) async throws {
+        _ = try await fetchFromAPITags()
     }
 
     // MARK: - Delegate send/stream to OpenAI-compatible client
@@ -88,13 +94,7 @@ nonisolated struct OllamaClient: AIProviderClient {
         OpenAICompatibleClient(
             provider: provider,
             baseURL: baseURL.appendingPathComponent("v1/chat/completions"),
-            fallbackModels: [],
-            defaultModel: "",
-            requiresAPIKey: false,
-            pingModel: "",
-            modelFilter: nil,
-            modelSorter: nil,
-            modelLimit: nil
+            requiresAPIKey: false
         )
     }
 

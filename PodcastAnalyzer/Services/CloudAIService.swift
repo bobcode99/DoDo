@@ -27,24 +27,12 @@ final class CloudAIService {
 
     private init() {
         var map: [CloudAIProvider: any AIProviderClient] = [:]
-        map[.applePCC] = ShortcutsClient(
-            provider: .applePCC,
-            fallbackModels: ["Shortcuts"],
-            defaultModel: "Shortcuts"
-        )
+        map[.applePCC] = ShortcutsClient(provider: .applePCC)
         map[.openai] = OpenAICompatibleClient.openAI()
         map[.groq] = OpenAICompatibleClient.groq()
         map[.grok] = OpenAICompatibleClient.grok()
-        map[.claude] = ClaudeClient(
-            provider: .claude,
-            fallbackModels: CloudAIProvider.claude.availableModels,
-            defaultModel: CloudAIProvider.claude.defaultModel
-        )
-        map[.gemini] = GeminiClient(
-            provider: .gemini,
-            fallbackModels: CloudAIProvider.gemini.availableModels,
-            defaultModel: CloudAIProvider.gemini.defaultModel
-        )
+        map[.claude] = ClaudeClient(provider: .claude)
+        map[.gemini] = GeminiClient(provider: .gemini)
         cloudClients = map
     }
 
@@ -365,6 +353,12 @@ final class CloudAIService {
         let provider = settings.selectedProvider
         let apiKey = settings.currentAPIKey
         let model = settings.currentModel
+        // The model list is fetched live, so a provider configured before its
+        // catalogue loaded has none selected. Sending "" produces an opaque
+        // provider-side 400; say what is actually missing.
+        guard !model.isEmpty else {
+            throw CloudAIError.noModelSelected(provider: provider.displayName)
+        }
 
         // Always sentence-based for AI analysis to minimise prompt tokens.
         let analyzeFormat: TranscriptFormatForAI = .sentenceBased
@@ -522,6 +516,12 @@ final class CloudAIService {
         let provider = settings.selectedProvider
         let apiKey = settings.currentAPIKey
         let model = settings.currentModel
+        // The model list is fetched live, so a provider configured before its
+        // catalogue loaded has none selected. Sending "" produces an opaque
+        // provider-side 400; say what is actually missing.
+        guard !model.isEmpty else {
+            throw CloudAIError.noModelSelected(provider: provider.displayName)
+        }
 
         if provider.requiresAPIKey {
             guard !apiKey.isEmpty else {
@@ -662,6 +662,12 @@ final class CloudAIService {
         let provider = settings.selectedProvider
         let apiKey = settings.currentAPIKey
         let model = settings.currentModel
+        // The model list is fetched live, so a provider configured before its
+        // catalogue loaded has none selected. Sending "" produces an opaque
+        // provider-side 400; say what is actually missing.
+        guard !model.isEmpty else {
+            throw CloudAIError.noModelSelected(provider: provider.displayName)
+        }
 
         // Format transcript based on user's preference (segment-based vs sentence-based)
         let formattedTranscript = settings.transcriptFormat.formatTranscript(transcript)
@@ -1002,6 +1008,7 @@ enum CloudAIError: LocalizedError {
     case modelNotFound(model: String)
     case rateLimited(provider: String)
     case contextTooLong(provider: String)
+    case noModelSelected(provider: String)
 
     var errorDescription: String? {
         switch self {
@@ -1023,6 +1030,8 @@ enum CloudAIError: LocalizedError {
             return "Too many requests to \(provider). Please wait a moment and try again."
         case .contextTooLong(let provider):
             return "Transcript too long for \(provider). Try a shorter episode or use a model with larger context window."
+        case .noModelSelected(let provider):
+            return "No model selected for \(provider). Open Settings > AI Settings and pick one — the list loads from the provider once your API key is in."
         }
     }
 

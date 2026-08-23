@@ -10,88 +10,95 @@ import Foundation
 nonisolated struct GeminiClient: AIProviderClient {
     let provider: CloudAIProvider
     let requiresAPIKey: Bool = true
-    let fallbackModels: [String]
-    let defaultModel: String
 
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models"
-    private let pingModel = "gemini-2.0-flash"
 
     // MARK: - Fetch Models
 
     func fetchAvailableModels(apiKey: String) async throws -> [String] {
-        let endpoint = URL(string: "\(baseURL)?key=\(apiKey)")!
-        let request = URLRequest(url: endpoint)
+        AIProviderHelpers.presentable(try await fetchModelListings(apiKey: apiKey))
+    }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+    /// `GET /v1beta/models`, following `nextPageToken` — the default page is 50
+    /// and Google's catalogue is longer, so one request drops models.
+    ///
+    /// The key travels in `x-goog-api-key`, not `?key=`. Building the URL by
+    /// interpolating the key and force-unwrapping crashed the app outright if
+    /// the pasted key held a space or newline, and put the secret into every URL
+    /// that gets logged along the way.
+    private func fetchModelListings(apiKey: String) async throws -> [AIModelListing] {
+        var listings: [AIModelListing] = []
+        var pageToken: String?
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CloudAIError.invalidResponse
-        }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let models = json?["models"] as? [[String: Any]] else {
-            throw CloudAIError.invalidResponse
-        }
-
-        let geminiModels = models.compactMap { model -> String? in
-            guard let name = model["name"] as? String,
-                  let supportedMethods = model["supportedGenerationMethods"] as? [String],
-                  supportedMethods.contains("generateContent") else {
-                return nil
+        for _ in 0..<20 {
+            guard var components = URLComponents(string: baseURL) else {
+                throw CloudAIError.invalidResponse
             }
-            return name.replacingOccurrences(of: "models/", with: "")
-        }
-        .filter { id in
-            id.contains("gemini") && !id.contains("embedding") && !id.contains("aqa")
-        }
-        .sorted { a, b in
-            if a.contains("2.5") && !b.contains("2.5") { return true }
-            if !a.contains("2.5") && b.contains("2.5") { return false }
-            if a.contains("2.0") && !b.contains("2.0") { return true }
-            if !a.contains("2.0") && b.contains("2.0") { return false }
-            if a.contains("pro") && !b.contains("pro") { return true }
-            if !a.contains("pro") && b.contains("pro") { return false }
-            return a < b
+            var items = [URLQueryItem(name: "pageSize", value: "200")]
+            if let pageToken { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
+            components.queryItems = items
+            guard let url = components.url else { throw CloudAIError.invalidResponse }
+
+            var request = URLRequest(url: url)
+            request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+
+            let (data, response) = try await AIProbe.session.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw CloudAIError.invalidResponse
+            }
+            guard httpResponse.statusCode == 200 else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                throw CloudAIError.apiError(
+                    statusCode: httpResponse.statusCode,
+                    message: AIProviderHelpers.parseErrorMessage(from: body) ?? body
+                )
+            }
+
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            guard let page = json?["models"] as? [[String: Any]] else {
+                throw CloudAIError.invalidResponse
+            }
+
+            listings += page.compactMap { model -> AIModelListing? in
+                // Only models that can answer a chat request — the list also
+                // carries embedding and tuning-only entries.
+                guard let name = model["name"] as? String,
+                      let methods = model["supportedGenerationMethods"] as? [String],
+                      methods.contains("generateContent") else { return nil }
+                return AIModelListing(id: name.replacingOccurrences(of: "models/", with: ""))
+            }
+
+            guard let next = json?["nextPageToken"] as? String, !next.isEmpty else { break }
+            pageToken = next
         }
 
-        return geminiModels.isEmpty ? fallbackModels : Array(geminiModels.prefix(10))
+        return listings
     }
 
     // MARK: - Ping
 
+    /// Auth check via the model list — no hardcoded model id to go stale, and
+    /// no generation billed for a connection test.
     func ping(apiKey: String) async throws {
-        let endpoint = URL(string: "\(baseURL)/\(pingModel):generateContent?key=\(apiKey)")!
+        _ = try await fetchModelListings(apiKey: apiKey)
+    }
 
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    // MARK: - Endpoints
 
-        let body: [String: Any] = [
-            "contents": [
-                ["role": "user", "parts": [["text": "ping"]]]
-            ],
-            "generationConfig": [
-                "maxOutputTokens": 1
-            ]
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
+    /// `…/models/{model}:{method}` with the key kept out of the URL.
+    ///
+    /// Throws rather than force-unwrapping: the model id reaches here from a
+    /// text field on the local-server path, and `URL(string:)!` on a value with
+    /// a stray space is a crash, not an error message.
+    private func generateEndpoint(model: String, method: String, sse: Bool = false) throws -> URL {
+        let path = "\(baseURL)/\(model):\(method)"
+        guard var components = URLComponents(string: path) else {
             throw CloudAIError.invalidResponse
         }
-
-        if httpResponse.statusCode != 200 {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw CloudAIError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
-        }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard json?["candidates"] != nil else {
-            throw CloudAIError.invalidResponse
-        }
+        if sse { components.queryItems = [URLQueryItem(name: "alt", value: "sse")] }
+        guard let url = components.url else { throw CloudAIError.invalidResponse }
+        return url
     }
 
     // MARK: - Send Request
@@ -103,10 +110,11 @@ nonisolated struct GeminiClient: AIProviderClient {
         model: String,
         maxTokens: Int
     ) async throws -> String {
-        let endpoint = URL(string: "\(baseURL)/\(model):generateContent?key=\(apiKey)")!
+        let endpoint = try generateEndpoint(model: model, method: "generateContent")
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body: [String: Any] = [
@@ -159,10 +167,11 @@ nonisolated struct GeminiClient: AIProviderClient {
         maxTokens: Int,
         onChunk: @escaping @Sendable (String) -> Void
     ) async throws -> String {
-        let endpoint = URL(string: "\(baseURL)/\(model):streamGenerateContent?key=\(apiKey)&alt=sse")!
+        let endpoint = try generateEndpoint(model: model, method: "streamGenerateContent", sse: true)
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body: [String: Any] = [

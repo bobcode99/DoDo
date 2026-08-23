@@ -12,8 +12,6 @@ import Foundation
 nonisolated struct ShortcutsClient: AIProviderClient {
     let provider: CloudAIProvider
     let requiresAPIKey: Bool = false
-    let fallbackModels: [String]
-    let defaultModel: String
 
     func fetchAvailableModels(apiKey: String) async throws -> [String] {
         ["Shortcuts"]

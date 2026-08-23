@@ -95,7 +95,11 @@ actor YapTranscriptService {
         if let key = apiKey, !key.isEmpty {
             request.setValue(key, forHTTPHeaderField: "X-API-Key")
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // AIProbe.session, not URLSession.shared: a mistyped LAN address drops
+        // the SYN rather than refusing it, and the shared session's 60s default
+        // left Test Connection spinning for a full minute before admitting the
+        // host was never there.
+        let (data, response) = try await AIProbe.session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw YapError.serverError("Non-HTTP response from /health")
         }
@@ -112,7 +116,7 @@ actor YapTranscriptService {
         if let key = apiKey, !key.isEmpty {
             request.setValue(key, forHTTPHeaderField: "X-API-Key")
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await AIProbe.session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw YapError.serverError("Non-HTTP response from /backends")
         }

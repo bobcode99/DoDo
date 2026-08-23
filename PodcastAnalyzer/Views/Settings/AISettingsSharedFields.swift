@@ -70,12 +70,16 @@ struct AIModelPicker: View {
             }
         }()
 
-        // Use fetched models if available, otherwise use hardcoded defaults.
-        // For local servers, surface the saved model in the picker even when
-        // it didn't come back from /v1/models — LM Studio's JIT loader can
-        // still bring it up on demand, and the user shouldn't lose their
-        // selection just because the model isn't currently loaded.
-        let fetched = modelState.fetchedModels[provider] ?? provider.availableModels
+        // Only what the provider actually reports. There is no hardcoded
+        // fallback list: the one that used to sit behind this offered ids that
+        // had been retired, which the picker presented as valid choices right
+        // up until the analysis 404'd.
+        //
+        // For local servers, surface the saved model even when it didn't come
+        // back from /v1/models — LM Studio's JIT loader can still bring it up
+        // on demand, and the user shouldn't lose their selection just because
+        // the model isn't currently loaded.
+        let fetched = modelState.fetchedModels[provider] ?? []
         let savedSelection = binding.wrappedValue
         let models: [String] = {
             if provider.usesLocalServer
@@ -103,7 +107,9 @@ struct AIModelPicker: View {
             HStack {
                 Text("Model")
                 Spacer()
-                Text("No models loaded")
+                Text(settings.apiKey(for: provider).isEmpty
+                     ? "Add an API key to load models"
+                     : "No models loaded")
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }

@@ -18,8 +18,6 @@ import Foundation
 
 nonisolated struct LMStudioClient: AIProviderClient {
     let provider: CloudAIProvider
-    let fallbackModels: [String] = []
-    let defaultModel: String = ""
     let requiresAPIKey: Bool = false
 
     let baseURL: URL
@@ -28,63 +26,86 @@ nonisolated struct LMStudioClient: AIProviderClient {
 
     func fetchAvailableModels(apiKey: String) async throws -> [String] {
         // Prefer LM Studio's native endpoint — it includes both loaded and
-        // downloaded-but-unloaded models, and lets us filter out embedding
-        // models that can't be used for chat.
-        let nativeURL = baseURL.appendingPathComponent("api/v1/models")
-        if let models = try? await fetchFromNativeModels(url: nativeURL, apiKey: apiKey),
-           !models.isEmpty {
-            return models
+        // downloaded-but-unloaded models, and reports each model's type so
+        // embedding models can be dropped.
+        do {
+            let models = try await fetchFromNativeModels(apiKey: apiKey)
+            if !models.isEmpty { return AIProviderHelpers.presentable(models) }
+        } catch {
+            // Only fall through when the server answered and the answer was
+            // unusable. If nothing is listening, the fallback request pays the
+            // same connect timeout over again — that second wait is why a
+            // typo'd address used to spin for two minutes instead of ten
+            // seconds.
+            if AIProbe.isUnreachable(error) { throw error }
         }
 
-        // Fallback: OpenAI-compatible /v1/models for older LM Studio builds.
-        let v1ModelsURL = baseURL.appendingPathComponent("v1/models")
-        return (try? await fetchFromV1Models(url: v1ModelsURL, apiKey: apiKey)) ?? []
+        // Older LM Studio builds predate /api/v1 and only serve the
+        // OpenAI-compatible route.
+        return AIProviderHelpers.presentable(try await fetchFromV1Models(apiKey: apiKey))
     }
 
-    private func fetchFromNativeModels(url: URL, apiKey: String) async throws -> [String] {
+    private func fetchFromNativeModels(apiKey: String) async throws -> [AIModelListing] {
+        let url = baseURL.appendingPathComponent("api/v1/models")
         var request = URLRequest(url: url)
         if !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await AIProbe.session.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return []
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CloudAIError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw CloudAIError.apiError(
+                statusCode: httpResponse.statusCode,
+                message: "LM Studio returned HTTP \(httpResponse.statusCode) from /api/v1/models."
+            )
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let models = json?["models"] as? [[String: Any]] else {
-            return []
+            throw CloudAIError.invalidResponse
         }
 
         // Keep only LLMs — embedding models can't service chat completions.
         // The `key` field is the identifier accepted by /v1/chat/completions.
         return models.compactMap { model in
             let type = model["type"] as? String ?? "llm"
-            guard type == "llm" else { return nil }
-            return model["key"] as? String
+            guard type == "llm", let key = model["key"] as? String else { return nil }
+            return AIModelListing(id: key)
         }
     }
 
-    private func fetchFromV1Models(url: URL, apiKey: String) async throws -> [String] {
+    private func fetchFromV1Models(apiKey: String) async throws -> [AIModelListing] {
+        let url = baseURL.appendingPathComponent("v1/models")
         var request = URLRequest(url: url)
         if !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await AIProbe.session.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return []
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CloudAIError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw CloudAIError.apiError(
+                statusCode: httpResponse.statusCode,
+                message: "Cannot reach LM Studio at \(baseURL.absoluteString). Is the server running?"
+            )
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let models = json?["data"] as? [[String: Any]] else {
-            return []
+            throw CloudAIError.invalidResponse
         }
 
-        return models.compactMap { $0["id"] as? String }
+        return models.compactMap { model in
+            guard let id = model["id"] as? String else { return nil }
+            return AIModelListing(id: id, unixSeconds: model["created"])
+        }
     }
 
     // MARK: - Ping (server reachability via models endpoint)
@@ -96,14 +117,16 @@ nonisolated struct LMStudioClient: AIProviderClient {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await AIProbe.session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CloudAIError.invalidResponse
         }
 
         // 200 = native endpoint OK. 401/403 = server up but token wrong/missing.
-        // 404 = older LM Studio without /api/v1 — try OpenAI-compatible fallback.
+        // Anything else = possibly an older LM Studio without /api/v1, so try
+        // the OpenAI-compatible route. The server demonstrably answered by this
+        // point, so the second request cannot become a second connect timeout.
         switch httpResponse.statusCode {
         case 200:
             return
@@ -113,20 +136,7 @@ nonisolated struct LMStudioClient: AIProviderClient {
                 message: "LM Studio rejected the API token. Check Server Settings › Manage Tokens."
             )
         default:
-            // Fallback to /v1/models for older LM Studio
-            let v1URL = baseURL.appendingPathComponent("v1/models")
-            var fallbackRequest = URLRequest(url: v1URL)
-            if !apiKey.isEmpty {
-                fallbackRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-            }
-            let (_, fallbackResponse) = try await URLSession.shared.data(for: fallbackRequest)
-            guard let fallbackHTTP = fallbackResponse as? HTTPURLResponse,
-                  fallbackHTTP.statusCode == 200 else {
-                throw CloudAIError.apiError(
-                    statusCode: httpResponse.statusCode,
-                    message: "Cannot reach LM Studio at \(baseURL.absoluteString). Is the server running?"
-                )
-            }
+            _ = try await fetchFromV1Models(apiKey: apiKey)
         }
     }
 
@@ -136,13 +146,7 @@ nonisolated struct LMStudioClient: AIProviderClient {
         OpenAICompatibleClient(
             provider: provider,
             baseURL: baseURL.appendingPathComponent("v1/chat/completions"),
-            fallbackModels: [],
-            defaultModel: "",
-            requiresAPIKey: false,
-            pingModel: "",
-            modelFilter: nil,
-            modelSorter: nil,
-            modelLimit: nil
+            requiresAPIKey: false
         )
     }
 

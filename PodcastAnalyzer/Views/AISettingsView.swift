@@ -37,6 +37,7 @@ struct AISettingsView: View {
             Text(modelState.testResultMessage)
         }
         .onAppear { modelState.autoFetchIfNeeded(for: settings.selectedProvider) }
+        .onDisappear { modelState.cancelProbes() }
     }
     #endif
 
@@ -53,6 +54,7 @@ struct AISettingsView: View {
             Text(modelState.testResultMessage)
         }
         .onAppear { modelState.autoFetchIfNeeded(for: settings.selectedProvider) }
+        .onDisappear { modelState.cancelProbes() }
     }
 
     // MARK: - Shared Form Content

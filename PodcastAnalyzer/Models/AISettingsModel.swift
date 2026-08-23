@@ -272,87 +272,32 @@ nonisolated enum CloudAIProvider: String, CaseIterable, Codable, Sendable {
         self == .lmstudio || self == .ollama
     }
 
-    var defaultModel: String {
+    /// Where the provider publishes its current rates.
+    ///
+    /// Deliberately a link and not a number. The `pricingNote` this replaced
+    /// quoted per-token prices and "free tier available!" from whenever it was
+    /// typed; by the time anyone read it in the app the figures were wrong and
+    /// the free tiers had changed shape. A URL is the only claim about someone
+    /// else's pricing that stays true without maintenance.
+    var pricingURL: URL? {
         switch self {
-        case .applePCC: return "Shortcuts"
-        case .openai: return "gpt-4o-mini"
-        case .claude: return "claude-sonnet-4-5-20250929"
-        case .gemini: return "gemini-2.0-flash"
-        case .groq: return "llama-3.3-70b-versatile"
-        case .grok: return "grok-2-1212"
-        case .lmstudio: return ""  // Populated dynamically
-        case .ollama: return ""    // Populated dynamically
+        case .applePCC, .lmstudio, .ollama: return nil
+        case .openai: return URL(string: "https://openai.com/api/pricing/")
+        case .claude: return URL(string: "https://platform.claude.com/docs/en/about-claude/pricing")
+        case .gemini: return URL(string: "https://ai.google.dev/gemini-api/docs/pricing")
+        case .groq: return URL(string: "https://groq.com/pricing")
+        case .grok: return URL(string: "https://docs.x.ai/docs/models")
         }
     }
 
-    var availableModels: [String] {
+    /// One line about what running this provider costs, in kind rather than in
+    /// numbers — the part that does not change when a price list does.
+    var costSummary: LocalizedStringKey {
         switch self {
-        // Shortcuts - depends on AI provider used in shortcut
-        case .applePCC: return ["Shortcuts"]
-        // OpenAI models (Dec 2025)
-        case .openai: return [
-            "gpt-4o-mini",           // Fast, cheap
-            "gpt-4o",                // Flagship multimodal
-            "gpt-4.1-mini",          // Newer, better coding
-            "gpt-4.1"                // Latest, 1M context
-        ]
-        // Claude models (Dec 2025) - Claude 3.x deprecated
-        case .claude: return [
-            "claude-sonnet-4-5-20250929",  // Best balance (recommended)
-            "claude-haiku-4-5-20251015",   // Fast, cheap
-            "claude-opus-4-5-20251101"     // Most capable
-        ]
-        // Gemini models (Dec 2025) - Gemini 1.5 DEPRECATED (returns 404!)
-        case .gemini: return [
-            "gemini-2.0-flash",      // Fast, free tier (recommended)
-            "gemini-2.5-flash-lite", // Ultra fast, cheap
-            "gemini-2.5-flash",      // Better quality
-            "gemini-2.5-pro"         // Best quality
-        ]
-        // Groq models (Dec 2025) - Ultra fast inference, free tier!
-        case .groq: return [
-            "llama-3.3-70b-versatile",   // Best quality (recommended)
-            "llama-3.1-8b-instant",      // Ultra fast, free tier
-            "llama-3.2-90b-vision-preview", // Vision capable
-            "mixtral-8x7b-32768",        // Good for long context
-            "gemma2-9b-it"               // Google's Gemma on Groq
-        ]
-        // Grok models (Dec 2025)
-        case .grok: return [
-            "grok-2-1212",           // Stable, good quality
-            "grok-3-mini",           // Faster
-            "grok-3-beta",          // More capable
-            "grok-4-fast-non-reasoning"  // Latest, 2M context
-        ]
-        // Local providers - always fetched dynamically
-        case .lmstudio: return []
-        case .ollama: return []
-        }
-    }
-
-    var contextWindowSize: Int {
-        switch self {
-        case .applePCC: return 128_000  // Shortcuts - depends on AI provider used
-        case .openai: return 128_000
-        case .claude: return 200_000
-        case .gemini: return 1_000_000
-        case .groq: return 128_000      // Varies by model
-        case .grok: return 128_000
-        case .lmstudio: return 32_768   // Varies by loaded model
-        case .ollama: return 32_768     // Varies by loaded model
-        }
-    }
-
-    var pricingNote: String {
-        switch self {
-        case .applePCC: return "Free! Runs AI via iOS/macOS Shortcuts app"
-        case .openai: return "gpt-4o-mini: $0.15/1M input tokens"
-        case .claude: return "Haiku: $0.25/1M input tokens"
-        case .gemini: return "Flash: Free tier available!"
-        case .groq: return "Free tier available! Ultra-fast inference"
-        case .grok: return "grok-beta: $5/1M input tokens"
-        case .lmstudio: return "Free! Runs locally via LM Studio"
-        case .ollama: return "Free! Runs locally via Ollama"
+        case .applePCC: return "Runs through the Shortcuts app. Cost depends on the shortcut you build."
+        case .lmstudio: return "Runs locally in LM Studio. No API cost."
+        case .ollama: return "Runs locally in Ollama. No API cost."
+        default: return "Billed per token by the provider, against your own API key."
         }
     }
 
@@ -517,15 +462,17 @@ final class AISettingsManager {
            let provider = CloudAIProvider(rawValue: providerString) {
             self.selectedProvider = provider
         } else {
-            self.selectedProvider = .gemini // Default to Gemini (has free tier)
+            self.selectedProvider = .gemini
         }
 
-        // Load model selections
-        self.selectedOpenAIModel = UserDefaults.standard.string(forKey: "ai_openai_model") ?? CloudAIProvider.openai.defaultModel
-        self.selectedClaudeModel = UserDefaults.standard.string(forKey: "ai_claude_model") ?? CloudAIProvider.claude.defaultModel
-        self.selectedGeminiModel = UserDefaults.standard.string(forKey: "ai_gemini_model") ?? CloudAIProvider.gemini.defaultModel
-        self.selectedGrokModel = UserDefaults.standard.string(forKey: "ai_grok_model") ?? CloudAIProvider.grok.defaultModel
-        self.selectedGroqModel = UserDefaults.standard.string(forKey: "ai_groq_model") ?? CloudAIProvider.groq.defaultModel
+        // Load model selections. No seeded defaults: a hardcoded starter id
+        // rots into a 404, so an unconfigured provider starts with no model and
+        // the first successful model fetch picks one from the live catalogue.
+        self.selectedOpenAIModel = UserDefaults.standard.string(forKey: "ai_openai_model") ?? ""
+        self.selectedClaudeModel = UserDefaults.standard.string(forKey: "ai_claude_model") ?? ""
+        self.selectedGeminiModel = UserDefaults.standard.string(forKey: "ai_gemini_model") ?? ""
+        self.selectedGrokModel = UserDefaults.standard.string(forKey: "ai_grok_model") ?? ""
+        self.selectedGroqModel = UserDefaults.standard.string(forKey: "ai_groq_model") ?? ""
         self.selectedLMStudioModel = UserDefaults.standard.string(forKey: "ai_lmstudio_model") ?? ""
         self.selectedOllamaModel = UserDefaults.standard.string(forKey: "ai_ollama_model") ?? ""
         self.disableThinkingForLocalModels = UserDefaults.standard.bool(forKey: "ai_disable_thinking")

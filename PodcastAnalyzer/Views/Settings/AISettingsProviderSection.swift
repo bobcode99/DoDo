@@ -34,9 +34,22 @@ struct AISettingsProviderSection: View {
                 }
             }
 
-            Text(settings.selectedProvider.pricingNote)
+            Text(settings.selectedProvider.costSummary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            // Rates live at the provider, not in this binary. The note that
+            // used to sit here quoted per-token prices and free-tier promises
+            // that were already out of date when the build shipped.
+            if let pricing = settings.selectedProvider.pricingURL {
+                Link(destination: pricing) {
+                    HStack {
+                        Text("View \(settings.selectedProvider.displayName) Pricing")
+                        Spacer()
+                        Image(systemName: "arrow.up.right.square")
+                    }
+                }
+            }
         } header: {
             Text("Cloud AI Provider")
         } footer: {
