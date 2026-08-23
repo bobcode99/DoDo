@@ -249,6 +249,29 @@ nonisolated enum CloudAIProvider: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// Asset-catalog name for this provider's own logo mark, so users
+    /// recognize it at a glance instead of a generic SF Symbol.
+    var brandAssetName: String? {
+        switch self {
+        case .applePCC: return "ProviderIcon-Shortcuts"
+        case .openai: return "ProviderIcon-OpenAI"
+        case .claude: return "ProviderIcon-Claude"
+        case .gemini: return "ProviderIcon-Gemini"
+        case .groq: return "ProviderIcon-Groq"
+        case .grok: return "ProviderIcon-Grok"
+        case .lmstudio: return "ProviderIcon-LMStudio"
+        case .ollama: return "ProviderIcon-Ollama"
+        }
+    }
+
+    /// Whether `brandAssetName` should render in its own colors rather than
+    /// as a template (tintable) mask. The Shortcuts icon is Apple's actual
+    /// app icon — a colorful badge meant to be shown as-is; the other
+    /// providers ship flat monochrome marks meant to be tinted.
+    var brandAssetRendersOriginalColor: Bool {
+        self == .applePCC
+    }
+
     var apiKeyURL: URL? {
         switch self {
         case .applePCC, .lmstudio, .ollama: return nil

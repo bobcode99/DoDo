@@ -284,7 +284,7 @@ struct QuestionAnswerTabView: View {
         Divider()
 
         HStack {
-          Label(result.provider.displayName, systemImage: result.provider.iconName)
+          ProviderIconLabel(provider: result.provider, iconSize: 12)
             .font(.caption2)
             .foregroundStyle(.secondary)
           Spacer()

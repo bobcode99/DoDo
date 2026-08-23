@@ -18,7 +18,7 @@ struct AISettingsOtherProvidersSection: View {
             DisclosureGroup("Configure Other Providers") {
                 ForEach(CloudAIProvider.allCases.filter { $0 != settings.selectedProvider && $0.requiresAPIKey }, id: \.self) { provider in
                     VStack(alignment: .leading, spacing: 8) {
-                        Label(provider.displayName, systemImage: provider.iconName)
+                        ProviderIconLabel(provider: provider)
                             .font(.subheadline)
                             .fontWeight(.medium)
 

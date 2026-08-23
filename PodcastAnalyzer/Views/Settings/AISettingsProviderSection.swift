@@ -16,7 +16,7 @@ struct AISettingsProviderSection: View {
         Section {
             Picker("AI Provider", selection: $settings.selectedProvider) {
                 ForEach(CloudAIProvider.allCases, id: \.self) { provider in
-                    Label(provider.displayName, systemImage: provider.iconName)
+                    ProviderIconLabel(provider: provider)
                         .tag(provider)
                 }
             }

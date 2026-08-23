@@ -357,11 +357,9 @@ struct AnalysisTabView: View {
 
       // Metadata
       HStack {
-        Label(
-          settings.selectedProvider.displayName, systemImage: settings.selectedProvider.iconName
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        ProviderIconLabel(provider: settings.selectedProvider, iconSize: 13)
+          .font(.caption)
+          .foregroundStyle(.secondary)
         Spacer()
         Text(settings.currentModel)
           .font(.caption)

@@ -52,7 +52,7 @@ struct AnalysisResultCardView: View {
 
       // Metadata
       HStack {
-        Label(result.provider.displayName, systemImage: result.provider.iconName)
+        ProviderIconLabel(provider: result.provider, iconSize: 13)
           .font(.caption)
           .foregroundStyle(.secondary)
 
