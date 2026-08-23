@@ -146,3 +146,17 @@ final class DiscoveryRegions {
     }
   }
 }
+
+// MARK: - Localized names
+
+extension Storefront {
+  /// Country name in the app's language.
+  ///
+  /// `Storefronts.swift` is generated with English CLDR names, so the picker
+  /// used to list 174 English countries whatever language the app was set to.
+  /// Foundation already ships every translation — falls back to the generated
+  /// name only for a custom code CLDR doesn't recognize.
+  func localizedName(in locale: Locale) -> String {
+    locale.localizedString(forRegionCode: code) ?? name
+  }
+}

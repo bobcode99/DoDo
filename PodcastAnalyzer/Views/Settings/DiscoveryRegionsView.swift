@@ -15,6 +15,7 @@ import SwiftUI
 
 struct DiscoveryRegionsView: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.locale) private var locale
   @State private var regions = DiscoveryRegions.shared
 
   @State private var search = ""
@@ -29,14 +30,27 @@ struct DiscoveryRegionsView: View {
   }
 
   /// Catalogue minus what's already ticked, filtered by the search field.
-  /// Matching on code as well as name so "tw" finds Taiwan.
+  ///
+  /// Matching on code as well as name so "tw" finds Taiwan, and on the English
+  /// name as well as the localized one so a code learned from Apple's own
+  /// English docs still finds its row.
+  ///
+  /// Sorted by localized name: the generated catalogue is in English
+  /// alphabetical order, which is arbitrary once the names are translated.
   private var searchResults: [Storefront] {
     let enabled = Set(regions.enabled)
-    let pool = Storefront.all.filter { !enabled.contains($0.code) }
+    let pool = Storefront.all
+      .filter { !enabled.contains($0.code) }
+      .sorted {
+        $0.localizedName(in: locale)
+          .localizedStandardCompare($1.localizedName(in: locale)) == .orderedAscending
+      }
     let query = search.trimmingCharacters(in: .whitespaces).lowercased()
     guard !query.isEmpty else { return pool }
     return pool.filter {
-      $0.name.lowercased().contains(query) || $0.code.contains(query)
+      $0.localizedName(in: locale).lowercased().contains(query)
+        || $0.name.lowercased().contains(query)
+        || $0.code.contains(query)
     }
   }
 
@@ -68,7 +82,7 @@ struct DiscoveryRegionsView: View {
       ForEach(regions.enabledStorefronts) { region in
         HStack {
           Text(region.flag).font(.title2)
-          Text(region.name)
+          Text(region.localizedName(in: locale))
           Spacer()
           if !Storefront.isKnown(region.code) {
             Text("Custom")
@@ -165,7 +179,7 @@ struct DiscoveryRegionsView: View {
         } label: {
           HStack {
             Text(region.flag).font(.title2)
-            Text(region.name).foregroundStyle(.primary)
+            Text(region.localizedName(in: locale)).foregroundStyle(.primary)
             Spacer()
             Image(systemName: "plus.circle")
               .foregroundStyle(.tint)
