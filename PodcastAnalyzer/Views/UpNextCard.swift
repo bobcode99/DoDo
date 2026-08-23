@@ -56,7 +56,7 @@ struct UpNextCard: View {
       Text(episode.episodeInfo.title)
         .font(.subheadline)
         .fontWeight(.medium)
-        .lineLimit(2)
+        .lineLimit(2, reservesSpace: true)
         .multilineTextAlignment(.leading)
 
       // Suggestion reason badge

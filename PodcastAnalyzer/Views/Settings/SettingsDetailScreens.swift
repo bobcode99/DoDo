@@ -599,6 +599,9 @@ struct AppearanceSettingsScreen: View {
   @AppStorage(EpisodeRowAppearanceDefaults.sizeKey)
   private var playButtonSize = EpisodeRowPlayButtonSize.medium.rawValue
 
+  @AppStorage(LibraryGridAppearanceDefaults.columnsKey)
+  private var libraryGridColumns = LibraryGridColumns.two.rawValue
+
   /// Empty = System Default. Stored here rather than read through the
   /// environment because this screen is the one place that writes it.
   @AppStorage(AppAccentColorDefaults.key) private var accentRaw = ""
@@ -710,6 +713,21 @@ struct AppearanceSettingsScreen: View {
         Text("Episode Rows")
       } footer: {
         Text("The ••• menu takes the opposite side. A larger play button is easier to hit while walking.")
+      }
+
+      Section {
+        Picker("Grid Columns", selection: $libraryGridColumns) {
+          ForEach(LibraryGridColumns.allCases) { columns in
+            Text(columns.titleKey).tag(columns.rawValue)
+          }
+        }
+        #if os(iOS)
+        .pickerStyle(.segmented)
+        #endif
+      } header: {
+        Text("Library")
+      } footer: {
+        Text("More columns fit more shows on screen at once, at a smaller artwork size.")
       }
 
       Section {

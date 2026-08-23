@@ -16,10 +16,11 @@ struct LibraryPodcastsGrid: View {
   let onError: (String) -> Void
   let onUnsubscribed: () -> Void
 
-  private let columns = [
-    GridItem(.flexible(), spacing: 12),
-    GridItem(.flexible(), spacing: 12),
-  ]
+  @Environment(\.libraryGridColumns) private var gridColumns
+
+  private var columns: [GridItem] {
+    Array(repeating: GridItem(.flexible(), spacing: 12), count: gridColumns.rawValue)
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
