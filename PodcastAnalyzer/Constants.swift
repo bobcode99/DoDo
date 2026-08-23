@@ -29,6 +29,12 @@ struct Constants {
   static let settingsString: LocalizedStringKey = "Settings"
   static let searchString: LocalizedStringKey = "Search"
 
+  /// UserDefaults key for the first-launch onboarding flag. Shared because
+  /// views read it through `@AppStorage` while the import intent and the
+  /// `podcastanalyzer://import-podcasts` handler write it directly — five
+  /// copies of the literal were one typo away from silently reshowing setup.
+  static let hasCompletedOnboardingKey = "hasCompletedOnboarding"
+
   static let homeIconName = "house.fill"
   static let libraryIconName = "books.vertical.fill"
   static let analysisIconName = "sparkles"

@@ -34,7 +34,7 @@ struct iOSContentView: View {
   private var notificationManager: NotificationNavigationManager { .shared }
   @Environment(\.modelContext) private var modelContext
 
-  @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+  @AppStorage(Constants.hasCompletedOnboardingKey) private var hasCompletedOnboarding = false
 
   @State private var coordinator = TabNavigationCoordinator()
   /// Transient playback/queue problem to surface. Carries its own title so one

@@ -235,7 +235,7 @@ struct PodcastAnalyzerApp: App {
           // deliberately on the onboarding Permissions page, so don't ambush them
           // with system prompts on first launch.
           #if os(iOS)
-          if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+          if UserDefaults.standard.bool(forKey: Constants.hasCompletedOnboardingKey) {
             // Speech recognition (used by on-device transcription).
             // Must be detached: requestAuthorization delivers its callback on a non-main
             // thread, which would crash under Swift 6 MainActor isolation if called inline.
@@ -374,7 +374,7 @@ struct PodcastAnalyzerApp: App {
           // Expected format: podcastanalyzer://import-podcasts?rssURLs=url1,url2,...
           // Importing *is* completing setup — land on the home screen, not back
           // on the onboarding page the user launched the shortcut from.
-          UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+          UserDefaults.standard.set(true, forKey: Constants.hasCompletedOnboardingKey)
           if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
              let rawValue = components.queryItems?.first(where: { $0.name == "rssURLs" })?.value {
             let rssURLs = rawValue

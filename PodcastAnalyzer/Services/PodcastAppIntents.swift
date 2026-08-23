@@ -14,7 +14,6 @@ import Foundation
 
 /// Intent that allows Shortcuts to import podcasts from Apple Podcasts export
 /// Accepts combined text with RSS URLs and subscribes to all podcasts
-@available(iOS 16.0, macOS 13.0, *)
 struct ImportPodcastsIntent: AppIntent {
     static let title: LocalizedStringResource = "Import Podcasts from List"
     static let description = IntentDescription(
@@ -39,6 +38,12 @@ struct ImportPodcastsIntent: AppIntent {
         if rssURLs.isEmpty {
             return .result(value: "No RSS feed URLs found in the provided text.")
         }
+
+        // Importing *is* completing setup — if this ran from first-launch
+        // onboarding (the "Run Shortcut" button), land on the home screen next
+        // instead of returning to the guide. Mirrors the
+        // podcastanalyzer://import-podcasts handler in the App struct.
+        UserDefaults.standard.set(true, forKey: Constants.hasCompletedOnboardingKey)
 
         // Post notification to trigger import in the app
         NotificationCenter.default.post(

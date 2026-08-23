@@ -23,6 +23,13 @@ final class SubscriptionSyncCoordinator {
   private var remoteChangeObserver: NSObjectProtocol?
   private var syncCompletedObserver: NSObjectProtocol?
 
+  /// Set while a resubscribe pass runs. CloudKit's initial import fires many
+  /// remote-change notifications in quick succession, and every save inside a
+  /// pass fires more — without this gate each notification spawned its own
+  /// full feed-refetching pass (the same feeds downloaded dozens of times).
+  private var isResubscribing = false
+  private var needsResubscribeRecheck = false
+
   // Internal (not private) so tests can create an isolated instance against
   // an in-memory container instead of sharing app-wide singleton state.
   init() {}
@@ -209,8 +216,28 @@ final class SubscriptionSyncCoordinator {
       forName: .NSPersistentStoreRemoteChange, object: nil, queue: .main
     ) { [weak self] _ in
       Task { @MainActor [weak self] in
-        await self?.resubscribeMissingPodcasts()
+        self?.scheduleResubscribe()
       }
+    }
+  }
+
+  /// Collapses overlapping remote-change notifications: one pass runs now, and
+  /// any notifications that land while it works collapse into a single repeat
+  /// afterwards — rather than one full pass per notification.
+  private func scheduleResubscribe() {
+    if isResubscribing {
+      needsResubscribeRecheck = true
+      return
+    }
+    isResubscribing = true
+    Task {
+      // `defer`, not a trailing assignment: a cancelled task would otherwise
+      // leave the flag set and silently drop every later resubscribe.
+      defer { isResubscribing = false }
+      repeat {
+        needsResubscribeRecheck = false
+        await resubscribeMissingPodcasts()
+      } while needsResubscribeRecheck
     }
   }
 
@@ -225,12 +252,23 @@ final class SubscriptionSyncCoordinator {
     let remoteRows = (try? context.fetch(FetchDescriptor<SubscribedPodcastModel>())) ?? []
     guard !remoteRows.isEmpty else { return }
 
+    // One fetch, not two per row: this runs on the main actor every time
+    // CloudKit reports a change, and a per-row descriptor meant 2N queries.
+    // "Already have it" means a subscribed model matching this feed URL *or*
+    // the mirrored title — matching URLs alone misses a subscribed title-twin
+    // when duplicate models exist, so the row read as missing forever and
+    // every pass refetched its whole feed.
+    let subscribed =
+      (try? context.fetch(
+        FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.isSubscribed })
+      )) ?? []
+    let subscribedURLs = Set(subscribed.map(\.rssUrl))
+    let subscribedTitles = Set(subscribed.map(\.title))
+
     for row in remoteRows {
-      let rssUrl = row.rssUrl
-      let descriptor = FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.rssUrl == rssUrl })
-      let local = try? context.fetch(descriptor).first
-      guard local?.isSubscribed != true else { continue }
-      await subscribeSilently(rssUrl: rssUrl, context: context)
+      guard !subscribedURLs.contains(row.rssUrl),
+            !subscribedTitles.contains(row.title) else { continue }
+      await subscribeSilently(rssUrl: row.rssUrl, context: context)
     }
   }
 
@@ -242,9 +280,12 @@ final class SubscriptionSyncCoordinator {
       let title = podcastInfo.title
       let titleDescriptor = FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.title == title })
       if let existingByTitle = try context.fetch(titleDescriptor).first {
+        // Already subscribed → nothing to persist; saving anyway would fire
+        // another remote-change notification and re-run this whole flow.
+        guard !existingByTitle.isSubscribed else { return }
         existingByTitle.setSubscribed(true)
       } else {
-        let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date(), isSubscribed: true)
+        let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: .now, isSubscribed: true)
         context.insert(model)
       }
       try context.save()

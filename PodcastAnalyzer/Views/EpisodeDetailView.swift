@@ -135,7 +135,7 @@ struct EpisodeDetailView: View {
                         podcastLanguage: viewModel.podcastLanguage
                     )
                 ) {
-                    navRowLabel(
+                    NavRowLabel(
                         icon: "captions.bubble",
                         tint: .purple,
                         title: "Transcript",
@@ -155,7 +155,7 @@ struct EpisodeDetailView: View {
                         podcastLanguage: viewModel.podcastLanguage
                     )
                 ) {
-                    navRowLabel(
+                    NavRowLabel(
                         icon: "sparkles",
                         tint: .orange,
                         title: "AI Insights",
@@ -169,35 +169,6 @@ struct EpisodeDetailView: View {
         }
     }
 
-    private func navRowLabel(
-        icon: String,
-        tint: Color,
-        title: String,
-        subtitle: String
-    ) -> some View {
-        HStack(spacing: 13) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.15), in: .rect(cornerRadius: 9))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-    }
 }
 
 #Preview {
