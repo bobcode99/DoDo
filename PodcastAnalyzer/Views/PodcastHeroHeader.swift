@@ -102,7 +102,7 @@ private nonisolated func saturationWeightedAverage(of data: Data) -> Color? {
 struct PodcastHeroHeader<Description: View>: View {
   let artworkURL: String
   let title: String
-  /// Empty for subscribed shows — RSS gives no author, only the browse path does.
+  /// Shown first on the meta line. Empty when the feed carries no author.
   let artist: String
   let episodeCount: Int
   let language: String
@@ -172,7 +172,11 @@ struct PodcastHeroHeader<Description: View>: View {
   }
 
   private var artworkAndTitle: some View {
-    HStack(alignment: .bottom, spacing: 15) {
+    // Centered against the artwork rather than bottom-aligned. Bottom alignment
+    // was set when the text column was three lines tall and filled the cover;
+    // with the author folded into the meta line it is two, and sat in the
+    // artwork's lower corner with the top half empty.
+    HStack(alignment: .center, spacing: 15) {
       CachedArtworkImage(urlString: artworkURL, size: 106, cornerRadius: 18)
         .shadow(color: .black.opacity(0.34), radius: 13, y: 6)
 
@@ -183,28 +187,27 @@ struct PodcastHeroHeader<Description: View>: View {
           .foregroundStyle(.white)
           .lineLimit(2)
 
-        if !artist.isEmpty {
-          Text(artist)
-            .font(.subheadline)
-            .foregroundStyle(.white.opacity(0.82))
-            .lineLimit(1)
-        }
-
         metaText
           .font(.caption)
           .foregroundStyle(.white.opacity(0.7))
-          .lineLimit(1)
+          .lineLimit(2)
       }
-      .padding(.bottom, 3)
     }
   }
 
+  /// Author · episode count · language, on one line.
+  ///
   /// `Text`, not an interpolated `String` — the in-app language picker works by
-  /// overriding the environment locale, which only `Text` honours.
+  /// overriding the environment locale, which only `Text` honours. The author is
+  /// concatenated rather than interpolated so the two count strings keep the
+  /// keys they are already translated under.
   private var metaText: Text {
-    language.isEmpty
+    let counts =
+      language.isEmpty
       ? Text("\(episodeCount) episodes")
       : Text("\(episodeCount) episodes · \(language)")
+    guard !artist.isEmpty else { return counts }
+    return Text(verbatim: artist) + Text(verbatim: " · ") + counts
   }
 
   private var actionButtons: some View {

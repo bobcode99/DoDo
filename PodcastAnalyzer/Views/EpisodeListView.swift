@@ -111,12 +111,18 @@ struct EpisodeListView: View {
     }
   }
 
-  private var artistName: String {
+  /// Author for the hero's meta line.
+  ///
+  /// Browse mode gets it from Apple's search result; the subscribed path used to
+  /// get nothing, which is why the header never showed one. The feed's
+  /// `itunes:author` is already parsed and stored — read it rather than leave
+  /// the line short.
+  private func artistName(viewModel: EpisodeListViewModel) -> String {
     switch source {
     case .model:
-      return ""
+      return viewModel.podcastInfo.author ?? ""
     case .browse(_, _, let artist, _, _):
-      return artist
+      return artist.isEmpty ? (viewModel.podcastInfo.author ?? "") : artist
     }
   }
 
@@ -659,7 +665,7 @@ struct EpisodeListView: View {
     PodcastHeroHeader(
       artworkURL: viewModel.podcastInfo.imageURL,
       title: viewModel.podcastInfo.title,
-      artist: artistName,
+      artist: artistName(viewModel: viewModel),
       episodeCount: viewModel.podcastInfo.episodes.count,
       language: languageDisplayName(for: viewModel.podcastInfo.language),
       isSubscribed: isSubscribed,
