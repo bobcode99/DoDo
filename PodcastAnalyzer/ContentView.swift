@@ -12,6 +12,7 @@ struct ContentView: View {
     #if os(iOS)
     iOSContentView()
       .episodeRowAppearance()
+      .libraryGridAppearance()
       .appAccentColor()
       .appTheme()
     #else
