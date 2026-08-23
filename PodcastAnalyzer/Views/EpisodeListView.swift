@@ -876,3 +876,103 @@ struct FilterChip: View {
     }
   }
 }
+
+// MARK: - Previews
+
+#if DEBUG
+
+  /// Sample store for the previews.
+  ///
+  /// The view reads its podcast through `@Environment(\.modelContext)`, so the
+  /// model has to live in a container the preview installs — a bare
+  /// `PodcastInfoModel(...)` renders an empty screen.
+  @MainActor
+  private enum EpisodeListPreviewData {
+    static let episodes: [PodcastEpisodeInfo] = (1...14).map { index in
+      PodcastEpisodeInfo(
+        title: "Episode \(index): \(titles[(index - 1) % titles.count])",
+        podcastEpisodeDescription:
+          "Maya and Ravi dig into what shipped this week, what broke, and the one "
+          + "decision they'd take back.",
+        // Weekly, newest first, so the sort toggle has something to reorder.
+        pubDate: Calendar.current.date(byAdding: .day, value: -7 * index, to: .now),
+        audioURL: "https://example.com/ep\(index).mp3",
+        duration: 1800 + index * 240,
+        guid: "preview-episode-\(index)"
+      )
+    }
+
+    private static let titles = [
+      "The On-Device AI Revolution", "Why Your Build Is Slow", "Shipping on a Friday",
+      "The Cost of a Free Tier", "Reading the Crash Log", "Everything Is a Cache",
+      "Nobody Reads the Docs",
+    ]
+
+    static let info = PodcastInfo(
+      title: "Signal & Noise",
+      description:
+        "A weekly conversation about the software people actually ship — the "
+        + "trade-offs, the outages, and the parts nobody writes a blog post about. "
+        + "Long enough to need the More button.",
+      episodes: episodes,
+      rssUrl: "https://example.com/feed.xml",
+      imageURL: "https://example.com/artwork.jpg",
+      language: "en",
+      author: "Maya Okonkwo"
+    )
+
+    // `lastUpdated: .now` keeps `refreshPodcast()` inside its 30-minute
+    // staleness guard, so the preview never reaches for the network.
+    static let subscribed = PodcastInfoModel(podcastInfo: info, lastUpdated: .now)
+    static let unsubscribed = PodcastInfoModel(
+      podcastInfo: info, lastUpdated: .now, isSubscribed: false)
+
+    // The view model fetches downloads, transcripts, and analyses alongside the
+    // podcast, so all four belong in the schema — a container that only knows
+    // PodcastInfoModel makes those fetches fail.
+    static let container: ModelContainer = {
+      let container = try! ModelContainer(
+        for: PodcastInfoModel.self, EpisodeDownloadModel.self,
+        EpisodeTranscriptModel.self, EpisodeAIAnalysis.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+      )
+      container.mainContext.insert(subscribed)
+      container.mainContext.insert(unsubscribed)
+      return container
+    }()
+  }
+
+  #Preview("Subscribed") {
+    NavigationStack {
+      EpisodeListView(podcastModel: EpisodeListPreviewData.subscribed)
+    }
+    .modelContainer(EpisodeListPreviewData.container)
+  }
+
+  #Preview("Not subscribed") {
+    NavigationStack {
+      EpisodeListView(podcastModel: EpisodeListPreviewData.unsubscribed)
+    }
+    .modelContainer(EpisodeListPreviewData.container)
+  }
+
+  /// Starred is empty in the sample data — this is the filtered-to-nothing state.
+  #Preview("Starred filter") {
+    NavigationStack {
+      EpisodeListView(podcastModel: EpisodeListPreviewData.subscribed, initialFilter: .starred)
+    }
+    .modelContainer(EpisodeListPreviewData.container)
+  }
+
+  #Preview("Filter chips") {
+    ScrollView(.horizontal) {
+      HStack(spacing: 7) {
+        ForEach(EpisodeFilter.allCases, id: \.self) { filter in
+          FilterChip(title: filter.rawValue, icon: filter.icon, isSelected: filter == .unplayed) {}
+        }
+      }
+      .padding()
+    }
+  }
+
+#endif
