@@ -133,7 +133,9 @@ public actor PodcastRssService {
 
   // MARK: - Private Helpers
 
-  private func parseRSSPodcast(from data: Data, rssUrl: String) throws -> PodcastInfo {
+  /// Not `private` so the parse can be exercised on fixture bytes without a
+  /// network round trip — every other caller still goes through a fetch.
+  func parseRSSPodcast(from data: Data, rssUrl: String) throws -> PodcastInfo {
     do {
       let rssFeed = try RSSFeed(data: data)
       guard let channel = rssFeed.channel else {
