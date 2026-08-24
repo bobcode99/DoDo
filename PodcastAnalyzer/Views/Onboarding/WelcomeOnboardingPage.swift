@@ -35,7 +35,7 @@ struct WelcomeOnboardingPage: View {
           .italic()
           .foregroundStyle(.secondary)
 
-        Text("Listen, download, and analyze podcasts\nwith AI-powered insights.")
+        Text("Turn hours of podcasts\ninto minutes of insight.")
           .font(.body)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
@@ -48,20 +48,20 @@ struct WelcomeOnboardingPage: View {
         FeatureRow(
           icon: "arrow.down.circle.fill",
           color: .green,
-          title: "Download Episodes",
-          description: "Save episodes for offline listening"
+          title: "Listen Anywhere",
+          description: "Download once, play offline — no signal needed"
         )
         FeatureRow(
           icon: "text.bubble.fill",
           color: .purple,
-          title: "AI Transcripts",
-          description: "On-device speech-to-text with Whisper"
+          title: "Every Word, Searchable",
+          description: "Transcripts made on your device. Free and private."
         )
         FeatureRow(
           icon: "sparkles",
           color: .orange,
-          title: "Smart Analysis",
-          description: "Summaries, highlights, and Q&A"
+          title: "Skip the Filler",
+          description: "AI summaries and key quotes — get the point in a minute"
         )
       }
       .padding(.horizontal, 28)
