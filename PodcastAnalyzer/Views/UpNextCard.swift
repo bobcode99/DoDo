@@ -59,23 +59,30 @@ struct UpNextCard: View {
         .lineLimit(2, reservesSpace: true)
         .multilineTextAlignment(.leading)
 
-      // Suggestion reason badge
-      switch reason {
-      case .inQueue, .inProgress, .starred, .downloaded:
-        HStack(spacing: 3) {
-          Image(systemName: reason.systemImage)
-            .font(.system(size: 9))
-          Text(reason.label)
-            .font(.system(size: 10))
-            .lineLimit(1)
+      // Suggestion reason badge — reserves its row height even with no badge
+      // (`Color.clear`) so every card in the carousel is the same height
+      // instead of relying on a Spacer inside a hardcoded outer frame, which
+      // squeezed the play button off the bottom once the title above started
+      // reserving 2 lines unconditionally.
+      Group {
+        switch reason {
+        case .inQueue, .inProgress, .starred, .downloaded:
+          HStack(spacing: 3) {
+            Image(systemName: reason.systemImage)
+              .font(.system(size: 9))
+            Text(reason.label)
+              .font(.system(size: 10))
+              .lineLimit(1)
+          }
+          // Queued rows are there because the user put them there — tint the
+          // badge so explicit intent reads differently from an inferred reason.
+          .foregroundStyle(isQueued ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+        default:
+          Color.clear
         }
-        // Queued rows are there because the user put them there — tint the
-        // badge so explicit intent reads differently from an inferred reason.
-        .foregroundStyle(isQueued ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-        .padding(.top, 1)
-      default:
-        Spacer(minLength: 0)
       }
+      .frame(height: 14, alignment: .leading)
+      .padding(.top, 1)
 
       // Play button with progress - uses live audio manager state
       LivePlaybackButton(
@@ -84,7 +91,7 @@ struct UpNextCard: View {
         action: onPlay
       )
     }
-    .frame(width: 140, height: 258, alignment: .top)
+    .frame(width: 140, alignment: .top)
     .task(id: episode.id) {
       let observer = EpisodeStatusObserver(episode: episode)
       observer.setModelContext(modelContext)
@@ -96,27 +103,102 @@ struct UpNextCard: View {
   }
 }
 
-#Preview {
-  let mockEpisode = LibraryEpisode(
-    id: "preview_podcast\u{1F}preview_episode",
-    podcastTitle: "The Swift Podcast",
+// MARK: - Preview Mocks
+
+private func mockUpNextEpisode(
+  title: String,
+  podcast: String = "The Swift Podcast",
+  isStarred: Bool = false,
+  isDownloaded: Bool = false,
+  lastPlaybackPosition: TimeInterval = 0
+) -> LibraryEpisode {
+  LibraryEpisode(
+    id: "\(podcast)\u{1F}\(title)",
+    podcastTitle: podcast,
     imageURL: nil,
     language: "en",
     episodeInfo: PodcastEpisodeInfo(
-      title: "Understanding Swift Concurrency in Practice",
+      title: title,
       podcastEpisodeDescription: "A deep dive into async/await patterns",
       pubDate: Date(),
       audioURL: "https://example.com/episode.mp3",
       duration: 1800
     ),
-    isStarred: true,
-    isDownloaded: false,
+    isStarred: isStarred,
+    isDownloaded: isDownloaded,
     isCompleted: false,
-    lastPlaybackPosition: 450,
+    lastPlaybackPosition: lastPlaybackPosition,
     savedDuration: 1800
   )
+}
 
-  UpNextCard(episode: mockEpisode, onPlay: {})
+#Preview("No Badge") {
+  UpNextCard(
+    episode: mockUpNextEpisode(title: "Understanding Swift Concurrency in Practice"),
+    onPlay: {}
+  )
+  .padding()
+  .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+
+#Preview("In Progress") {
+  UpNextCard(
+    episode: mockUpNextEpisode(title: "The Daily", lastPlaybackPosition: 594),
+    onPlay: {},
+    reason: .inProgress(percentComplete: 33)
+  )
+  .padding()
+  .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+
+#Preview("Starred") {
+  UpNextCard(
+    episode: mockUpNextEpisode(title: "A Deep Dive Into Ambient Sound Design", isStarred: true),
+    onPlay: {},
+    reason: .starred
+  )
+  .padding()
+  .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+
+#Preview("In Queue") {
+  UpNextCard(
+    episode: mockUpNextEpisode(title: "Season Finale: What We Got Wrong"),
+    onPlay: {},
+    reason: .inQueue(position: 1)
+  )
+  .padding()
+  .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+
+/// A row of mixed 1-line and 2-line titles, badge and no-badge — the exact
+/// layout the Up Next carousel renders, so a height regression that clips
+/// the play button (or misaligns rows) shows up here instead of only in a
+/// single-card preview.
+#Preview("Carousel Row") {
+  ScrollView(.horizontal) {
+    HStack(spacing: 12) {
+      UpNextCard(
+        episode: mockUpNextEpisode(title: "The Daily", lastPlaybackPosition: 594),
+        onPlay: {},
+        reason: .inProgress(percentComplete: 33)
+      )
+      UpNextCard(
+        episode: mockUpNextEpisode(title: "Think Baseball Is Boring? The Sabermetrics Revolution"),
+        onPlay: {},
+        reason: .newEpisode
+      )
+      UpNextCard(
+        episode: mockUpNextEpisode(title: "Understanding Swift Concurrency in Practice", isStarred: true),
+        onPlay: {},
+        reason: .starred
+      )
+      UpNextCard(
+        episode: mockUpNextEpisode(title: "Radiolab"),
+        onPlay: {}
+      )
+    }
     .padding()
-    .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+  }
+  .modelContainer(for: PodcastInfoModel.self, inMemory: true)
 }
