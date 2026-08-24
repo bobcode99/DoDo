@@ -15,18 +15,14 @@ struct WelcomeOnboardingPage: View {
     VStack(spacing: 0) {
       Spacer()
 
-      ZStack {
-        RoundedRectangle(cornerRadius: 26)
-          .fill(Color(.displayP3, red: 0.137, green: 0.216, blue: 0.188).gradient)
-        Image("DoDoLogo")
-          .resizable()
-          .scaledToFit()
-          .padding(8)
-      }
-      .frame(width: 116, height: 116)
-      .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
-      .padding(.bottom, 28)
-      .accessibilityHidden(true)
+      Image("dodo-real")
+        .resizable()
+        .scaledToFill()
+        .frame(width: 116, height: 116)
+        .clipShape(RoundedRectangle(cornerRadius: 26))
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
+        .padding(.bottom, 28)
+        .accessibilityHidden(true)
 
       VStack(spacing: 6) {
         Text("Welcome to\nDoDo")
