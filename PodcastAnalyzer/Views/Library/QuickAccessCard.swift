@@ -135,14 +135,16 @@ struct PodcastGridCell: View {
       Text(item.title)
         .font(.caption)
         .fontWeight(.medium)
-        .lineLimit(2)
+        .lineLimit(2, reservesSpace: true)
         .foregroundStyle(.primary)
 
-      if let dateStr = latestEpisodeDate {
-        Text(dateStr)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-      }
+      // Reserves the date row's height even when a podcast has no episodes
+      // yet, so every cell in a grid row bottoms out at the same height
+      // instead of the shorter ones leaving a gap under the artwork.
+      Text(latestEpisodeDate ?? " ")
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .opacity(latestEpisodeDate == nil ? 0 : 1)
     }
   }
 }
