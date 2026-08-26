@@ -160,6 +160,7 @@ struct PodcastAnalyzerApp: App {
 
     // Show new-episode banners in foreground + route taps to episode detail.
     UNUserNotificationCenter.current().delegate = NotificationTapDelegate.shared
+    NewEpisodeNotification.registerCategory()
 
     // Eagerly start NWPathMonitor at launch. NetworkMonitor.shared is lazy
     // (singleton), and its `isConnected` defaults to false until the first

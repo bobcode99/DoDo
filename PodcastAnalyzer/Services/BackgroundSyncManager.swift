@@ -12,6 +12,7 @@ import Foundation
 import Observation
 import SwiftData
 import UserNotifications
+import UniformTypeIdentifiers
 import OSLog
 
 // MARK: - Sync Notifications
@@ -268,7 +269,7 @@ class BackgroundSyncManager {
       )
 
       var totalNewEpisodes = 0
-      var newEpisodeDetails: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)] = []
+      var newEpisodeDetails: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)] = []
 
       // Sync all podcasts in parallel (up to 6 at a time) for faster refresh
       let maxConcurrent = 6
@@ -394,7 +395,7 @@ class BackgroundSyncManager {
     podcasts: [PodcastInfoModel],
     episodesWithUserData: Set<String>,
     totalNewEpisodes: inout Int,
-    newEpisodeDetails: inout [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)]
+    newEpisodeDetails: inout [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)]
   ) {
     let podcast = podcasts[result.index]
 
@@ -445,7 +446,8 @@ class BackgroundSyncManager {
           episodeTitle: episode.title,
           audioURL: episode.audioURL,
           imageURL: episode.imageURL ?? updatedPodcast.imageURL,
-          language: updatedPodcast.language
+          language: updatedPodcast.language,
+          summary: episode.podcastEpisodeDescription
         ))
       }
 
@@ -511,7 +513,7 @@ class BackgroundSyncManager {
   /// the candidates are still in hand and no staging is needed.
   @MainActor
   private func enqueueAutoAddEpisodes(
-    _ details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)],
+    _ details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)],
     podcasts: [PodcastInfoModel]
   ) async {
     var settings: [String: AutoAddToQueueSetting] = [:]
@@ -564,7 +566,7 @@ class BackgroundSyncManager {
 
   private func sendNewEpisodesNotification(
     totalCount: Int,
-    details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String)]
+    details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)]
   ) async {
     let center = UNUserNotificationCenter.current()
 
@@ -585,8 +587,16 @@ class BackgroundSyncManager {
       // Podcast as the bold title, episode as the body — mirrors Apple Podcasts.
       content.title = detail.podcastTitle
       content.subtitle = "New Episode"
-      content.body = detail.episodeTitle
+      // Episode title first, summary after: the collapsed banner truncates to
+      // the title, the long-press expansion shows the whole thing. Cheaper than
+      // a notification content extension for the same result.
+      if let summary = Self.plainSummary(detail.summary) {
+        content.body = "\(detail.episodeTitle)\n\n\(summary)"
+      } else {
+        content.body = detail.episodeTitle
+      }
       content.threadIdentifier = detail.podcastTitle  // stack by show
+      content.categoryIdentifier = NewEpisodeNotification.categoryIdentifier
       content.userInfo = [
         "type": "newEpisode",
         "podcastTitle": detail.podcastTitle,
@@ -630,19 +640,74 @@ class BackgroundSyncManager {
   /// attachment. Best-effort: returns nil on any failure so the notification
   /// still fires without the thumbnail. UNNotificationAttachment copies the file
   /// into its own store, so the temp file can be discarded afterwards.
+  ///
+  /// The file type comes from the response MIME type, not the URL path: feed
+  /// artwork is routinely served from extension-less URLs (or a `.jpg` path
+  /// that returns PNG bytes), and UNNotificationAttachment rejects the file
+  /// when the extension and the data disagree — the cause of artwork showing
+  /// up only "sometimes".
   private func imageAttachment(from urlString: String?) async -> UNNotificationAttachment? {
-    guard let urlString, let url = URL(string: urlString) else { return nil }
+    guard let urlString, !urlString.isEmpty, let url = URL(string: urlString) else { return nil }
     do {
-      let (data, _) = try await URLSession.shared.data(from: url)
-      let ext = url.pathExtension.isEmpty ? "jpg" : url.pathExtension
+      let (data, response) = try await URLSession.shared.data(from: url)
+      if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+        return nil
+      }
+      let type = Self.imageType(mimeType: response.mimeType, url: url, data: data)
+      guard let type, let ext = type.preferredFilenameExtension else { return nil }
+      // 10 MB is the system cap for image attachments; a bigger file is dropped
+      // silently, so skip it and keep the plain notification.
+      guard data.count <= 10 * 1024 * 1024 else { return nil }
+
       let tmp = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension(ext)
       try data.write(to: tmp)
-      return try UNNotificationAttachment(identifier: "artwork", url: tmp)
+      return try UNNotificationAttachment(
+        identifier: "artwork", url: tmp,
+        options: [UNNotificationAttachmentOptionsTypeHintKey: type.identifier])
     } catch {
+      logger.error("Artwork attachment failed: \(error.localizedDescription, privacy: .public)")
       return nil
     }
+  }
+
+  /// Resolve an image UTType from the response MIME type, falling back to the
+  /// URL extension and then to the file's magic bytes.
+  private static func imageType(mimeType: String?, url: URL, data: Data) -> UTType? {
+    if let mimeType, let type = UTType(mimeType: mimeType), type.conforms(to: .image) {
+      return type
+    }
+    if let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image) {
+      return type
+    }
+    switch Array(data.prefix(4)) {
+    case let b where b.starts(with: [0xFF, 0xD8, 0xFF]): return .jpeg
+    case let b where b.starts(with: [0x89, 0x50, 0x4E, 0x47]): return .png
+    case let b where b.starts(with: [0x47, 0x49, 0x46]): return .gif
+    default: return nil
+    }
+  }
+
+  /// HTML-ish feed description reduced to a short plain-text blurb for the
+  /// expanded notification.
+  static func plainSummary(_ raw: String?, limit: Int = 400) -> String? {
+    guard let raw else { return nil }
+    var text = raw.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+    for (entity, char) in [("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+                           ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"),
+                           ("&nbsp;", " ")] {
+      text = text.replacingOccurrences(of: entity, with: char)
+    }
+    text = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    // Tags collapse to a space, which leaves "shop ." where markup hugged the
+    // punctuation, so pull the space back out.
+    text = text.replacingOccurrences(
+      of: "\\s+([,.;:!?\u{2026}])", with: "$1", options: .regularExpression)
+    text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return nil }
+    guard text.count > limit else { return text }
+    return String(text.prefix(limit)).trimmingCharacters(in: .whitespaces) + "\u{2026}"
   }
 
   // MARK: - Foreground Timer (Optional: for when app is active)

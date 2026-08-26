@@ -138,6 +138,35 @@ class NotificationNavigationManager {
     }
 }
 
+// MARK: - New Episode Notification Actions
+
+/// Buttons on the expanded (long-press / 3D-touch) new-episode notification.
+enum NewEpisodeNotification {
+    static let categoryIdentifier = "NEW_EPISODE"
+    static let playAction = "NEW_EPISODE_PLAY"
+    static let openAction = "NEW_EPISODE_OPEN"
+
+    /// Registered once at launch; categories are matched by identifier when the
+    /// notification is delivered, so this must run before any is scheduled.
+    static func registerCategory() {
+        let play = UNNotificationAction(
+            identifier: playAction,
+            title: String(localized: "Play"),
+            options: [])
+        let open = UNNotificationAction(
+            identifier: openAction,
+            title: String(localized: "Open in DoDo"),
+            options: [.foreground])
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(
+                identifier: categoryIdentifier,
+                actions: [play, open],
+                intentIdentifiers: [],
+                options: [])
+        ])
+    }
+}
+
 // MARK: - System Notification Delegate
 
 /// Bridges UNUserNotificationCenter callbacks to in-app navigation. Without a
@@ -166,6 +195,23 @@ final class NotificationTapDelegate: NSObject, UNUserNotificationCenterDelegate 
               let episodeTitle = info["episodeTitle"] as? String else { return }
         let audioURL = info["audioURL"] as? String ?? ""
         let imageURL = info["imageURL"] as? String ?? ""
+
+        if response.actionIdentifier == NewEpisodeNotification.playAction, !audioURL.isEmpty {
+            await MainActor.run {
+                let episode = PlaybackEpisode(
+                    id: "\(podcastTitle)\u{1F}\(episodeTitle)",
+                    title: episodeTitle,
+                    podcastTitle: podcastTitle,
+                    audioURL: audioURL,
+                    imageURL: imageURL.isEmpty ? nil : imageURL)
+                EnhancedAudioManager.shared.play(
+                    episode: episode, audioURL: audioURL,
+                    imageURL: imageURL.isEmpty ? nil : imageURL)
+            }
+            return
+        }
+
+        // Default tap and "Open in DoDo" both land on the episode detail screen.
         await MainActor.run {
             NotificationNavigationManager.shared.navigateToEpisodeDetail(
                 title: episodeTitle, podcastTitle: podcastTitle,
