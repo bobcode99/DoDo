@@ -134,6 +134,10 @@ struct MiniPlayerBar: View {
         }
       )
       .presentationSizing(.page)
+      // No detents: the sheet stays one fixed size (page on iPad, full on
+      // iPhone), so a downward drag can only dismiss. `.resizes` hands that
+      // drag to the sheet instead of to the player's scroll view.
+      .presentationContentInteraction(.resizes)
     }
     .onChange(of: NotificationNavigationManager.shared.shouldExpandPlayer) { _, shouldExpand in
       if shouldExpand {

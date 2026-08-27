@@ -51,5 +51,10 @@ struct ExpandedPlayerContent: View {
             .frame(maxWidth: .infinity)
             .containerRelativeFrame(.vertical, alignment: .center)
         }
+        // The column is sized to the container, so the only thing left to drag
+        // was the rubber band — which swallowed the start of a dismiss swipe and
+        // made the sheet feel like it could be pulled up as well as down.
+        // `.basedOnSize` keeps scrolling for the screens where it overflows.
+        .scrollBounceBehavior(.basedOnSize)
     }
 }

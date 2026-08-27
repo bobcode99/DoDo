@@ -24,22 +24,20 @@ struct ExpandedPlayerView: View {
                 )
                 .ignoresSafeArea()
 
-                Group {
-                    if hSizeClass == .regular {
-                        ExpandedPlayerPadContent(
-                            viewModel: viewModel,
-                            onNavigateToEpisodeDetail: navigateToEpisodeDetail,
-                            onNavigateToPodcast: navigateToPodcast,
-                            onOpenQueue: openQueue
-                        )
-                    } else {
-                        ExpandedPlayerContent(
-                            viewModel: viewModel,
-                            onNavigateToEpisodeDetail: navigateToEpisodeDetail,
-                            onNavigateToPodcast: navigateToPodcast,
-                            onOpenQueue: openQueue
-                        )
-                    }
+                if hSizeClass == .regular {
+                    ExpandedPlayerPadContent(
+                        viewModel: viewModel,
+                        onNavigateToEpisodeDetail: navigateToEpisodeDetail,
+                        onNavigateToPodcast: navigateToPodcast,
+                        onOpenQueue: openQueue
+                    )
+                } else {
+                    ExpandedPlayerContent(
+                        viewModel: viewModel,
+                        onNavigateToEpisodeDetail: navigateToEpisodeDetail,
+                        onNavigateToPodcast: navigateToPodcast,
+                        onOpenQueue: openQueue
+                    )
                 }
 
                 // Dim rather than blur. `.blur` is installed unconditionally even

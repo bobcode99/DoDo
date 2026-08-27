@@ -24,6 +24,7 @@ struct ExpandedPlayerPadContent: View {
             }
             .frame(maxWidth: .infinity)
         }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     // MARK: - Portrait: centered column, larger artwork
