@@ -365,12 +365,7 @@ extension View {
         )
       }
       .navigationDestination(for: EpisodeAIAnalysisRoute.self) { route in
-        EpisodeAIAnalysisPage(
-          episode: route.episode,
-          podcastTitle: route.podcastTitle,
-          fallbackImageURL: route.fallbackImageURL,
-          podcastLanguage: route.podcastLanguage ?? "en"
-        )
+        EpisodeAIAnalysisDestination(route: route)
       }
       #endif
       .navigationDestination(for: PodcastBrowseRoute.self) { route in

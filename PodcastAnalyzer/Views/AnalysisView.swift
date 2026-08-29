@@ -18,6 +18,7 @@ struct AnalysisView: View {
   private var podcasts: [PodcastInfoModel]
 
   @State private var searchText: String = ""
+  @Environment(\.zoomNamespace) private var zoomNamespace
 
   private var podcastByTitle: [String: PodcastInfoModel] {
     Dictionary(podcasts.map { ($0.title, $0) }, uniquingKeysWith: { first, _ in first })
@@ -59,13 +60,15 @@ struct AnalysisView: View {
         ScrollView {
           LazyVStack(spacing: 12) {
             ForEach(filteredAnalyses) { analysis in
-              NavigationLink(value: route(for: analysis)) {
+              let aiRoute = route(for: analysis)
+              NavigationLink(value: aiRoute) {
                 AnalysisRowCard(
                   analysis: analysis,
                   artworkURL: artworkURL(for: analysis)
                 )
               }
               .buttonStyle(.plain)
+              .zoomSource(id: aiRoute.id, in: zoomNamespace)
               .contextMenu {
                 NavigationLink(value: episodeDetailRoute(for: analysis)) {
                   Label("View Episode", systemImage: "doc.text")

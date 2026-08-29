@@ -103,3 +103,27 @@ struct EpisodeDetailDestination: View {
     .zoomDestination(id: route.id, in: zoomNamespace)
   }
 }
+
+/// Destination for `EpisodeAIAnalysisRoute`.
+///
+/// Same reason as the two above: `navigationDestinations()` is a `View`
+/// extension, so it cannot read the zoom namespace itself. iOS-only, like the
+/// page it wraps — macOS splits the episode detail across its own pages and
+/// registers this route in MacContentView.
+#if os(iOS)
+struct EpisodeAIAnalysisDestination: View {
+  let route: EpisodeAIAnalysisRoute
+
+  @Environment(\.zoomNamespace) private var zoomNamespace
+
+  var body: some View {
+    EpisodeAIAnalysisPage(
+      episode: route.episode,
+      podcastTitle: route.podcastTitle,
+      fallbackImageURL: route.fallbackImageURL,
+      podcastLanguage: route.podcastLanguage ?? "en"
+    )
+    .zoomDestination(id: route.id, in: zoomNamespace)
+  }
+}
+#endif

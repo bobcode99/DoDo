@@ -31,6 +31,7 @@ struct EpisodeDetailView: View {
     @State private var tappedTimestampSeconds: TimeInterval?
     @State private var timestampTapX: CGFloat = 0
     @State private var timestampTapY: CGFloat = 200
+    @Environment(\.zoomNamespace) private var zoomNamespace
 
     init(
         episode: PodcastEpisodeInfo,
@@ -147,14 +148,13 @@ struct EpisodeDetailView: View {
 
                 Divider().padding(.leading, 52)
 
-                NavigationLink(
-                    value: EpisodeAIAnalysisRoute(
-                        episode: viewModel.episode,
-                        podcastTitle: viewModel.podcastTitle,
-                        fallbackImageURL: viewModel.imageURLString,
-                        podcastLanguage: viewModel.podcastLanguage
-                    )
-                ) {
+                let aiRoute = EpisodeAIAnalysisRoute(
+                    episode: viewModel.episode,
+                    podcastTitle: viewModel.podcastTitle,
+                    fallbackImageURL: viewModel.imageURLString,
+                    podcastLanguage: viewModel.podcastLanguage
+                )
+                NavigationLink(value: aiRoute) {
                     NavRowLabel(
                         icon: "sparkles",
                         tint: .orange,
@@ -163,6 +163,7 @@ struct EpisodeDetailView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .zoomSource(id: aiRoute.id, in: zoomNamespace)
                 .accessibilityHint("Open the AI analysis for this episode")
             }
             .background(.regularMaterial, in: .rect(cornerRadius: 16))
