@@ -15,6 +15,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: SwiftLint
+        # Reports only for now: the repo carries error-level violations that
+        # predate this step. Drop continue-on-error once `swiftlint lint` exits
+        # clean, so the lint actually gates.
+        continue-on-error: true
+        run: |
+          brew install swiftlint
+          swiftlint lint --quiet --reporter github-actions-logging
+
       - name: Cache Swift Package Manager
         uses: actions/cache@v4
         with:
