@@ -88,3 +88,5 @@ iOSInjectionProject/
 
 buildServer.json
 *.txt
+# Worktree checkouts created by Claude Code sessions
+.claude/worktrees/
