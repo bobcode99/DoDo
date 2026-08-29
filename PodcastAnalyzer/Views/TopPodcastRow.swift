@@ -18,8 +18,6 @@ struct TopPodcastRow: View {
   let isSubscribed: Bool
   let onSubscribe: () -> Void
 
-  @Environment(\.zoomNamespace) private var zoomNamespace
-
   var body: some View {
     NavigationLink(value: podcast) {
       HStack(spacing: 12) {
@@ -62,7 +60,6 @@ struct TopPodcastRow: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .zoomSource(id: podcast.id, in: zoomNamespace)
     .contextMenu {
       // View episodes
       NavigationLink(value: podcast) {
