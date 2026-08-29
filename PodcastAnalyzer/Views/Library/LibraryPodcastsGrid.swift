@@ -17,6 +17,7 @@ struct LibraryPodcastsGrid: View {
   let onUnsubscribed: () -> Void
 
   @Environment(\.libraryGridColumns) private var gridColumns
+  @Environment(\.zoomNamespace) private var zoomNamespace
 
   private var columns: [GridItem] {
     Array(repeating: GridItem(.flexible(), spacing: 12), count: gridColumns.rawValue)
@@ -39,11 +40,15 @@ struct LibraryPodcastsGrid: View {
         LazyVGrid(columns: columns, spacing: 16) {
           ForEach(sortedPodcasts) { item in
             if let model = podcastModelByID[item.id] {
-              NavigationLink(value: PodcastBrowseRoute(podcastModel: model)) {
+              let route = PodcastBrowseRoute(podcastModel: model)
+              NavigationLink(value: route) {
                 PodcastGridCell(item: item)
               }
               .buttonStyle(.plain)
               .contentShape(Rectangle())
+              // The tile the episode list grows out of. Same id the destination
+              // matches on — `PodcastBrowseRoute.id`.
+              .zoomSource(id: route.id, in: zoomNamespace)
               .podcastContextMenu(
                 podcast: model,
                 modelContext: modelContext,

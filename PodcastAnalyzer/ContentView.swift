@@ -42,6 +42,10 @@ struct iOSContentView: View {
   /// alert can serve every such notification instead of stacking a modifier per
   /// message kind.
   @State private var playbackAlert: (title: String, message: String)?
+  /// Matches a Library artwork tile to the episode list that zooms out of it.
+  /// Declared here because it has to be visible to both the grid and the
+  /// `navigationDestinations()` handlers, which live in separate branches.
+  @Namespace private var podcastZoom
 
   var body: some View {
     // `visibleTab` is driven by TabView's own selection rather than by an
@@ -89,6 +93,7 @@ struct iOSContentView: View {
       }
     }
     .environment(\.tabNavigationCoordinator, coordinator)
+    .environment(\.zoomNamespace, podcastZoom)
     .tabViewBottomAccessory {
       MiniPlayerBar()
     }
@@ -348,12 +353,7 @@ extension View {
   func navigationDestinations() -> some View {
     self
       .navigationDestination(for: EpisodeDetailRoute.self) { route in
-        EpisodeDetailView(
-          episode: route.episode,
-          podcastTitle: route.podcastTitle,
-          fallbackImageURL: route.fallbackImageURL,
-          podcastLanguage: route.podcastLanguage ?? "en"
-        )
+        EpisodeDetailDestination(route: route)
       }
       #if os(iOS)
       .navigationDestination(for: EpisodeTranscriptRoute.self) { route in
@@ -374,18 +374,7 @@ extension View {
       }
       #endif
       .navigationDestination(for: PodcastBrowseRoute.self) { route in
-        if let model = route.podcastModel {
-          EpisodeListView(podcastModel: model, initialFilter: route.initialFilter)
-        } else {
-          EpisodeListView(
-            podcastName: route.podcastName,
-            podcastArtwork: route.artworkURL,
-            artistName: route.artistName,
-            collectionId: route.collectionId ?? "",
-            applePodcastUrl: route.applePodcastURL,
-            initialFilter: route.initialFilter
-          )
-        }
+        PodcastBrowseDestination(route: route)
       }
   }
 }
