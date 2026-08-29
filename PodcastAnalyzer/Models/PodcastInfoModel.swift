@@ -168,6 +168,11 @@ class PodcastInfoModel {
   /// is only used as a host when nothing better names one.
   var feedAuthor: String = ""
 
+  /// Feed language code (mirrors podcastInfo.language). Denormalized for the
+  /// same reason as the grid fields above: the show header renders the language
+  /// on the navigation path, before anything has decoded the episode blob.
+  var feedLanguage: String = ""
+
   /// Hosts credited by `<podcast:person>` at channel level.
   /// Distinct from `hostNames`, which the user maintains and which wins.
   var feedHostNames: [String] = []
@@ -228,6 +233,7 @@ class PodcastInfoModel {
     self.episodeCount = podcastInfo.episodes.count
     self.latestEpisodeDate = podcastInfo.episodes.lazy.compactMap(\.pubDate).max()
     self.feedAuthor = podcastInfo.author ?? ""
+    self.feedLanguage = podcastInfo.language
     self.feedHostNames = podcastInfo.people.filter(\.isHost).map(\.name)
     self.episodeGuestNames = podcastInfo.episodePeople.mapValues { people in
       people.filter { $0.role == "guest" }.map(\.name)
@@ -244,6 +250,7 @@ class PodcastInfoModel {
   func applyPodcastInfo(_ info: PodcastInfo) {
     self.podcastInfo = info
     self.feedAuthor = info.author ?? ""
+    self.feedLanguage = info.language
     self.feedHostNames = info.people.filter(\.isHost).map(\.name)
     self.episodeGuestNames = info.episodePeople.mapValues { people in
       people.filter { $0.role == "guest" }.map(\.name)

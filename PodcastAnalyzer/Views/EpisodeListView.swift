@@ -39,6 +39,24 @@ enum EpisodeFilter: String, CaseIterable {
   }
 }
 
+// MARK: - Sheets
+
+/// The one modal this screen can be showing. An enum rather than a bool per
+/// sheet: they are mutually exclusive, and carrying the podcast in the case
+/// means the sheet body never has to unwrap an optional that could be nil by
+/// the time it presents.
+enum EpisodeListSheet: Identifiable {
+  case episodeFilter(PodcastInfoModel)
+  case transcribeBackfill(PodcastInfoModel)
+
+  var id: String {
+    switch self {
+    case .episodeFilter(let model): return "filter-\(model.id)"
+    case .transcribeBackfill(let model): return "backfill-\(model.id)"
+    }
+  }
+}
+
 // MARK: - Podcast Source (subscribed vs browse)
 
 enum PodcastSource {
@@ -51,6 +69,9 @@ enum PodcastSource {
 // MARK: - Episode List View
 
 struct EpisodeListView: View {
+  /// Keeps the error glyph at its designed size while still growing with the
+  /// user's text setting — a bare `.system(size: 50)` never moved.
+  @ScaledMetric private var errorGlyphSize: Double = 50
   private let source: PodcastSource
   private let initialFilter: EpisodeFilter
 
@@ -60,7 +81,6 @@ struct EpisodeListView: View {
   @State private var viewModel: EpisodeListViewModel?
   @AppStorage("showEpisodeArtwork") private var showEpisodeArtwork = true
   @State private var episodeToDelete: PodcastEpisodeInfo?
-  @State private var showDeleteConfirmation = false
   @State private var showUnsubscribeConfirmation = false
   @State private var applePodcastURL: URL?
 
@@ -68,8 +88,11 @@ struct EpisodeListView: View {
   @State private var isLoadingRSS = false
   @State private var loadError: String?
   @State private var podcastModel: PodcastInfoModel?
-  @State private var showEpisodeFilterSheet = false
-  @State private var showTranscribeBackfillSheet = false
+  @State private var activeSheet: EpisodeListSheet?
+  /// A play tapped before the view model finished loading. Held rather than
+  /// dropped, so the header's primary action is never a live button that
+  /// silently does nothing.
+  @State private var pendingPlay = false
 
   private let applePodcastService = ApplePodcastService()
 
@@ -127,7 +150,12 @@ struct EpisodeListView: View {
   }
 
   private var isSubscribed: Bool {
-    podcastModel?.isSubscribed ?? false
+    // `podcastModel` is only assigned once `.task` runs, and the header draws
+    // before that — read the source directly so "Follow" doesn't flip to
+    // "Following" a frame later.
+    if let podcastModel { return podcastModel.isSubscribed }
+    if case .model(let model) = source { return model.isSubscribed }
+    return false
   }
 
   private var toolbarPlacement: ToolbarItemPlacement {
@@ -166,29 +194,34 @@ struct EpisodeListView: View {
 
   @ViewBuilder
   private func modelContent(podcastModel: PodcastInfoModel) -> some View {
-    Group {
-      if let vm = viewModel {
-        episodeListContent(viewModel: vm)
-      } else {
-        episodeLoadingView
+    // One List for both phases, not a branch between two of them: the hero row
+    // has to keep its identity when the view model lands, or the header the
+    // first frame just drew is torn down and rebuilt (tint state included)
+    // exactly when the push finishes.
+    episodeListContent(viewModel: viewModel)
+      .task {
+        // Initialize ViewModel and refresh in a single task to prevent race conditions
+        self.podcastModel = podcastModel
+        if viewModel == nil {
+          // Let the push animation land before constructing the view model. Its
+          // init decodes the whole `podcastInfo` episode blob on the main actor,
+          // and `.task` fires as the view appears — so without this the freeze
+          // lands inside the transition. Until then the header draws from the
+          // model's denormalized mirrors, which don't touch the blob.
+          try? await Task.sleep(for: .milliseconds(300))
+          let vm = EpisodeListViewModel(podcastModel: podcastModel, initialFilter: initialFilter)
+          vm.setModelContext(modelContext)
+          viewModel = vm
+          // A play tapped against the placeholder header resolves here, rather
+          // than being swallowed by a button that looked enabled.
+          if pendingPlay {
+            pendingPlay = false
+            playTargetEpisode(viewModel: vm)
+          }
+        }
+        await viewModel?.refreshPodcast()
+        await lookupApplePodcastURL(title: podcastModel.title)
       }
-    }
-    .task {
-      // Initialize ViewModel and refresh in a single task to prevent race conditions
-      self.podcastModel = podcastModel
-      if viewModel == nil {
-        // Let the push animation land before constructing the view model. Its
-        // init decodes the whole `podcastInfo` episode blob on the main actor,
-        // and `.task` fires as the view appears — so without this the freeze
-        // lands inside the transition. `episodeLoadingView` covers the gap.
-        try? await Task.sleep(for: .milliseconds(300))
-        let vm = EpisodeListViewModel(podcastModel: podcastModel, initialFilter: initialFilter)
-        vm.setModelContext(modelContext)
-        viewModel = vm
-      }
-      await viewModel?.refreshPodcast()
-      await lookupApplePodcastURL(title: podcastModel.title)
-    }
   }
 
   // MARK: - Browse Content
@@ -232,24 +265,10 @@ struct EpisodeListView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  /// Centered, full-frame loading placeholder shown while the view model is
-  /// still being built — avoids the abrupt top-left spinner so navigating in
-  /// reads as a smooth transition.
-  private var episodeLoadingView: some View {
-    VStack(spacing: 16) {
-      ProgressView()
-        .scaleEffect(1.2)
-      Text("Loading episodes\u{2026}")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-  }
-
   private func errorView(_ error: String) -> some View {
     VStack(spacing: 16) {
       Image(systemName: "exclamationmark.triangle")
-        .font(.system(size: 50))
+        .font(.system(size: errorGlyphSize))
         .foregroundStyle(.orange)
 
       Text("Unable to load podcast")
@@ -370,7 +389,7 @@ struct EpisodeListView: View {
   // MARK: - Episode List Content
 
   @ViewBuilder
-  private func episodeListContent(viewModel: EpisodeListViewModel) -> some View {
+  private func episodeListContent(viewModel: EpisodeListViewModel?) -> some View {
     // The reader only supplies the top inset (status bar + navigation bar) that
     // the hero has to bleed back over; the List still lays out normally inside.
     GeometryReader { proxy in
@@ -379,7 +398,7 @@ struct EpisodeListView: View {
   }
 
   @ViewBuilder
-  private func episodeList(viewModel: EpisodeListViewModel, topBleed: CGFloat) -> some View {
+  private func episodeList(viewModel: EpisodeListViewModel?, topBleed: CGFloat) -> some View {
     List {
       // MARK: - Header Section
       Section {
@@ -392,50 +411,49 @@ struct EpisodeListView: View {
         // List pins it, so the chips stayed parked under the navigation bar
         // while the backlog ran past underneath; here the whole screen scrolls
         // as one page and the filters leave with the hero.
-        filterSortBar(viewModel: viewModel)
-          .listRowInsets(EdgeInsets())
-          .listRowSeparator(.hidden)
-          .listRowBackground(Color.clear)
+        if let viewModel {
+          filterSortBar(viewModel: viewModel)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+        }
       }
 
       // MARK: - Episodes List
       Section {
-        ForEach(viewModel.displayedEpisodes) { episode in
-          let key = viewModel.makeEpisodeKey(episode)
-          EpisodeRowView(
-            episode: episode,
-            podcastTitle: viewModel.podcastInfo.title,
-            fallbackImageURL: viewModel.podcastInfo.imageURL,
-            podcastLanguage: viewModel.podcastInfo.language,
-            downloadManager: downloadManager,
-            episodeModel: viewModel.episodeModels[key],
-            precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
-            precomputedHasTranscript: viewModel.transcriptKeys.contains(key),
-            precomputedHasAIAnalysis: episode.audioURL.map {
-              viewModel.aiAnalysisAudioURLs.contains($0)
-            } ?? false,
-            showArtwork: showEpisodeArtwork,
-            onToggleStar: {
-              viewModel.toggleStar(for: episode)
-            },
-            onDownload: { viewModel.downloadEpisode(episode) },
-            onDeleteRequested: {
-              episodeToDelete = episode
-              showDeleteConfirmation = true
-            },
-            onTogglePlayed: {
-              viewModel.togglePlayed(for: episode)
-            }
-          )
-          .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-        }
-
-        // "Show All (N)" footer — only the latest `initialEpisodeDisplayCount`
-        // episodes render until the user opts into the full backlog.
-        if viewModel.hasMoreEpisodesToShow {
-          showAllButton(viewModel: viewModel)
-            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+        if let viewModel {
+          ForEach(viewModel.filteredEpisodes) { episode in
+            let key = viewModel.makeEpisodeKey(episode)
+            EpisodeRowView(
+              episode: episode,
+              podcastTitle: viewModel.podcastInfo.title,
+              fallbackImageURL: viewModel.podcastInfo.imageURL,
+              podcastLanguage: viewModel.podcastInfo.language,
+              downloadManager: downloadManager,
+              episodeModel: viewModel.episodeModels[key],
+              precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
+              precomputedHasTranscript: viewModel.transcriptKeys.contains(key),
+              precomputedHasAIAnalysis: episode.audioURL.map {
+                viewModel.aiAnalysisAudioURLs.contains($0)
+              } ?? false,
+              showArtwork: showEpisodeArtwork,
+              onToggleStar: {
+                viewModel.toggleStar(for: episode)
+              },
+              onDownload: { viewModel.downloadEpisode(episode) },
+              onDeleteRequested: { episodeToDelete = episode },
+              onTogglePlayed: {
+                viewModel.togglePlayed(for: episode)
+              }
+            )
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+          }
+        } else {
+          ProgressView("Loading episodes\u{2026}")
+            .frame(maxWidth: .infinity)
+            .padding(.vertical)
             .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
       }
     }
@@ -448,102 +466,33 @@ struct EpisodeListView: View {
     #endif
     .toolbar {
       ToolbarItem(placement: toolbarPlacement) {
-        Menu {
-          if let url = applePodcastURL {
-            Link(destination: url) {
-              Label("View on Apple Podcasts", systemImage: "link")
-            }
-
-            Divider()
-          }
-
-          if isSubscribed {
-            Button(role: .destructive) {
-              showUnsubscribeConfirmation = true
-            } label: {
-              Label("Unsubscribe", systemImage: "minus.circle")
-            }
-          } else {
-            Button(action: subscribe) {
-              Label("Subscribe", systemImage: "plus.circle")
-            }
-          }
-
-          Divider()
-
-          Button(action: {
-            Task { await viewModel.refreshPodcast() }
-          }) {
-            Label(
-              "Refresh Episodes",
-              systemImage: "arrow.clockwise"
-            )
-          }
-
-          if podcastModel != nil && isSubscribed {
-            Divider()
-
-            Menu {
-              ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
-                Button {
-                  podcastModel?.autoDownloadSetting = setting.rawValue
-                  modelContext.saveOrLog()
-                } label: {
-                  if podcastModel?.autoDownloadSetting == setting.rawValue {
-                    Label(setting.displayName, systemImage: "checkmark")
-                  } else {
-                    Text(setting.displayName)
-                  }
-                }
-              }
-            } label: {
-              let current = AutoDownloadSetting(rawValue: podcastModel?.autoDownloadSetting ?? "") ?? .inheritGlobal
-              Label("Auto Download: \(current.displayName)", systemImage: "arrow.down.circle")
-            }
-
-            Button {
-              let wasOff = podcastModel?.autoTranscribeNewEpisodes != true
-              podcastModel?.autoTranscribeNewEpisodes.toggle()
-              modelContext.saveOrLog()
-              if wasOff && podcastModel?.autoTranscribeNewEpisodes == true {
-                showTranscribeBackfillSheet = true
-              }
-            } label: {
-              if podcastModel?.autoTranscribeNewEpisodes == true {
-                Label("Auto-transcribe: On", systemImage: "waveform.badge.plus")
-              } else {
-                Label("Auto-transcribe: Off", systemImage: "waveform")
-              }
-            }
-
-            Button {
-              showEpisodeFilterSheet = true
-            } label: {
-              Label("Episode Filter\u{2026}", systemImage: "line.3.horizontal.decrease.circle")
-            }
-          }
-        } label: {
-          Image(systemName: "ellipsis.circle")
+        // Label, not a bare Image: a toolbar Menu renders icon-only anyway, and
+        // this is the only thing VoiceOver has to announce it with.
+        Menu("More", systemImage: "ellipsis.circle") {
+          showActionsMenu
         }
       }
     }
     .refreshable {
-      await viewModel.refreshPodcast()
+      // An explicit pull always makes the round trip; the staleness window is
+      // there to throttle the automatic refresh, not the user's gesture.
+      await viewModel?.refreshPodcast(force: true)
     }
     .confirmationDialog(
       "Delete Download",
-      isPresented: $showDeleteConfirmation,
+      isPresented: Binding(
+        get: { episodeToDelete != nil },
+        set: { if !$0 { episodeToDelete = nil } }
+      ),
       titleVisibility: .visible
     ) {
       Button("Delete", role: .destructive) {
         if let episode = episodeToDelete {
-          viewModel.deleteDownload(episode)
+          viewModel?.deleteDownload(episode)
         }
         episodeToDelete = nil
       }
-      Button("Cancel", role: .cancel) {
-        episodeToDelete = nil
-      }
+      Button("Cancel", role: .cancel) { episodeToDelete = nil }
     } message: {
       Text(
         "Are you sure you want to delete this downloaded episode? You can download it again later."
@@ -563,8 +512,9 @@ struct EpisodeListView: View {
         "Are you sure you want to unsubscribe from this podcast? Downloaded episodes will remain available."
       )
     }
-    .sheet(isPresented: $showEpisodeFilterSheet) {
-      if let model = podcastModel {
+    .sheet(item: $activeSheet) { sheet in
+      switch sheet {
+      case .episodeFilter(let model):
         PodcastEpisodeFilterView(podcast: model, modelContext: modelContext) {
           // Promote the user's freshly-saved filter into a visible result —
           // switch the chip row to .custom so the list updates immediately.
@@ -572,13 +522,10 @@ struct EpisodeListView: View {
           // didSet fires unconditionally, so the filter re-evaluates against
           // the new include/exclude/min-duration values.
           withAnimation(.easeInOut(duration: 0.2)) {
-            viewModel.selectedFilter = .custom
+            viewModel?.selectedFilter = .custom
           }
         }
-      }
-    }
-    .sheet(isPresented: $showTranscribeBackfillSheet) {
-      if let model = podcastModel {
+      case .transcribeBackfill(let model):
         TranscribeBackfillSheet(
           podcastTitle: model.podcastInfo.title,
           podcastLanguage: model.podcastInfo.language,
@@ -586,31 +533,6 @@ struct EpisodeListView: View {
         )
       }
     }
-  }
-
-  /// Footer row that reveals the full episode backlog. Tapping flips the view
-  /// model's window flag; the List then materializes the remaining rows.
-  @ViewBuilder
-  private func showAllButton(viewModel: EpisodeListViewModel) -> some View {
-    Button {
-      withAnimation(.easeInOut(duration: 0.25)) {
-        viewModel.isShowingAllEpisodes = true
-      }
-    } label: {
-      HStack(spacing: 6) {
-        Spacer()
-        Text("Show All (\(viewModel.filteredEpisodes.count))")
-          .font(.subheadline)
-          .fontWeight(.semibold)
-        Image(systemName: "chevron.down")
-          .font(.caption)
-        Spacer()
-      }
-      .foregroundStyle(.blue)
-      .padding(.vertical, 10)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
   }
 
   // MARK: - Apple Podcast Lookup
@@ -640,8 +562,7 @@ struct EpisodeListView: View {
   private func descriptionView(for viewModel: EpisodeListViewModel) -> some View {
     switch viewModel.descriptionContent {
     case .loading:
-      ProgressView()
-        .frame(maxWidth: .infinity, alignment: .center)
+      descriptionPlaceholder
     case .empty:
       Text("No description available.")
         .foregroundStyle(.secondary)
@@ -659,20 +580,68 @@ struct EpisodeListView: View {
 
   // MARK: - Header Section
 
+  /// The show-level values the hero draws.
+  ///
+  /// Taken from the view model once it exists, and from `PodcastInfoModel`'s
+  /// denormalized mirrors before that — none of the mirrors decode the episode
+  /// blob, so the header renders in the frame the push starts.
+  private struct HeroFields {
+    var artworkURL = ""
+    var title = ""
+    var artist = ""
+    var episodeCount = 0
+    var language = ""
+  }
+
+  private func heroFields(viewModel: EpisodeListViewModel?) -> HeroFields {
+    if let viewModel {
+      return HeroFields(
+        artworkURL: viewModel.podcastInfo.imageURL,
+        title: viewModel.podcastInfo.title,
+        artist: artistName(viewModel: viewModel),
+        episodeCount: viewModel.podcastInfo.episodes.count,
+        language: languageDisplayName(for: viewModel.podcastInfo.language)
+      )
+    }
+    switch source {
+    case .model(let model):
+      return HeroFields(
+        artworkURL: model.imageURL,
+        title: model.title,
+        artist: model.feedAuthor,
+        episodeCount: model.episodeCount,
+        language: model.feedLanguage.isEmpty
+          ? "" : languageDisplayName(for: model.feedLanguage)
+      )
+    case .browse(_, let name, let artist, let artwork, _):
+      return HeroFields(artworkURL: artwork, title: name, artist: artist)
+    }
+  }
+
   @ViewBuilder
-  private func headerSection(viewModel: EpisodeListViewModel, topBleed: CGFloat) -> some View {
-    let target = playTarget(viewModel: viewModel)
+  private func headerSection(viewModel: EpisodeListViewModel?, topBleed: CGFloat) -> some View {
+    let fields = heroFields(viewModel: viewModel)
+    let target = viewModel?.playTarget
     PodcastHeroHeader(
-      artworkURL: viewModel.podcastInfo.imageURL,
-      title: viewModel.podcastInfo.title,
-      artist: artistName(viewModel: viewModel),
-      episodeCount: viewModel.podcastInfo.episodes.count,
-      language: languageDisplayName(for: viewModel.podcastInfo.language),
+      artworkURL: fields.artworkURL,
+      title: fields.title,
+      artist: fields.artist,
+      episodeCount: fields.episodeCount,
+      language: fields.language,
       isSubscribed: isSubscribed,
       topBleed: topBleed,
       playTitle: target?.isResume == true ? "Resume" : "Latest",
-      canPlay: target != nil,
-      onPlay: { playTargetEpisode(viewModel: viewModel) },
+      // Before the view model lands there is no target to test, and every feed
+      // with episodes has a playable one — matching the state it resolves to
+      // keeps the button from flickering when the two swap.
+      canPlay: viewModel == nil ? fields.episodeCount > 0 : target != nil,
+      onPlay: {
+        if let viewModel {
+          playTargetEpisode(viewModel: viewModel)
+        } else {
+          pendingPlay = true
+        }
+      },
       onToggleSubscribe: {
         if isSubscribed {
           showUnsubscribeConfirmation = true
@@ -681,61 +650,47 @@ struct EpisodeListView: View {
         }
       }
     ) {
-      if viewModel.podcastInfo.podcastInfoDescription != nil {
-        VStack(alignment: .leading, spacing: 2) {
-          descriptionView(for: viewModel)
+      if let viewModel {
+        if viewModel.podcastInfo.podcastInfoDescription != nil {
+          VStack(alignment: .leading, spacing: 2) {
+            descriptionView(for: viewModel)
 
-          Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-              viewModel.isDescriptionExpanded.toggle()
+            Button {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                viewModel.isDescriptionExpanded.toggle()
+              }
+            } label: {
+              Text(viewModel.isDescriptionExpanded ? "Show less" : "More")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.blue)
             }
-          } label: {
-            Text(viewModel.isDescriptionExpanded ? "Show less" : "More")
-              .font(.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(.blue)
+            .buttonStyle(.plain)
           }
-          .buttonStyle(.plain)
         }
+      } else {
+        // Reserves the collapsed description's height up front, so the header
+        // doesn't grow and shove the list down as the parse lands.
+        descriptionPlaceholder
       }
     }
   }
 
-  // MARK: - Play Button Target
-
-  /// What the header's play button acts on: the episode the user last listened
-  /// to in this show, falling back to the newest one when nothing here has been
-  /// played yet. Independent of the chip filter and the sort direction.
-  ///
-  /// Recency is the later of `progressUpdatedAt` and `lastPlayedDate`. The
-  /// first moves on every playback-position write, so it catches an episode
-  /// left half-finished; the second only moves on completion, but legacy rows
-  /// may carry just that one.
-  private func playTarget(viewModel: EpisodeListViewModel)
-    -> (episode: PodcastEpisodeInfo, isResume: Bool)?
-  {
-    let playable = viewModel.podcastInfo.episodes.filter { $0.audioURL != nil }
-
-    let lastListened =
-      playable
-      .compactMap { episode -> (PodcastEpisodeInfo, Date)? in
-        guard let model = viewModel.episodeModels[viewModel.makeEpisodeKey(episode)],
-          let stamp = [model.progressUpdatedAt, model.lastPlayedDate].compactMap({ $0 }).max()
-        else { return nil }
-        return (episode, stamp)
-      }
-      .max { $0.1 < $1.1 }?
-      .0
-
-    if let lastListened { return (lastListened, true) }
-
-    return playable
-      .max { ($0.pubDate ?? .distantPast) < ($1.pubDate ?? .distantPast) }
-      .map { ($0, false) }
+  /// Three reserved lines at the description's own size — used both before the
+  /// view model exists and while its HTML parse is in flight.
+  private var descriptionPlaceholder: some View {
+    Text(verbatim: "\u{2007}\n\u{2007}\n\u{2007}")
+      .font(.footnote)
+      .lineLimit(3, reservesSpace: true)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .redacted(reason: .placeholder)
+      .accessibilityHidden(true)
   }
 
+  // MARK: - Play Button Target
+
   private func playTargetEpisode(viewModel: EpisodeListViewModel) {
-    guard let episode = playTarget(viewModel: viewModel)?.episode,
+    guard let episode = viewModel.playTarget?.episode,
       let audioURL = episode.audioURL
     else { return }
 
@@ -788,6 +743,84 @@ struct EpisodeListView: View {
     return code.uppercased()
   }
 
+  /// Contents of the ••• menu.
+  @ViewBuilder
+  private var showActionsMenu: some View {
+    if let url = applePodcastURL {
+      Link(destination: url) {
+        Label("View on Apple Podcasts", systemImage: "link")
+      }
+
+      Divider()
+    }
+
+    if isSubscribed {
+      Button(role: .destructive) {
+        showUnsubscribeConfirmation = true
+      } label: {
+        Label("Unsubscribe", systemImage: "minus.circle")
+      }
+    } else {
+      Button(action: subscribe) {
+        Label("Subscribe", systemImage: "plus.circle")
+      }
+    }
+
+    Divider()
+
+    Button(action: {
+      Task { await viewModel?.refreshPodcast(force: true) }
+    }) {
+      Label(
+        "Refresh Episodes",
+        systemImage: "arrow.clockwise"
+      )
+    }
+
+    if podcastModel != nil && isSubscribed {
+      Divider()
+
+      Menu {
+        ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
+          Button {
+      podcastModel?.autoDownloadSetting = setting.rawValue
+      modelContext.saveOrLog()
+          } label: {
+      if podcastModel?.autoDownloadSetting == setting.rawValue {
+        Label(setting.displayName, systemImage: "checkmark")
+      } else {
+        Text(setting.displayName)
+      }
+          }
+        }
+      } label: {
+        let current = AutoDownloadSetting(rawValue: podcastModel?.autoDownloadSetting ?? "") ?? .inheritGlobal
+        Label("Auto Download: \(current.displayName)", systemImage: "arrow.down.circle")
+      }
+
+      Button {
+        let wasOff = podcastModel?.autoTranscribeNewEpisodes != true
+        podcastModel?.autoTranscribeNewEpisodes.toggle()
+        modelContext.saveOrLog()
+        if wasOff, podcastModel?.autoTranscribeNewEpisodes == true, let model = podcastModel {
+          activeSheet = .transcribeBackfill(model)
+        }
+      } label: {
+        if podcastModel?.autoTranscribeNewEpisodes == true {
+          Label("Auto-transcribe: On", systemImage: "waveform.badge.plus")
+        } else {
+          Label("Auto-transcribe: Off", systemImage: "waveform")
+        }
+      }
+
+      Button {
+        if let model = podcastModel { activeSheet = .episodeFilter(model) }
+      } label: {
+        Label("Episode Filter\u{2026}", systemImage: "line.3.horizontal.decrease.circle")
+      }
+    }
+  }
+
   @ViewBuilder
   private func filterSortBar(viewModel: EpisodeListViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -828,7 +861,7 @@ struct EpisodeListView: View {
               .font(.subheadline)
               .fontWeight(.semibold)
             Image(systemName: viewModel.sortOldestFirst ? "arrow.up" : "arrow.down")
-              .font(.system(size: 11, weight: .semibold))
+              .font(.caption.weight(.semibold))
           }
           .contentShape(Rectangle())
         }
@@ -841,7 +874,6 @@ struct EpisodeListView: View {
     .background(.bar)
   }
 }
-
 
 // MARK: - Filter Chip Component
 
@@ -862,7 +894,7 @@ struct FilterChip: View {
   private var chipLabel: some View {
     let content = HStack(spacing: 4) {
       Image(systemName: icon)
-        .font(.system(size: 12))
+        .font(.caption)
       Text(title)
         .font(.caption)
         .fontWeight(isSelected ? .semibold : .regular)
@@ -937,14 +969,18 @@ struct FilterChip: View {
     // podcast, so all four belong in the schema — a container that only knows
     // PodcastInfoModel makes those fetches fail.
     static let container: ModelContainer = {
-      let container = try! ModelContainer(
-        for: PodcastInfoModel.self, EpisodeDownloadModel.self,
-        EpisodeTranscriptModel.self, EpisodeAIAnalysis.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-      )
-      container.mainContext.insert(subscribed)
-      container.mainContext.insert(unsubscribed)
-      return container
+      do {
+        let container = try ModelContainer(
+          for: PodcastInfoModel.self, EpisodeDownloadModel.self,
+          EpisodeTranscriptModel.self, EpisodeAIAnalysis.self,
+          configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        container.mainContext.insert(subscribed)
+        container.mainContext.insert(unsubscribed)
+        return container
+      } catch {
+        fatalError("Preview container failed to build: \(error)")
+      }
     }()
   }
 

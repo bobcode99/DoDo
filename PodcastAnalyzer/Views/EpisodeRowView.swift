@@ -5,7 +5,6 @@
 //  Created by Bob on 2026/1/9.
 //
 
-
 import SwiftData
 import SwiftUI
 
@@ -14,6 +13,11 @@ import UIKit
 #endif
 
 struct EpisodeRowView: View {
+  /// Status glyphs are deliberately small, but they still have to grow with the
+  /// user's text size. `@ScaledMetric` keeps the default appearance and scales
+  /// from there; a bare `.system(size:)` did not move at all.
+  @ScaledMetric private var badgeIconSize: Double = 10
+
   /// Set once at the app root from UserDefaults, not read per row — see
   /// EpisodeRowAppearance.swift.
   @Environment(\.episodeRowPlayButtonEdge) private var playButtonEdge
@@ -350,19 +354,19 @@ struct EpisodeRowView: View {
       HStack(spacing: 4) {
         if isStarred {
           Image(systemName: "star.fill")
-            .font(.system(size: 10))
+            .font(.system(size: badgeIconSize))
             .foregroundStyle(.yellow)
         }
 
         if isDownloaded {
           Image(systemName: "arrow.down.circle.fill")
-            .font(.system(size: 10))
+            .font(.system(size: badgeIconSize))
             .foregroundStyle(.green)
         }
 
         if hasCaptions {
           Image(systemName: "captions.bubble.fill")
-            .font(.system(size: 10))
+            .font(.system(size: badgeIconSize))
             .foregroundStyle(.purple)
         } else {
           // Transcript-manager observation is isolated in this subview so
@@ -372,13 +376,13 @@ struct EpisodeRowView: View {
 
         if hasAIAnalysis {
           Image(systemName: "sparkles")
-            .font(.system(size: 10))
+            .font(.system(size: badgeIconSize))
             .foregroundStyle(.orange)
         }
 
         if isCompleted {
           Image(systemName: "checkmark.circle.fill")
-            .font(.system(size: 10))
+            .font(.system(size: badgeIconSize))
             .foregroundStyle(.green)
         }
       }
@@ -414,10 +418,12 @@ struct EpisodeRowView: View {
       contextMenuContent
     } label: {
       Image(systemName: "ellipsis")
-        .font(.system(size: 14, weight: .medium))
+        .font(.body)
         .foregroundStyle(.secondary)
-        .frame(width: 28, height: 28)
-        .contentShape(Rectangle())
+        // 44x44 is Apple's minimum touch target; the glyph stays visually the
+        // same size, the hit area around it grows to meet it.
+        .frame(width: 44, height: 44)
+        .contentShape(.rect)
     }
     .accessibilityLabel("Episode options")
     .buttonStyle(.plain)
@@ -567,7 +573,7 @@ struct EpisodeRowView: View {
     shareTask = Task {
       do {
         // Use timeout with task group
-        let appleUrl = try await withThrowingTaskGroup(of: String?.self) { group in
+        let appleUrl = try await withThrowingTaskGroup(of: String?.self) { group -> String? in
           group.addTask {
             try await applePodcastService.getAppleEpisodeLink(
               episodeTitle: episode.title,
@@ -575,10 +581,13 @@ struct EpisodeRowView: View {
             )
           }
           group.addTask {
-            try await Task.sleep(nanoseconds: 5_000_000_000)
+            try await Task.sleep(for: .seconds(5))
             throw CancellationError()
           }
-          let result = try await group.next()!
+          // `next()` vends the element optional wrapped in its own optional
+          // (nil = the group is empty). Unwrap the outer one; the inner nil is
+          // a legitimate "no Apple link found".
+          guard let result = try await group.next() else { return nil }
           group.cancelAll()
           return result
         }
@@ -607,6 +616,8 @@ struct EpisodeRowView: View {
 /// Owns the `TranscriptManager.shared.activeJobs` subscription so transcript
 /// progress ticks only re-render this view, not the entire row.
 private struct EpisodeRowTranscriptIndicator: View {
+  @ScaledMetric private var progressTextSize: Double = 8
+
   let episodeKey: String
 
   private var transcriptManager: TranscriptManager { .shared }
@@ -622,21 +633,21 @@ private struct EpisodeRowTranscriptIndicator: View {
         HStack(spacing: 2) {
           ProgressView().scaleEffect(0.35)
           Text("Model")
-            .font(.system(size: 8))
+            .font(.system(size: progressTextSize))
             .foregroundStyle(.purple)
           Text("\(Int(progress * 100))%")
-            .font(.system(size: 8))
+            .font(.system(size: progressTextSize))
             .foregroundStyle(.purple)
         }
       case .transcribing(let progress):
         HStack(spacing: 2) {
           ProgressView().scaleEffect(0.35)
           Text("\(Int(progress * 100))%")
-            .font(.system(size: 8))
+            .font(.system(size: progressTextSize))
             .foregroundStyle(.purple)
           if let parts = job.partProgress {
             Text("\(min(parts.completed + 1, parts.total))/\(parts.total)")
-              .font(.system(size: 8))
+              .font(.system(size: progressTextSize))
               .foregroundStyle(.purple.opacity(0.7))
           }
         }
@@ -659,6 +670,7 @@ private struct EpisodeRowTranscriptIndicator: View {
 /// `audioManager.isPlaying` or `audioManager.currentEpisode` change, instead
 /// of every visible row.
 private struct EpisodeRowPlayingIndicator: View {
+  @ScaledMetric private var glyphSize: Double = 12
   let episodeTitle: String
   let podcastTitle: String
 
@@ -673,7 +685,7 @@ private struct EpisodeRowPlayingIndicator: View {
   var body: some View {
     if isPlayingThisEpisode {
       Image(systemName: audioManager.isPlaying ? "waveform" : "pause.fill")
-        .font(.system(size: 12, weight: .bold))
+        .font(.system(size: glyphSize).bold())
         .foregroundStyle(.white)
         .padding(4)
         .glassEffect(.regular.tint(.blue), in: .rect(cornerRadius: 4))

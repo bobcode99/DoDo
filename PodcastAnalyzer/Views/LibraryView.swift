@@ -40,7 +40,10 @@ struct LibraryView: View {
   /// blob only for podcasts whose feed actually changed since the last build.
   @State private var gridItemCache: [PodcastInfoModel.ID: CachedGridItem] = [:]
   @State private var errorMessage: String?
-  @State private var showError = false
+  /// Whether this tab is the screen on top. LibraryView is a NavigationStack
+  /// root, so it stays subscribed to its `@Query` while EpisodeListView is
+  /// pushed over it — see `visibleRecencySignature`.
+  @State private var isVisible = false
 
   var body: some View {
     ZStack {
@@ -65,13 +68,17 @@ struct LibraryView: View {
         .padding(.bottom, 40)
       }
 
-      if viewModel.isLoading && subscribedPodcasts.isEmpty
+      // `sortedPodcasts`, not `subscribedPodcasts`: touching the @Query here ran
+      // its fetch a third time per body pass. The two hold the same set — the
+      // grid above already renders from this one.
+      if viewModel.isLoading && sortedPodcasts.isEmpty
           && viewModel.savedEpisodes.isEmpty && viewModel.downloadedEpisodes.isEmpty {
         ProgressView("Loading Library...")
           .scaleEffect(1.5)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(Color.platformBackground)
-      } else if subscribedPodcasts.isEmpty
+      } else if lastProcessedSignature != nil
+                && sortedPodcasts.isEmpty
                 && viewModel.savedEpisodes.isEmpty
                 && viewModel.downloadedEpisodes.isEmpty {
         ContentUnavailableView {
@@ -122,24 +129,36 @@ struct LibraryView: View {
     .onAppear {
       let isFirstLoad = !viewModel.isLoaded
       viewModel.setModelContext(modelContext)
-      applyPodcastsIfChanged(subscribedPodcasts)
-      // Re-fetch saved/starred episodes so stars set from Home/Search/Trending
-      // (outside the Library tab) surface on return. Deferred past the nav
-      // transition and throttled, so popping back from a sub-page doesn't run
-      // SwiftData fetches mid-animation — that contention was the visible
-      // hitch when navigating back into this tab.
+
+      // First appearance: nothing is on screen and there is no transition to
+      // protect, so draw the grid as early as possible.
+      guard !isFirstLoad else {
+        isVisible = true
+        applyPodcastsIfChanged(subscribedPodcasts)
+        return
+      }
+
+      // Popping back from a sub-page. Every line below reads SwiftData, and
+      // flipping `isVisible` alone re-opens the `@Query` — whose getter runs a
+      // synchronous fetch, the main-thread `sqlite3_step` this gate exists to
+      // avoid. EpisodeListView stamps `lastUpdated` on the show you just left,
+      // so that fetch is always invalidated and always does real work: the
+      // pop paid for it every single time.
       //
-      // Skipped on the very first appearance: `setModelContext` has just
-      // kicked off the full load, and re-running saved/downloaded 350ms later
-      // duplicated every fetch and its observable writes. The device log showed
-      // each section loading twice, ~370ms apart, on the first Home → Library
-      // switch.
-      guard !isFirstLoad else { return }
+      // Holding `isVisible` false until the transition lands keeps the query
+      // parked for the whole animation. The grid then re-sorts a frame later,
+      // animated by LibraryPodcastsGrid's own `.animation(.smooth,)`.
       let now = Date()
-      guard now.timeIntervalSince(lastAppearRefresh) > 2 else { return }
-      lastAppearRefresh = now
+      let shouldRefreshSections = now.timeIntervalSince(lastAppearRefresh) > 2
+      if shouldRefreshSections { lastAppearRefresh = now }
       Task {
         try? await Task.sleep(for: .milliseconds(350))
+        isVisible = true
+        applyPodcastsIfChanged(subscribedPodcasts)
+        // Re-fetch saved/starred episodes so stars set from Home/Search/Trending
+        // (outside the Library tab) surface on return. Throttled because a
+        // quick out-and-back would otherwise refetch both sections twice.
+        guard shouldRefreshSections else { return }
         await viewModel.refreshSavedEpisodes()
         await viewModel.refreshDownloadedEpisodes()
       }
@@ -158,9 +177,6 @@ struct LibraryView: View {
     .onChange(of: syncTick) { _, _ in
       applyPodcastsIfChanged(subscribedPodcasts)
     }
-    .onChange(of: errorMessage) { _, newValue in
-      showError = newValue != nil
-    }
     // Watch the recency *signature*, not the array. `[PodcastInfoModel]`
     // equality is persistent-identity based, so `onChange(of: subscribedPodcasts)`
     // never fired when a sync only mutated `lastUpdated` / `latestEpisodeDate`
@@ -172,14 +188,25 @@ struct LibraryView: View {
     // No withAnimation here: animating a full grid map+sort+dictionary
     // rebuild was both a main-thread cost and visible jank. The grid items
     // are cheap value types; LibraryPodcastsGrid animates the reposition.
-    .onChange(of: podcastRecencySignature) { _, _ in
+    .onChange(of: visibleRecencySignature) { _, _ in
+      guard isVisible else { return }
       applyPodcastsIfChanged(subscribedPodcasts)
     }
+    // Pushing a NavigationLink fires this, which is exactly what we want: it
+    // parks the @Query for as long as a sub-page is on top. `onAppear` re-syncs
+    // on the way back.
+    .onDisappear { isVisible = false }
 
     // Note: Do NOT call viewModel.cleanup() here — LibraryView is a tab root,
     // and pushing a NavigationLink fires onDisappear.  Cleaning up would cancel
     // the download-completion observer while the user is in a sub-page.
-    .alert("Error", isPresented: $showError) {
+    .alert(
+      "Error",
+      isPresented: Binding(
+        get: { errorMessage != nil },
+        set: { if !$0 { errorMessage = nil } }
+      )
+    ) {
       Button("OK", role: .cancel) { errorMessage = nil }
     } message: {
       Text(errorMessage ?? "")
@@ -195,6 +222,25 @@ struct LibraryView: View {
   /// bumping the sync timestamp.
   private var podcastRecencySignature: Int {
     signature(for: subscribedPodcasts)
+  }
+
+  /// The recency signature, but only while this tab is actually on screen.
+  ///
+  /// Reading `subscribedPodcasts` runs the `@Query`'s fetch synchronously inside
+  /// `body` — Instruments (`library-timeprofile-0829.trace`) shows
+  /// `LibraryView.subscribedPodcasts.getter` → `NSManagedObjectContext.fetch` →
+  /// `sqlite3_step` at 3,767 ms, 22% of all main-thread CPU and 86% of the CPU
+  /// inside `LibraryView.body`. Because this view is the NavigationStack root it
+  /// stays alive under a pushed EpisodeListView, and every SwiftData write that
+  /// screen makes re-invalidates the query: 73 of 96 body passes in the trace
+  /// ran behind a screen the user could not see, and both the push and the pop
+  /// hung on it.
+  ///
+  /// Off-screen the read is skipped entirely, so the query never runs. `onAppear`
+  /// calls `applyPodcastsIfChanged` on the way back, which is what caught up the
+  /// grid before this gate existed too.
+  private var visibleRecencySignature: Int {
+    isVisible ? podcastRecencySignature : 0
   }
 
   private func signature(for podcasts: [PodcastInfoModel]) -> Int {
@@ -285,7 +331,7 @@ private struct TranscriptToolbarBadge: View {
         HStack(spacing: 4) {
           Image(systemName: "waveform.badge.plus")
           Text("\(count)")
-            .font(.caption2.monospacedDigit())
+            .font(.caption.monospacedDigit())
         }
       }
       .transition(.opacity)
