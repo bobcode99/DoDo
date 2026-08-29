@@ -14,95 +14,6 @@ import OSLog
 private let signpostLog = OSLog(subsystem: "com.podcast.analyzer", category: "PointsOfInterest")
 #endif
 
-// MARK: - Library Episode Model
-
-struct LibraryEpisode: Identifiable, Hashable {
-  static func == (lhs: LibraryEpisode, rhs: LibraryEpisode) -> Bool {
-    lhs.id == rhs.id
-  }
-  func hash(into hasher: inout Hasher) {
-    hasher.combine(id)
-  }
-
-  let id: String
-  let podcastTitle: String
-  let imageURL: String?
-  let language: String
-  let episodeInfo: PodcastEpisodeInfo
-  let isStarred: Bool
-  let isDownloaded: Bool
-  let isCompleted: Bool
-  let lastPlaybackPosition: TimeInterval
-  /// Actual duration measured by AVPlayer and stored in SwiftData.
-  /// More accurate than `episodeInfo.duration` which comes from potentially
-  /// wrong RSS metadata. Zero means not yet measured.
-  let savedDuration: TimeInterval
-
-  var hasProgress: Bool {
-    lastPlaybackPosition > 0 && !isCompleted
-  }
-
-  /// Progress percentage (0.0 to 1.0).
-  /// Prefers `savedDuration` (measured by AVPlayer) over RSS metadata duration.
-  var progress: Double {
-    let dur: Double
-    if savedDuration > 0 {
-      dur = savedDuration
-    } else if let rss = episodeInfo.duration, rss > 0 {
-      dur = Double(rss)
-    } else {
-      return 0
-    }
-    return min(lastPlaybackPosition / dur, 1.0)
-  }
-}
-
-// MARK: - Playback Conversion
-
-extension PlaybackEpisode {
-  /// The queue/playback shape of a library row. `nil` when the episode has no
-  /// audio URL — every caller already has to guard that case, so the failable
-  /// init keeps the check in one place instead of at each menu action.
-  init?(_ episode: LibraryEpisode) {
-    guard let audioURL = episode.episodeInfo.audioURL else { return nil }
-    self.init(
-      id: episode.id,
-      title: episode.episodeInfo.title,
-      podcastTitle: episode.podcastTitle,
-      audioURL: audioURL,
-      imageURL: episode.imageURL,
-      episodeDescription: episode.episodeInfo.podcastEpisodeDescription,
-      pubDate: episode.episodeInfo.pubDate,
-      duration: episode.episodeInfo.duration,
-      guid: episode.episodeInfo.guid
-    )
-  }
-}
-
-// MARK: - Downloading Episode Model
-
-struct DownloadingEpisode: Identifiable {
-  let id: String
-  let episodeTitle: String
-  let podcastTitle: String
-  let imageURL: String?
-  let progress: Double
-  let state: DownloadState
-}
-
-// MARK: - Downloaded Podcast Group Model
-
-struct DownloadedPodcastGroup: Identifiable {
-  let title: String
-  let imageURL: String?
-  let podcast: PodcastInfoModel?
-  let downloadCount: Int
-
-  var id: String {
-    podcast?.id.uuidString ?? title
-  }
-}
-
 // MARK: - Library ViewModel
 
 @MainActor
@@ -275,6 +186,26 @@ final class LibraryViewModel {
   /// refresh — i.e. on every Library appearance — which is main-thread work
   /// proportional to total episode count across the whole library.
   private var podcastInfoByTitle: [String: PodcastInfo] = [:]
+
+  /// Same decoded snapshots keyed by persistent id, so `loadAllPodcasts` can
+  /// reuse them across rebuilds. Keyed by id rather than title because a feed
+  /// rename changes the title but not the row.
+  private var podcastInfoByID: [UUID: PodcastInfo] = [:]
+
+  /// Decoded snapshot for a podcast title, preferring the cache.
+  ///
+  /// `PodcastInfoModel.podcastInfo` is a SwiftData Codable attribute: every read
+  /// runs a full `JSONDecoder` pass over the entire episode array. Instruments
+  /// (`library-timeprofile-0829.trace`) caught `podcastInfo.getter` →
+  /// `PodcastInfo.init(from:)` at 1,441 ms of main-thread time, because
+  /// `createLibraryEpisode` was called once per downloaded episode and decoded
+  /// the whole show again each time. `loadAllPodcasts` has already decoded every
+  /// blob into `podcastInfoByTitle` — use it, and only fall back to a decode for
+  /// a podcast that map hasn't seen yet.
+  private func podcastInfo(forTitle title: String) -> PodcastInfo? {
+    if let cached = podcastInfoByTitle[title] { return cached }
+    return podcastTitleMap[title]?.podcastInfo
+  }
 
   /// (id → lastUpdated) signature of the last `loadAllPodcasts` fetch.
   /// Repeat calls with an unchanged store skip the map rebuilds entirely.
@@ -776,6 +707,12 @@ final class LibraryViewModel {
         self.allPodcasts = podcasts
         return
       }
+      // Keep the old stamps to diff against below. This check is all-or-nothing,
+      // but the rebuild no longer is: opening one show refreshes just that feed
+      // and bumps only its `lastUpdated`, and re-decoding every *other* podcast's
+      // blob for it cost 674 ms of main-thread SQL + JSON on the pop back into
+      // Library (Instruments: library-timeprofile-0829).
+      let previousStamp = allPodcastsStamp
       allPodcastsStamp = stamp
 
       // Since we're @MainActor, update directly
@@ -790,8 +727,17 @@ final class LibraryViewModel {
       titleMap.reserveCapacity(podcasts.count)
       infoByTitle.reserveCapacity(podcasts.count)
       var didBackfill = false
+      var rebuiltInfoByID: [UUID: PodcastInfo] = [:]
+      rebuiltInfoByID.reserveCapacity(podcasts.count)
       for model in podcasts {
-        let info = model.podcastInfo
+        // Reuse the previous decode for any show whose feed hasn't moved.
+        let info: PodcastInfo
+        if previousStamp[model.id] == model.lastUpdated, let cached = podcastInfoByID[model.id] {
+          info = cached
+        } else {
+          info = model.podcastInfo
+        }
+        rebuiltInfoByID[model.id] = info
         titleMap[info.title] = model           // later row wins on duplicate titles
         infoByTitle[info.title] = info
         if model.episodeCount == 0 && !info.episodes.isEmpty {
@@ -800,9 +746,21 @@ final class LibraryViewModel {
           model.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
           didBackfill = true
         }
+        // The show header reads these two before the blob is decoded, so a
+        // legacy row missing them would draw a short meta line and then grow it
+        // once the view model lands.
+        if model.feedLanguage.isEmpty && !info.language.isEmpty {
+          model.feedLanguage = info.language
+          didBackfill = true
+        }
+        if model.feedAuthor.isEmpty, let author = info.author, !author.isEmpty {
+          model.feedAuthor = author
+          didBackfill = true
+        }
       }
       self.podcastTitleMap = titleMap
       self.podcastInfoByTitle = infoByTitle
+      self.podcastInfoByID = rebuiltInfoByID
       if didBackfill { context.saveOrLog() }
 
       logger.info("Loaded \(self.allPodcasts.count) total podcasts for episode lookups")
@@ -1252,8 +1210,7 @@ final class LibraryViewModel {
         // Try to find full podcast info for richer data using O(1) lookup.
         // `info` is bound once: this runs per episode, and each read of
         // `podcast.podcastInfo` re-materializes the whole episode array.
-        if let podcast = podcastTitleMap[podcastTitle] {
-          let info = podcast.podcastInfo
+        if let info = podcastInfo(forTitle: podcastTitle) {
           if let episode = info.episodes.first(where: { $0.title == episodeTitle }) {
             return LibraryEpisode(
               id: model.id,
@@ -1328,8 +1285,7 @@ final class LibraryViewModel {
 
     // Find the podcast using O(1) lookup. `info` is bound once — this runs per
     // episode, and each `podcast.podcastInfo` read re-materializes the array.
-    if let podcast = podcastTitleMap[podcastTitle] {
-      let info = podcast.podcastInfo
+    if let info = podcastInfo(forTitle: podcastTitle) {
       if let episode = info.episodes.first(where: { $0.title == episodeTitle }) {
         // Found the full episode info
         return LibraryEpisode(
@@ -1405,7 +1361,10 @@ final class LibraryViewModel {
     logger.info("Starting parallel refresh of \(podcastCount) podcast feeds")
 
     // Extract RSS URLs and model IDs before entering TaskGroup
-    let modelData: [(id: UUID, rssUrl: String)] = self.podcastInfoModelList.map { ($0.id, $0.podcastInfo.rssUrl) }
+    // `$0.rssUrl`, not `$0.podcastInfo.rssUrl`: the mirror column holds the same
+    // value, and going through the blob decoded every show's episode array just
+    // to read one string.
+    let modelData: [(id: UUID, rssUrl: String)] = self.podcastInfoModelList.map { ($0.id, $0.rssUrl) }
 
     // Use TaskGroup to fetch all podcasts in parallel
     let results = await withTaskGroup(of: (UUID, PodcastInfo?).self) { group -> [(UUID, PodcastInfo?)] in

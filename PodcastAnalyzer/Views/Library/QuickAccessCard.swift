@@ -2,14 +2,10 @@
 //  QuickAccessCard.swift
 //  PodcastAnalyzer
 //
-//  Quick access card and podcast grid cell for the Library tab.
+//  Saved / Downloaded shortcut card at the top of the Library tab.
 //
 
 import SwiftUI
-import NukeUI
-import Nuke
-
-// MARK: - Quick Access Card
 
 struct QuickAccessCard: View {
   let icon: String
@@ -22,7 +18,7 @@ struct QuickAccessCard: View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
         Image(systemName: icon)
-          .font(.system(size: 20))
+          .font(.title3)
           .foregroundStyle(iconColor)
 
         Spacer()
@@ -53,98 +49,5 @@ struct QuickAccessCard: View {
     .padding(12)
     .frame(maxWidth: .infinity, minHeight: 90)
     .glassEffect(Glass.regular, in: .rect(cornerRadius: 12))
-  }
-}
-
-// MARK: - Podcast Grid Cell
-
-/// Value-type snapshot passed to PodcastGridCell to prevent @Observable observation
-/// storms. LibraryView converts [PodcastInfoModel] → [PodcastGridItem] once in
-/// updateSortedPodcasts(), so SwiftUI only tracks the cheap value array, not the
-/// live model's episode array.
-struct PodcastGridItem: Identifiable, Equatable {
-  let id: UUID
-  let title: String
-  let imageURL: String
-  let episodeCount: Int
-  let latestEpisodeDate: Date?
-
-  init(from model: PodcastInfoModel) {
-    self.id = model.id
-    // Fast path: read the denormalized mirrors so the grid never decodes the
-    // podcastInfo episode blob (the cold-load hang). Rows persisted before
-    // these columns existed fall back to a one-time decode; LibraryViewModel
-    // .loadAllPodcasts backfills them so subsequent launches take the fast path.
-    if model.episodeCount > 0 || !model.imageURL.isEmpty {
-      self.title = model.title
-      self.imageURL = model.imageURL
-      self.episodeCount = model.episodeCount
-      self.latestEpisodeDate = model.latestEpisodeDate
-    } else {
-      let info = model.podcastInfo
-      self.title = info.title
-      self.imageURL = info.imageURL
-      self.episodeCount = info.episodes.count
-      self.latestEpisodeDate = info.episodes.lazy.compactMap(\.pubDate).max()
-    }
-  }
-}
-
-struct PodcastGridCell: View {
-  let item: PodcastGridItem
-
-  private var latestEpisodeDate: String? {
-    guard let date = item.latestEpisodeDate else { return nil }
-    return Formatters.formatRelativeDate(date, locale: Formatters.appLocale)
-  }
-
-  /// Downsample to a grid-cell-sized thumbnail instead of decoding the full-res
-  /// CDN artwork (up to ~3000px) into memory per cell — that full decode was the
-  /// scroll/cold-load lag. ~200pt @3x ≈ 600px, sharp for a half-screen cell.
-  private var request: ImageRequest? {
-    guard !item.imageURL.isEmpty,
-          let url = URL(string: AppleArtworkURL.upgrade(item.imageURL, targetPixels: 600))
-    else { return nil }
-    var request = ImageRequest(url: url)
-    request.processors = [
-      ImageProcessors.Resize(
-        size: CGSize(width: 200, height: 200),
-        unit: .points,
-        contentMode: .aspectFill,
-        crop: true,
-        upscale: false
-      )
-    ]
-    return request
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      LazyImage(request: request) { state in
-        if let image = state.image {
-          image.resizable().aspectRatio(contentMode: .fill)
-        } else {
-          Color.gray.opacity(0.2)
-            .overlay(ProgressView().scaleEffect(0.5))
-        }
-      }
-      .aspectRatio(1, contentMode: .fit)
-      .clipShape(.rect(cornerRadius: 10))
-      .clipped()
-
-      Text(item.title)
-        .font(.caption)
-        .fontWeight(.medium)
-        .lineLimit(2, reservesSpace: true)
-        .foregroundStyle(.primary)
-
-      // Reserves the date row's height even when a podcast has no episodes
-      // yet, so every cell in a grid row bottoms out at the same height
-      // instead of the shorter ones leaving a gap under the artwork.
-      Text(latestEpisodeDate ?? " ")
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .opacity(latestEpisodeDate == nil ? 0 : 1)
-    }
   }
 }
