@@ -17,7 +17,11 @@ struct TrendingEpisodesDestination: Hashable {}
 struct PopularShowsDestination: Hashable {}
 
 /// Destination for navigating to a trending episode's detail view
-struct TrendingEpisodeDetailDestination: Hashable {
+struct TrendingEpisodeDetailDestination: Hashable, Identifiable {
+  /// Same shape as `ApplePodcastService.TrendingEpisode.id`, and stable across
+  /// accesses — it is what the zoom transition matches the source card on.
+  var id: String { "\(podcastId)\u{1F}\(episodeTitle)" }
+
   let episodeTitle: String
   let episodeDescription: String?
   let releaseDate: String?
@@ -76,6 +80,7 @@ struct HomeView: View {
   @Environment(\.modelContext) private var modelContext
   @State private var showRegionPicker = false
   @State private var showNotificationInbox = false
+  @Environment(\.zoomNamespace) private var zoomNamespace
 
   /// `viewModel` is injectable so previews can seed Up Next / Popular Shows /
   /// Top Episodes into their populated, empty, and loading states without a
@@ -126,6 +131,7 @@ struct HomeView: View {
         collectionId: podcast.id,
         applePodcastUrl: podcast.url
       )
+      .zoomDestination(id: podcast.id, in: zoomNamespace)
     }
     .navigationDestination(for: TrendingEpisodeDetailDestination.self) { dest in
       EpisodeDetailView(
@@ -133,6 +139,7 @@ struct HomeView: View {
         podcastTitle: dest.podcastName,
         fallbackImageURL: dest.podcastArtworkUrl
       )
+      .zoomDestination(id: dest.id, in: zoomNamespace)
     }
     .navigationDestination(for: TrendingEpisodesDestination.self) { _ in
       TrendingEpisodesListView(episodes: viewModel.trendingEpisodes)

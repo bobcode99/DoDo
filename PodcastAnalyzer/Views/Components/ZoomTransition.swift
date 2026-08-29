@@ -3,14 +3,10 @@
 //  PodcastAnalyzer
 //
 //  Zoom navigation transitions: a card grows into the screen it opens, and
-//  shrinks back into it on the way out.
-//
-//  Scoped to the two shared routes registered in `navigationDestinations()`.
-//  Screens that register their own destinations keep the default push — the
-//  zoom is for the app's main way into a show and into an episode, not for
-//  every navigation. The namespace travels through the environment because
-//  sources (the library grid, the Up Next carousel) and those destinations sit
-//  in different branches of the view tree.
+//  shrinks back into it on the way out. The namespace is shared through the
+//  environment because sources (grids, carousels, rows) and destinations
+//  (registered in `navigationDestinations()` and HomeView) sit in different
+//  branches of the view tree.
 //
 
 import SwiftUI
