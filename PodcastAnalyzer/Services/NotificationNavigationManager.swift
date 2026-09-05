@@ -151,11 +151,11 @@ enum NewEpisodeNotification {
     static func registerCategory() {
         let play = UNNotificationAction(
             identifier: playAction,
-            title: String(localized: "Play"),
+            title: String.appLocalized("Play"),
             options: [])
         let open = UNNotificationAction(
             identifier: openAction,
-            title: String(localized: "Open in DoDo"),
+            title: String.appLocalized("Open in DoDo"),
             options: [.foreground])
         UNUserNotificationCenter.current().setNotificationCategories([
             UNNotificationCategory(

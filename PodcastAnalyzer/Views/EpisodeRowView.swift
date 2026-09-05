@@ -283,16 +283,12 @@ struct EpisodeRowView: View {
     }
   }
 
-  private static let relativeDateFormatter: RelativeDateTimeFormatter = {
-    let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .abbreviated
-    return formatter
-  }()
-
   /// Format episode date - relative for today, otherwise abbreviated
   private func formatEpisodeDate(_ date: Date) -> String {
     if Calendar.current.isDateInToday(date) {
-      return Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
+      // A bare RelativeDateTimeFormatter follows the *device* language, so this
+      // stayed Chinese after switching the app to English.
+      return Formatters.formatRelativeDate(date, locale: Formatters.appLocale)
     } else {
       return Formatters.formatDate(date)
     }

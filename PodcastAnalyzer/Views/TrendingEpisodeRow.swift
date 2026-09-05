@@ -28,12 +28,6 @@ struct TrendingEpisodeRow: View {
     return f
   }()
 
-  private static let relativeFormatter: RelativeDateTimeFormatter = {
-    let f = RelativeDateTimeFormatter()
-    f.unitsStyle = .abbreviated
-    return f
-  }()
-
   private var formattedDuration: String {
     guard let millis = episode.episode.trackTimeMillis else { return "" }
     let totalSeconds = millis / 1000
@@ -49,7 +43,9 @@ struct TrendingEpisodeRow: View {
     guard let dateStr = episode.episode.releaseDate else { return "" }
     guard let date = Self.isoFormatter.date(from: dateStr)
             ?? Self.isoFormatterNoFrac.date(from: dateStr) else { return "" }
-    return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+    // A bare RelativeDateTimeFormatter follows the *device* language, so this
+    // stayed Chinese after switching the app to English.
+    return Formatters.formatRelativeDate(date, locale: Formatters.appLocale)
   }
 
   private var metadataText: String {
