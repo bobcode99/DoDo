@@ -82,26 +82,6 @@ struct PodcastBrowseDestination: View {
   }
 }
 
-/// Destination for `EpisodeDetailRoute`.
-///
-/// Same reason as `PodcastBrowseDestination`: `navigationDestinations()` is a
-/// `View` extension, so it cannot read the zoom namespace itself.
-struct EpisodeDetailDestination: View {
-  let route: EpisodeDetailRoute
-
-  @Environment(\.zoomNamespace) private var zoomNamespace
-
-  var body: some View {
-    EpisodeDetailView(
-      episode: route.episode,
-      podcastTitle: route.podcastTitle,
-      fallbackImageURL: route.fallbackImageURL,
-      podcastLanguage: route.podcastLanguage ?? "en"
-    )
-    .zoomDestination(id: route.id, in: route.zoomsFromSource ? zoomNamespace : nil)
-  }
-}
-
 /// Destination for `EpisodeAIAnalysisRoute`.
 ///
 /// Same reason as the two above: `navigationDestinations()` is a `View`

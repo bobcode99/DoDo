@@ -353,7 +353,12 @@ extension View {
   func navigationDestinations() -> some View {
     self
       .navigationDestination(for: EpisodeDetailRoute.self) { route in
-        EpisodeDetailDestination(route: route)
+        EpisodeDetailView(
+          episode: route.episode,
+          podcastTitle: route.podcastTitle,
+          fallbackImageURL: route.fallbackImageURL,
+          podcastLanguage: route.podcastLanguage ?? "en"
+        )
       }
       #if os(iOS)
       .navigationDestination(for: EpisodeTranscriptRoute.self) { route in

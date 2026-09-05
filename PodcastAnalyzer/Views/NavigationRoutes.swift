@@ -20,14 +20,6 @@ struct EpisodeDetailRoute: Hashable, Identifiable {
   let podcastTitle: String
   let fallbackImageURL: String?
   let podcastLanguage: String?
-  /// Set only where the pushing view also carries `.zoomSource(id: route.id)`.
-  ///
-  /// A `.navigationTransition(.zoom)` with no matching source does not fall back
-  /// to the plain push: it still swaps UIKit's edge-swipe pop for its own
-  /// source-anchored dismiss, which then has nothing to shrink into, so the
-  /// screen becomes unswipeable. Pushes from search, the mini player and
-  /// notifications have no card to grow from and must leave this false.
-  var zoomsFromSource: Bool = false
 
   var id: String {
     "\(podcastTitle)\u{1F}\(episode.id)"
@@ -96,7 +88,13 @@ struct PodcastBrowseRoute: Hashable, Identifiable {
   let podcastModel: PodcastInfoModel?
   /// Non-nil when navigating to an unsubscribed podcast from browse/search.
   let collectionId: String?
-  /// See `EpisodeDetailRoute.zoomsFromSource`.
+  /// Set only where the pushing view also carries `.zoomSource(id: route.id)`.
+  ///
+  /// A `.navigationTransition(.zoom)` with no matching source does not fall back
+  /// to the plain push: it still swaps UIKit's edge-swipe pop for its own
+  /// source-anchored dismiss, which then has nothing to shrink into, so the
+  /// screen becomes unswipeable. Pushes from search, the mini player and
+  /// notifications have no card to grow from and must leave this false.
   var zoomsFromSource: Bool = false
   let podcastName: String
   let artistName: String

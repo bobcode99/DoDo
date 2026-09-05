@@ -15,8 +15,6 @@ import UIKit
 struct TrendingEpisodesListView: View {
   let episodes: [ApplePodcastService.TrendingEpisode]
 
-  @Environment(\.zoomNamespace) private var zoomNamespace
-
   var body: some View {
     List {
       ForEach(Array(episodes.prefix(200).enumerated()), id: \.element.id) { index, episode in
@@ -27,7 +25,6 @@ struct TrendingEpisodesListView: View {
               .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
-          .zoomSource(id: destination.id, in: zoomNamespace)
 
           Menu {
             TrendingEpisodeContextMenu(episode: episode)
