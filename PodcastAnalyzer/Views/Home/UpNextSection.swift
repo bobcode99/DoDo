@@ -75,7 +75,8 @@ struct UpNextSection: View {
             episode: scored.episode.episodeInfo,
             podcastTitle: scored.episode.podcastTitle,
             fallbackImageURL: scored.episode.imageURL,
-            podcastLanguage: scored.episode.language
+            podcastLanguage: scored.episode.language,
+            zoomsFromSource: true
           )
           NavigationLink(value: route) {
             UpNextCard(

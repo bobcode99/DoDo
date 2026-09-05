@@ -34,9 +34,11 @@ extension View {
     #endif
   }
 
-  /// Zooms this screen out of the card carrying the same id. Falls back to the
-  /// standard push when nothing tagged that id — pushes from search, the mini
-  /// player, notifications and context menus have no card to grow from.
+  /// Zooms this screen out of the card carrying the same id.
+  ///
+  /// Pass a nil namespace when the push had no tagged card. An unmatched zoom is
+  /// not a free no-op — it keeps the source-anchored interactive dismiss that
+  /// replaced the edge-swipe pop, and the screen ends up with neither.
   @ViewBuilder
   func zoomDestination(id: String, in namespace: Namespace.ID?) -> some View {
     #if os(iOS)
@@ -76,7 +78,7 @@ struct PodcastBrowseDestination: View {
         )
       }
     }
-    .zoomDestination(id: route.id, in: zoomNamespace)
+    .zoomDestination(id: route.id, in: route.zoomsFromSource ? zoomNamespace : nil)
   }
 }
 
@@ -96,7 +98,7 @@ struct EpisodeDetailDestination: View {
       fallbackImageURL: route.fallbackImageURL,
       podcastLanguage: route.podcastLanguage ?? "en"
     )
-    .zoomDestination(id: route.id, in: zoomNamespace)
+    .zoomDestination(id: route.id, in: route.zoomsFromSource ? zoomNamespace : nil)
   }
 }
 

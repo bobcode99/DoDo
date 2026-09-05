@@ -40,7 +40,7 @@ struct LibraryPodcastsGrid: View {
         LazyVGrid(columns: columns, spacing: 16) {
           ForEach(sortedPodcasts) { item in
             if let model = podcastModelByID[item.id] {
-              let route = PodcastBrowseRoute(podcastModel: model)
+              let route = PodcastBrowseRoute(podcastModel: model, zoomsFromSource: true)
               NavigationLink(value: route) {
                 PodcastGridCell(item: item)
               }

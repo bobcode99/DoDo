@@ -20,6 +20,14 @@ struct EpisodeDetailRoute: Hashable, Identifiable {
   let podcastTitle: String
   let fallbackImageURL: String?
   let podcastLanguage: String?
+  /// Set only where the pushing view also carries `.zoomSource(id: route.id)`.
+  ///
+  /// A `.navigationTransition(.zoom)` with no matching source does not fall back
+  /// to the plain push: it still swaps UIKit's edge-swipe pop for its own
+  /// source-anchored dismiss, which then has nothing to shrink into, so the
+  /// screen becomes unswipeable. Pushes from search, the mini player and
+  /// notifications have no card to grow from and must leave this false.
+  var zoomsFromSource: Bool = false
 
   var id: String {
     "\(podcastTitle)\u{1F}\(episode.id)"
@@ -88,6 +96,8 @@ struct PodcastBrowseRoute: Hashable, Identifiable {
   let podcastModel: PodcastInfoModel?
   /// Non-nil when navigating to an unsubscribed podcast from browse/search.
   let collectionId: String?
+  /// See `EpisodeDetailRoute.zoomsFromSource`.
+  var zoomsFromSource: Bool = false
   let podcastName: String
   let artistName: String
   let artworkURL: String
@@ -95,8 +105,13 @@ struct PodcastBrowseRoute: Hashable, Identifiable {
   let initialFilter: EpisodeFilter
 
   /// Convenience init for a subscribed PodcastInfoModel.
-  init(podcastModel: PodcastInfoModel, initialFilter: EpisodeFilter = .all) {
+  init(
+    podcastModel: PodcastInfoModel,
+    initialFilter: EpisodeFilter = .all,
+    zoomsFromSource: Bool = false
+  ) {
     self.podcastModel = podcastModel
+    self.zoomsFromSource = zoomsFromSource
     self.collectionId = nil
     // Read the denormalized mirrors, never `podcastInfo.*`: this init runs for
     // every visible grid cell on each Library render (and again on back-nav),
