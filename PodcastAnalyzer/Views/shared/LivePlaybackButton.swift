@@ -142,7 +142,10 @@ struct LivePlaybackButton: View {
   private var showsPlaybackProgress: Bool {
     // Show progress as soon as playback has meaningfully started instead of
     // waiting for 1% progress, which hides the bar for ~1 minute on long episodes.
-    displayProgress > 0 && displayProgress < 1 && livePosition > 0
+    // `isCompleted` first: Mark as Played zeroes the saved position, but a
+    // marked episode that is still loaded in the player keeps reporting a live
+    // `currentTime`, so the bar survived the mark without this check.
+    !isCompleted && displayProgress > 0 && displayProgress < 1 && livePosition > 0
   }
 
   private var localeIdentifier: String {
