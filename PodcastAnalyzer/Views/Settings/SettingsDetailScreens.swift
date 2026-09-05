@@ -531,18 +531,13 @@ struct SubscriptionsSettingsScreen: View {
         ScrollView {
           ImportShortcutInstructionsView().padding()
         }
-        .navigationTitle("Import from Apple Podcasts")
+        // An inline title shares the bar with Done and truncates:
+        // "Import from Apple Podcasts" became "Import from App…". The button
+        // that opens this sheet already says what the import is, so the title
+        // only has to name the source.
+        .navigationTitle("Apple Podcasts")
         .platformToolbarTitleDisplayMode()
         .toolbar {
-          // An inline title is one line and truncates; with Done beside it
-          // "Import from Apple Podcasts" became "Import from App…". A principal
-          // item can shrink to fit instead of clipping.
-          ToolbarItem(placement: .principal) {
-            Text("Import from Apple Podcasts")
-              .font(.subheadline.weight(.semibold))
-              .lineLimit(1)
-              .minimumScaleFactor(0.7)
-          }
           ToolbarItem(placement: .confirmationAction) {
             Button("Done") { showImportInstructions = false }
           }
