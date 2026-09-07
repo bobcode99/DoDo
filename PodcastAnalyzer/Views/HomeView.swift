@@ -139,6 +139,7 @@ struct HomeView: View {
         podcastTitle: dest.podcastName,
         fallbackImageURL: dest.podcastArtworkUrl
       )
+      .zoomDestination(id: dest.id, in: zoomNamespace)
     }
     .navigationDestination(for: TrendingEpisodesDestination.self) { _ in
       TrendingEpisodesListView(episodes: viewModel.trendingEpisodes)

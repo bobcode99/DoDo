@@ -10,6 +10,7 @@ import SwiftUI
 struct UpNextSection: View {
   let viewModel: HomeViewModel
 
+  @Environment(\.zoomNamespace) private var zoomNamespace
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -74,7 +75,8 @@ struct UpNextSection: View {
             episode: scored.episode.episodeInfo,
             podcastTitle: scored.episode.podcastTitle,
             fallbackImageURL: scored.episode.imageURL,
-            podcastLanguage: scored.episode.language
+            podcastLanguage: scored.episode.language,
+            zoomsFromSource: true
           )
           NavigationLink(value: route) {
             UpNextCard(
@@ -84,6 +86,7 @@ struct UpNextSection: View {
             )
           }
           .buttonStyle(.plain)
+          .zoomSource(id: route.id, in: zoomNamespace)
           .contextMenu {
             UpNextRowContextMenu(episode: scored.episode, viewModel: viewModel)
           }

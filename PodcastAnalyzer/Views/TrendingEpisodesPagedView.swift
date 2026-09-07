@@ -57,6 +57,8 @@ private struct TrendingEpisodeRowWithNav: View {
   let episode: ApplePodcastService.TrendingEpisode
   let rank: Int
 
+  @Environment(\.zoomNamespace) private var zoomNamespace
+
   var body: some View {
     let destination = TrendingEpisodeDetailDestination(from: episode)
     HStack(spacing: 0) {
@@ -65,6 +67,7 @@ private struct TrendingEpisodeRowWithNav: View {
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .zoomSource(id: destination.id, in: zoomNamespace)
 
       Menu {
         TrendingEpisodeContextMenu(episode: episode)
