@@ -86,10 +86,13 @@ struct UpNextSection: View {
             )
           }
           .buttonStyle(.plain)
-          .zoomSource(id: route.id, in: zoomNamespace)
           .contextMenu {
             UpNextRowContextMenu(episode: scored.episode, viewModel: viewModel)
           }
+          // Outside the context menu, not inside it: the menu wraps the card in
+          // its own container, and a transition source buried in there is not
+          // found at push time, so the zoom silently falls back to a slide.
+          .zoomSource(id: route.id, in: zoomNamespace)
         }
       }
       .padding(.horizontal)
