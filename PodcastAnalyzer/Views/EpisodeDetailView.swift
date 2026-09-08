@@ -68,8 +68,13 @@ struct EpisodeDetailView: View {
             }
             .padding(.vertical)
         }
+        // SpatialTapGesture, not `DragGesture(minimumDistance: 0)`: a zero
+        // distance drag claims every touch from the first pixel, so the edge
+        // swipe back never reached the navigation stack once this page was
+        // pushed with a zoom transition. EpisodeListView has no such gesture,
+        // which is why the library grid's zoom always swiped back fine.
         .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
+            SpatialTapGesture()
                 .onEnded {
                     timestampTapX = $0.location.x
                     timestampTapY = $0.location.y
