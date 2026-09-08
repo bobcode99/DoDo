@@ -12,6 +12,9 @@ import SwiftUI
 struct LibraryView: View {
   @State private var viewModel = LibraryViewModel(modelContext: nil)
   @State private var showTranscriptProgressSheet = false
+  /// Episode picked in the transcript sheet, pushed once the sheet is gone.
+  @State private var pendingTranscriptEpisode: TranscriptJobRoute?
+  @Environment(\.tabNavigationCoordinator) private var tabCoordinator
   @AppStorage("showEpisodeArtwork") private var showEpisodeArtwork = true
   @Environment(\.modelContext) private var modelContext
 
@@ -102,8 +105,13 @@ struct LibraryView: View {
         TranscriptToolbarBadge(showSheet: $showTranscriptProgressSheet)
       }
     }
-    .sheet(isPresented: $showTranscriptProgressSheet) {
-      TranscriptGenerationProgressOverallView()
+    .sheet(isPresented: $showTranscriptProgressSheet, onDismiss: pushPendingTranscriptEpisode) {
+      TranscriptGenerationProgressOverallView(
+        onSelectJob: { pendingTranscriptEpisode = $0 }
+      )
+    }
+    .navigationDestination(for: TranscriptJobRoute.self) { route in
+      TranscriptJobEpisodeBridgeView(route: route)
     }
     .navigationDestination(for: LibrarySubpageRoute.self) { route in
       switch route {
@@ -241,6 +249,14 @@ struct LibraryView: View {
   /// grid before this gate existed too.
   private var visibleRecencySignature: Int {
     isVisible ? podcastRecencySignature : 0
+  }
+
+  /// Pushes after the sheet has closed, never while it is closing — a push
+  /// issued mid-dismissal is dropped. Same reason MiniPlayerBar defers its own.
+  private func pushPendingTranscriptEpisode() {
+    guard let route = pendingTranscriptEpisode else { return }
+    pendingTranscriptEpisode = nil
+    tabCoordinator?.libraryRouter.push(route)
   }
 
   private func signature(for podcasts: [PodcastInfoModel]) -> Int {
