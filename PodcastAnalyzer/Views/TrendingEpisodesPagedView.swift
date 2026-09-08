@@ -67,7 +67,6 @@ private struct TrendingEpisodeRowWithNav: View {
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .zoomSource(id: destination.id, in: zoomNamespace)
 
       Menu {
         TrendingEpisodeContextMenu(episode: episode)
@@ -82,5 +81,8 @@ private struct TrendingEpisodeRowWithNav: View {
     .contextMenu {
       TrendingEpisodeContextMenu(episode: episode)
     }
+    // See TrendingEpisodesListView: the source has to sit outside the context
+    // menu, or the zoom silently falls back to a slide.
+    .zoomSource(id: destination.id, in: zoomNamespace)
   }
 }

@@ -20,14 +20,13 @@ struct TrendingEpisodesListView: View {
   var body: some View {
     List {
       ForEach(Array(episodes.prefix(200).enumerated()), id: \.element.id) { index, episode in
+        let destination = TrendingEpisodeDetailDestination(from: episode)
         HStack(spacing: 0) {
-          let destination = TrendingEpisodeDetailDestination(from: episode)
           NavigationLink(value: destination) {
             TrendingEpisodeRow(episode: episode, rank: index + 1)
               .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
-          .zoomSource(id: destination.id, in: zoomNamespace)
 
           Menu {
             TrendingEpisodeContextMenu(episode: episode)
@@ -42,6 +41,10 @@ struct TrendingEpisodesListView: View {
         .contextMenu {
           TrendingEpisodeContextMenu(episode: episode)
         }
+        // Outside the context menu, and on the whole row: a source nested in
+        // the menu's container is not found at push time, so the zoom degrades
+        // to a slide — and an unmatched zoom also costs the back swipe.
+        .zoomSource(id: destination.id, in: zoomNamespace)
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
       }
     }
