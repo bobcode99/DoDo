@@ -32,6 +32,18 @@ struct EpisodeDetailRoute: Hashable, Identifiable {
   var id: String {
     "\(podcastTitle)\u{1F}\(episode.id)"
   }
+
+  // Written out rather than synthesized so `zoomsFromSource` stays out of
+  // identity, as it does on the other two routes: it describes how the push
+  // animates, not where it goes, and the same episode reached from Home and
+  // from search must not compare as two different destinations.
+  static func == (lhs: EpisodeDetailRoute, rhs: EpisodeDetailRoute) -> Bool {
+    lhs.id == rhs.id
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(id)
+  }
 }
 
 // MARK: - macOS sub-page routes
@@ -56,9 +68,19 @@ struct EpisodeAIAnalysisRoute: Hashable, Identifiable {
   let podcastTitle: String
   let fallbackImageURL: String?
   let podcastLanguage: String?
+  /// See `EpisodeDetailRoute.zoomsFromSource`.
+  var zoomsFromSource: Bool = false
 
   var id: String {
     "\(podcastTitle)\u{1F}\(episode.id)#ai"
+  }
+
+  static func == (lhs: EpisodeAIAnalysisRoute, rhs: EpisodeAIAnalysisRoute) -> Bool {
+    lhs.id == rhs.id
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(id)
   }
 }
 

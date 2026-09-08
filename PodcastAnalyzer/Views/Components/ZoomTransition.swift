@@ -121,7 +121,7 @@ struct EpisodeAIAnalysisDestination: View {
       fallbackImageURL: route.fallbackImageURL,
       podcastLanguage: route.podcastLanguage ?? "en"
     )
-    .zoomDestination(id: route.id, in: zoomNamespace)
+    .zoomDestination(id: route.id, in: route.zoomsFromSource ? zoomNamespace : nil)
   }
 }
 #endif

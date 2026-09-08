@@ -157,7 +157,8 @@ struct EpisodeDetailView: View {
                     episode: viewModel.episode,
                     podcastTitle: viewModel.podcastTitle,
                     fallbackImageURL: viewModel.imageURLString,
-                    podcastLanguage: viewModel.podcastLanguage
+                    podcastLanguage: viewModel.podcastLanguage,
+                    zoomsFromSource: true
                 )
                 NavigationLink(value: aiRoute) {
                     NavRowLabel(

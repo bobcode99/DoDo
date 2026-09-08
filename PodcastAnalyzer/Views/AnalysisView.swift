@@ -112,7 +112,8 @@ struct AnalysisView: View {
       episode: enrichedEpisode(for: analysis, info: info),
       podcastTitle: analysis.podcastTitle,
       fallbackImageURL: podcast?.imageURL,
-      podcastLanguage: info?.language
+      podcastLanguage: info?.language,
+      zoomsFromSource: true
     )
   }
 
