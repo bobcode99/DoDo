@@ -44,7 +44,6 @@ extension View {
     #if os(iOS)
       if let namespace {
         navigationTransition(.zoom(sourceID: id, in: namespace))
-          .background(EdgeSwipeBackRestorer())
       } else {
         self
       }
@@ -53,57 +52,6 @@ extension View {
     #endif
   }
 }
-
-#if os(iOS)
-/// Puts UIKit's edge-swipe pop back on a screen pushed with a zoom transition.
-///
-/// The zoom hands the whole screen to its own source-anchored pan dismiss, which
-/// a scrolling destination swallows before it ever starts — so the page ends up
-/// with no back gesture at all. Re-enabling the pop recognizer restores the edge
-/// swipe alongside the zoom.
-private struct EdgeSwipeBackRestorer: UIViewControllerRepresentable {
-  func makeUIViewController(context: Context) -> UIViewController {
-    Restorer(popDelegate: context.coordinator)
-  }
-
-  func updateUIViewController(_: UIViewController, context _: Context) {}
-
-  func makeCoordinator() -> PopGestureDelegate { PopGestureDelegate() }
-
-  /// Held by the coordinator so it dies with the screen: `delegate` is weak, so
-  /// UIKit's own behaviour comes back the moment this page is popped.
-  final class PopGestureDelegate: NSObject, UIGestureRecognizerDelegate {
-    weak var navigationController: UINavigationController?
-
-    func gestureRecognizerShouldBegin(_: UIGestureRecognizer) -> Bool {
-      // Same guard UIKit applies by default — without it the recognizer fires
-      // on the root screen and leaves the stack wedged.
-      (navigationController?.viewControllers.count ?? 0) > 1
-    }
-  }
-
-  private final class Restorer: UIViewController {
-    private let popDelegate: PopGestureDelegate
-
-    init(popDelegate: PopGestureDelegate) {
-      self.popDelegate = popDelegate
-      super.init(nibName: nil, bundle: nil)
-      view.isUserInteractionEnabled = false
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func didMove(toParent parent: UIViewController?) {
-      super.didMove(toParent: parent)
-      guard let nav = navigationController else { return }
-      popDelegate.navigationController = nav
-      nav.interactivePopGestureRecognizer?.delegate = popDelegate
-      nav.interactivePopGestureRecognizer?.isEnabled = true
-    }
-  }
-}
-#endif
 
 /// Destination for `PodcastBrowseRoute`.
 ///
