@@ -109,6 +109,27 @@ struct EpisodeDetailView: View {
         )
     }
 
+    /// Shown when the transcript ends well before the audio does, so a reader
+    /// who reaches the end knows the rest is missing rather than assuming the
+    /// episode simply went quiet.
+    private var transcriptTruncatedNotice: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            Text(
+                "Transcript covers only \(Int(viewModel.transcriptCoveredFraction * 100))% of this episode. Timings may not line up with the audio."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+        .accessibilityElement(children: .combine)
+    }
+
     // MARK: - Action row (Play / Download + Transcript / AI Analysis rows)
 
     private var actionRow: some View {
@@ -150,6 +171,10 @@ struct EpisodeDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Open the transcript for this episode")
+
+                if viewModel.transcriptIsTruncated {
+                    transcriptTruncatedNotice
+                }
 
                 Divider().padding(.leading, 52)
 

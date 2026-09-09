@@ -227,7 +227,8 @@ nonisolated enum ChunkedTranscriptionService {
     speechSegments: [ChunkSegment],
     musicRanges: [MusicDetectionService.TimeRange],
     marker: String = MusicDetectionService.markerText,
-    musicOverlapRatio: Double = 0.7
+    musicOverlapRatio: Double = 0.7,
+    maxSilentMusicGap: TimeInterval = 30
   ) -> [ChunkSegment] {
     guard !musicRanges.isEmpty else { return speechSegments }
 
@@ -239,11 +240,56 @@ nonisolated enum ChunkedTranscriptionService {
       return overlap / duration < musicOverlapRatio
     }
 
-    let markers = musicRanges.map { range in
+    let markers = coalesceMusicRanges(
+      musicRanges,
+      around: speechOnly,
+      maxSilentGap: maxSilentMusicGap
+    ).map { range in
       ChunkSegment(startTime: range.start, endTime: range.end, text: marker)
     }
 
     return (speechOnly + markers).sorted { $0.startTime < $1.startTime }
+  }
+
+  /// Joins music ranges that are really one passage.
+  ///
+  /// `MusicDetectionService` only coalesces hits within 0.5s of each other, so
+  /// a few seconds where the classifier's confidence dips mid-song — a quiet
+  /// bar, a key change — ends the range and starts another. The transcript
+  /// then shows one song as two adjacent `[♪ Music]` blocks, because the
+  /// sentence grouper gives every marker a line of its own.
+  ///
+  /// Two ranges are the same passage when nothing was said between them: no
+  /// surviving speech segment overlaps the gap. `maxSilentGap` still bounds
+  /// it, so two songs on either side of a long silence stay separate rather
+  /// than collapsing into one block spanning the quiet.
+  static func coalesceMusicRanges(
+    _ ranges: [MusicDetectionService.TimeRange],
+    around speech: [ChunkSegment],
+    maxSilentGap: TimeInterval
+  ) -> [MusicDetectionService.TimeRange] {
+    let sorted = ranges.sorted { $0.start < $1.start }
+    guard var current = sorted.first else { return [] }
+
+    var merged: [MusicDetectionService.TimeRange] = []
+    for range in sorted.dropFirst() {
+      let gapStart = current.end
+      let gapEnd = max(range.start, current.end)
+      let hasSpeechBetween = speech.contains { segment in
+        segment.startTime < gapEnd && gapStart < segment.endTime
+      }
+      if !hasSpeechBetween && gapEnd - gapStart <= maxSilentGap {
+        current = MusicDetectionService.TimeRange(
+          start: current.start,
+          end: max(current.end, range.end)
+        )
+      } else {
+        merged.append(current)
+        current = range
+      }
+    }
+    merged.append(current)
+    return merged
   }
 
   /// Removes temporary chunk files
