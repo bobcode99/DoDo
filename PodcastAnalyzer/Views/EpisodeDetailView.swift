@@ -31,6 +31,7 @@ struct EpisodeDetailView: View {
     @State private var tappedTimestampSeconds: TimeInterval?
     @State private var timestampTapX: CGFloat = 0
     @State private var timestampTapY: CGFloat = 200
+    @Environment(\.zoomNamespace) private var zoomNamespace
 
     init(
         episode: PodcastEpisodeInfo,
@@ -67,8 +68,13 @@ struct EpisodeDetailView: View {
             }
             .padding(.vertical)
         }
+        // SpatialTapGesture, not `DragGesture(minimumDistance: 0)`: a zero
+        // distance drag claims every touch from the first pixel, so the edge
+        // swipe back never reached the navigation stack once this page was
+        // pushed with a zoom transition. EpisodeListView has no such gesture,
+        // which is why the library grid's zoom always swiped back fine.
         .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
+            SpatialTapGesture()
                 .onEnded {
                     timestampTapX = $0.location.x
                     timestampTapY = $0.location.y
@@ -101,6 +107,27 @@ struct EpisodeDetailView: View {
             showRegenerateConfirmation: $showRegenerateConfirmation,
             showTranslationLanguagePicker: $showTranslationLanguagePicker
         )
+    }
+
+    /// Shown when the transcript ends well before the audio does, so a reader
+    /// who reaches the end knows the rest is missing rather than assuming the
+    /// episode simply went quiet.
+    private var transcriptTruncatedNotice: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            Text(
+                "Transcript covers only \(Int(viewModel.transcriptCoveredFraction * 100))% of this episode. Timings may not line up with the audio."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Action row (Play / Download + Transcript / AI Analysis rows)
@@ -145,16 +172,20 @@ struct EpisodeDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityHint("Open the transcript for this episode")
 
+                if viewModel.transcriptIsTruncated {
+                    transcriptTruncatedNotice
+                }
+
                 Divider().padding(.leading, 52)
 
-                NavigationLink(
-                    value: EpisodeAIAnalysisRoute(
-                        episode: viewModel.episode,
-                        podcastTitle: viewModel.podcastTitle,
-                        fallbackImageURL: viewModel.imageURLString,
-                        podcastLanguage: viewModel.podcastLanguage
-                    )
-                ) {
+                let aiRoute = EpisodeAIAnalysisRoute(
+                    episode: viewModel.episode,
+                    podcastTitle: viewModel.podcastTitle,
+                    fallbackImageURL: viewModel.imageURLString,
+                    podcastLanguage: viewModel.podcastLanguage,
+                    zoomsFromSource: true
+                )
+                NavigationLink(value: aiRoute) {
                     NavRowLabel(
                         icon: "sparkles",
                         tint: .orange,
@@ -163,6 +194,7 @@ struct EpisodeDetailView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .zoomSource(id: aiRoute.id, in: zoomNamespace)
                 .accessibilityHint("Open the AI analysis for this episode")
             }
             .background(.regularMaterial, in: .rect(cornerRadius: 16))

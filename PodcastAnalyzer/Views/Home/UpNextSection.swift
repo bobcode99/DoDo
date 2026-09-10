@@ -10,6 +10,8 @@ import SwiftUI
 struct UpNextSection: View {
   let viewModel: HomeViewModel
 
+  @Environment(\.zoomNamespace) private var zoomNamespace
+
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       header
@@ -69,14 +71,14 @@ struct UpNextSection: View {
     ScrollView(.horizontal) {
       LazyHStack(spacing: 12) {
         ForEach(viewModel.scoredUpNextEpisodes.prefix(10)) { scored in
-          NavigationLink(
-            value: EpisodeDetailRoute(
-              episode: scored.episode.episodeInfo,
-              podcastTitle: scored.episode.podcastTitle,
-              fallbackImageURL: scored.episode.imageURL,
-              podcastLanguage: scored.episode.language
-            )
-          ) {
+          let route = EpisodeDetailRoute(
+            episode: scored.episode.episodeInfo,
+            podcastTitle: scored.episode.podcastTitle,
+            fallbackImageURL: scored.episode.imageURL,
+            podcastLanguage: scored.episode.language,
+            zoomsFromSource: true
+          )
+          NavigationLink(value: route) {
             UpNextCard(
               episode: scored.episode,
               onPlay: { viewModel.playEpisode(scored.episode) },
@@ -87,6 +89,10 @@ struct UpNextSection: View {
           .contextMenu {
             UpNextRowContextMenu(episode: scored.episode, viewModel: viewModel)
           }
+          // Outside the context menu, not inside it: the menu wraps the card in
+          // its own container, and a transition source buried in there is not
+          // found at push time, so the zoom silently falls back to a slide.
+          .zoomSource(id: route.id, in: zoomNamespace)
         }
       }
       .padding(.horizontal)

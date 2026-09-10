@@ -56,6 +56,13 @@ enum CloudAnalysisTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var displayName: LocalizedStringResource {
+        switch self {
+        case .analysis: return "Analysis"
+        case .askQuestion: return "Ask"
+        }
+    }
+
     var icon: String {
         switch self {
         case .analysis: return "sparkles"

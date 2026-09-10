@@ -16,7 +16,6 @@ import UIKit
 import AppKit
 #endif
 
-
 private let viewModelLogger = Logger(subsystem: "com.podcast.analyzer", category: "ViewModelLifecycle")
 
 @MainActor
@@ -41,13 +40,12 @@ final class EpisodeListViewModel {
   #endif
   var selectedFilter: EpisodeFilter = .all {
     didSet {
-      isShowingAllEpisodes = false  // collapse back to the window for the new set
       statusSnapshotsBuilt = false  // re-scan transcript presence when the chip is (re)selected
       recomputeFilteredEpisodes()
     }
   }
   var sortOldestFirst: Bool = false {
-    didSet { recomputeFilteredEpisodes() }  // same set, just reordered — keep expansion
+    didSet { recomputeFilteredEpisodes() }  // same set, just reordered
   }
   var isRefreshing: Bool = false
   var isDescriptionExpanded: Bool = false
@@ -107,16 +105,6 @@ final class EpisodeListViewModel {
 
   private(set) var filteredEpisodes: [PodcastEpisodeInfo] = []
 
-  /// Episodes shown on first open before the user taps "Show All". Keeps
-  /// navigating into a large feed light — only this many rows are materialized
-  /// by the List initially, so first paint isn't proportional to a 600+ backlog.
-  static let initialEpisodeDisplayCount = 10
-
-  /// When false, only the first `initialEpisodeDisplayCount` filtered episodes
-  /// render; the user reveals the rest via the "Show All" footer button. Reset
-  /// whenever the filtered set changes (filter / search), kept across re-sorts.
-  var isShowingAllEpisodes = false
-
   /// Cached decoded snapshot. Reading the model's stored podcast blob
   /// re-materializes the entire episode array out of SwiftData's backing store
   /// on every access, and this view touches it per row and inside filter loops —
@@ -124,16 +112,43 @@ final class EpisodeListViewModel {
   /// cached struct everywhere else. This is what keeps a 600+ episode list fast.
   private(set) var podcastInfo: PodcastInfo
 
-  /// Episodes actually rendered by the List — a capped window until "Show All".
-  var displayedEpisodes: [PodcastEpisodeInfo] {
-    isShowingAllEpisodes
-      ? filteredEpisodes
-      : Array(filteredEpisodes.prefix(Self.initialEpisodeDisplayCount))
-  }
+  /// What the header's play button acts on: the episode the user last listened
+  /// to in this show, falling back to the newest one when nothing here has been
+  /// played yet. Independent of the chip filter and the sort direction.
+  ///
+  /// Recency is the later of `progressUpdatedAt` and `lastPlayedDate`. The
+  /// first moves on every playback-position write, so it catches an episode
+  /// left half-finished; the second only moves on completion, but legacy rows
+  /// may carry just that one.
+  ///
+  /// Cached rather than computed in the view: it scans every episode and builds
+  /// a key string for each one, and the header re-derived it on *every* body
+  /// pass — including every download-progress tick.
+  private(set) var playTarget: (episode: PodcastEpisodeInfo, isResume: Bool)?
 
-  /// True when more episodes exist beyond the initial window.
-  var hasMoreEpisodesToShow: Bool {
-    !isShowingAllEpisodes && filteredEpisodes.count > Self.initialEpisodeDisplayCount
+  private func recomputePlayTarget() {
+    let playable = podcastInfo.episodes.filter { $0.audioURL != nil }
+
+    let lastListened =
+      playable
+      .compactMap { episode -> (PodcastEpisodeInfo, Date)? in
+        guard let model = episodeModels[makeEpisodeKey(episode)],
+          let stamp = [model.progressUpdatedAt, model.lastPlayedDate].compactMap({ $0 }).max()
+        else { return nil }
+        return (episode, stamp)
+      }
+      .max { $0.1 < $1.1 }?
+      .0
+
+    if let lastListened {
+      playTarget = (lastListened, true)
+      return
+    }
+
+    playTarget =
+      playable
+      .max { ($0.pubDate ?? .distantPast) < ($1.pubDate ?? .distantPast) }
+      .map { ($0, false) }
   }
 
   /// Rebuild both status sets with one fetch each, scoped to this podcast.
@@ -265,6 +280,7 @@ final class EpisodeListViewModel {
     self.podcastInfo = podcastModel.podcastInfo  // decode once; cached for every read below
     self.selectedFilter = initialFilter
     recomputeFilteredEpisodes()
+    recomputePlayTarget()
     parseDescription()
     observeDownloadStates()
     manageProgressTimer()
@@ -371,8 +387,20 @@ final class EpisodeListViewModel {
   func setModelContext(_ context: ModelContext) {
     self.modelContext = context
     loadEpisodeModels()
-    refreshStatusSnapshots()
     setupDownloadCompletionObserver()
+
+    // Transcript / AI-analysis presence only feeds row badges — two more
+    // main-thread SwiftData fetches that don't have to be in front of the first
+    // frame. The Transcript chip needs them to filter at all, so re-run the
+    // filter once they land.
+    Task { [weak self] in
+      await Task.yield()
+      guard let self, !self.isCleaned else { return }
+      self.refreshStatusSnapshots()
+      if self.selectedFilter == .transcript {
+        self.recomputeFilteredEpisodes()
+      }
+    }
   }
 
   private func setupDownloadCompletionObserver() {
@@ -467,23 +495,31 @@ final class EpisodeListViewModel {
       return
     }
 
-    #if os(iOS)
-    let labelColor = UIColor.secondaryLabel
-    #else
-    let labelColor = NSColor.secondaryLabelColor
-    #endif
-
-    let rootStyle = MarkupStyle(
-      font: MarkupStyleFont(size: 13),  // Smaller font for list view
-      foregroundColor: MarkupStyleColor(color: labelColor)
-    )
-
-    let parser = ZHTMLParserBuilder.initWithDefault()
-      .set(rootStyle: rootStyle)
-      .build()
-
     parseDescriptionTask?.cancel()
     parseDescriptionTask = Task {
+      // Both the builder and `render` are main-actor work (ZMarkupParser isn't
+      // Sendable, so neither can move off), and running them from `init` put a
+      // full HTML parse of the show notes in front of the push animation's
+      // first frame. Yield so the header paints first; the description arrives
+      // into the space `.loading` already reserves.
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+
+      #if os(iOS)
+      let labelColor = UIColor.secondaryLabel
+      #else
+      let labelColor = NSColor.secondaryLabelColor
+      #endif
+
+      let rootStyle = MarkupStyle(
+        font: MarkupStyleFont(size: 13),  // Smaller font for list view
+        foregroundColor: MarkupStyleColor(color: labelColor)
+      )
+
+      let parser = ZHTMLParserBuilder.initWithDefault()
+        .set(rootStyle: rootStyle)
+        .build()
+
       let attributedString = parser.render(html)
       guard !Task.isCancelled else { return }
       descriptionCache.setObject(attributedString, forKey: cacheKey)
@@ -514,6 +550,7 @@ final class EpisodeListViewModel {
         models[model.id] = model
       }
       episodeModels = models
+      recomputePlayTarget()  // "Resume" vs "Latest" depends on these
     } catch {
       viewModelLogger.error("Failed to load episode models: \(error.localizedDescription, privacy: .public)")
     }
@@ -521,17 +558,39 @@ final class EpisodeListViewModel {
 
   // MARK: - Podcast Operations
 
-  func refreshPodcast() async {
-    // Skip network fetch if this feed was seen within the last 30 minutes,
-    // by anyone — this view model or a background sync.
+  /// - Parameter force: skip the staleness window. Pull-to-refresh and the
+  ///   ••• menu's Refresh pass this: a gesture the user made explicitly should
+  ///   always reach the feed, and with a conditional GET an unchanged one costs
+  ///   a single 304.
+  func refreshPodcast(force: Bool = false) async {
+    // Otherwise skip the network fetch if this feed was seen within the last 30
+    // minutes, by anyone — this view model or a background sync.
     let staleAfter: TimeInterval = 30 * 60
-    guard Date().timeIntervalSince(podcastModel.lastUpdated) >= staleAfter else { return }
+    if !force, Date.now.timeIntervalSince(podcastModel.lastUpdated) < staleAfter { return }
     isRefreshing = true
     defer { isRefreshing = false }
 
     do {
-      let updatedPodcast = try await rssService.fetchPodcast(
-        from: podcastInfo.rssUrl)
+      // Conditional GET, same as BackgroundSyncManager: a feed that hasn't
+      // published answers 304 and costs one round trip and no work at all. The
+      // unconditional fetch this replaced re-parsed, re-merged, re-encoded and
+      // re-saved the entire episode blob on the main actor every time the user
+      // opened a show past the staleness window — for a large backlog that is
+      // the multi-second stall that landed on top of the freshly-drawn list.
+      let result = try await rssService.fetchPodcastConditional(
+        from: podcastInfo.rssUrl, cacheHeader: podcastModel.httpCacheHeader)
+
+      // Same bookkeeping BackgroundSyncManager does after a refresh: this is a
+      // successful look at the feed, and the Library grid / macOS list treat
+      // `lastUpdated` as "when we last saw this feed".
+      podcastModel.lastUpdated = Date()
+
+      guard case .updated(let updatedPodcast, let cacheHeader) = result else {
+        modelContext?.saveOrLog()
+        return
+      }
+      if let cacheHeader { podcastModel.httpCacheHeader = cacheHeader }
+
       // Merge instead of replace: episodes with user data that aged off the RSS feed
       // (downloaded, starred, played, or in-progress) are preserved.
       let preservedKeys: Set<String> = Set(
@@ -544,17 +603,38 @@ final class EpisodeListViewModel {
       )
       let merged = podcastInfo.merging(
         updatedFrom: updatedPodcast, preservedKeys: preservedKeys)
+
+      // Feeds that serve no ETag still re-serve the same episodes, which is the
+      // common case. Writing that back costs a whole-blob JSON encode plus a
+      // SwiftData save proportional to the backlog — skip it unless something
+      // the UI reads actually moved.
+      guard changed(from: podcastInfo, to: merged) else {
+        modelContext?.saveOrLog()
+        return
+      }
+
       podcastModel.applyPodcastInfo(merged)
-      // Same bookkeeping BackgroundSyncManager does after a merge: this is a
-      // successful feed refresh, and the Library grid / macOS list treat
-      // `lastUpdated` as "when we last saw this feed".
-      podcastModel.lastUpdated = Date()
       podcastInfo = merged  // refresh the cache from the value we just built (no re-decode)
       statusSnapshotsBuilt = false  // episodes changed — re-scan status on next use
       recomputeFilteredEpisodes()
-      try? modelContext?.save()
+      recomputePlayTarget()
+      modelContext?.saveOrLog()
     } catch {
       viewModelLogger.error("Failed to refresh podcast: \(error.localizedDescription, privacy: .public)")
+    }
+  }
+
+  /// Whether a merged snapshot differs from the one already on screen, by the
+  /// fields this app renders. Episodes compare on the same identity the merge
+  /// de-duplicates on, so a feed that only reworded a description is treated as
+  /// unchanged — that is the point: the alternative is rewriting the blob.
+  private func changed(from current: PodcastInfo, to merged: PodcastInfo) -> Bool {
+    if merged.title != current.title { return true }
+    if merged.imageURL != current.imageURL { return true }
+    if merged.podcastInfoDescription != current.podcastInfoDescription { return true }
+    if merged.episodes.count != current.episodes.count { return true }
+    return zip(merged.episodes, current.episodes).contains { new, old in
+      (new.guid ?? new.audioURL ?? new.title) != (old.guid ?? old.audioURL ?? old.title)
     }
   }
 

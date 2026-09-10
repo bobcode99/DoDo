@@ -324,6 +324,42 @@ final class EpisodeDetailViewModel {
     TranscriptStore.shared.source(episodeTitle: episode.title, podcastTitle: podcastTitle)
   }
 
+  /// How far into the audio the transcript actually reaches, and how long the
+  /// audio is — nil until both are known.
+  ///
+  /// Audio length is read from the saved model first and the feed's
+  /// `itunes:duration` second; the live player is deliberately not consulted,
+  /// so the check works on an episode that has never been played.
+  private var transcriptCoverage: (transcriptEnd: TimeInterval, audio: TimeInterval)? {
+    guard let last = transcript.transcriptSegments.last else { return nil }
+    let audioLength = savedDuration > 0
+      ? savedDuration
+      : TimeInterval(episode.duration ?? 0)
+    guard audioLength > 0 else { return nil }
+    return (last.endTime, audioLength)
+  }
+
+  /// True when the transcript stops well short of the audio it belongs to.
+  ///
+  /// A transcript can end early for reasons the text itself never reveals — a
+  /// cancelled job, a chunk that failed to export, or captions fetched from a
+  /// feed that shipped a different cut of the episode. The reader deserves to
+  /// know the timings drift rather than discover it at the end.
+  ///
+  /// The 5% tolerance (floor 60s) absorbs the ordinary case: trailing outro
+  /// music that no speech recognizer emits a cue for.
+  var transcriptIsTruncated: Bool {
+    guard let coverage = transcriptCoverage else { return false }
+    let tolerance = max(coverage.audio * 0.05, 60)
+    return coverage.transcriptEnd < coverage.audio - tolerance
+  }
+
+  /// Fraction of the audio the transcript covers, for the warning's wording.
+  var transcriptCoveredFraction: Double {
+    guard let coverage = transcriptCoverage, coverage.audio > 0 else { return 1 }
+    return min(coverage.transcriptEnd / coverage.audio, 1)
+  }
+
   var formattedDuration: String? {
     episode.formattedDuration
   }

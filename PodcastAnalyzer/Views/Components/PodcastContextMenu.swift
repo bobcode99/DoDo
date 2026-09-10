@@ -9,7 +9,11 @@ import SwiftData
 import SwiftUI
 
 struct PodcastContextMenu: ViewModifier {
-  let podcast: PodcastInfoModel
+  // @Bindable, not `let`: PodcastInfoModel is an @Model and therefore already
+  // Observable, so its properties vend bindings directly. The hand-rolled
+  // Binding(get:set:) this replaces was rebuilt on every evaluation of this
+  // modifier — 3,406 of them in library-timeprofile-0829.trace.
+  @Bindable var podcast: PodcastInfoModel
   let modelContext: ModelContext
   var onError: ((String) -> Void)?
   var onUnsubscribed: (() -> Void)?
@@ -45,17 +49,7 @@ struct PodcastContextMenu: ViewModifier {
         Divider()
 
         // Auto-transcribe new episodes — engine resolved at run time (YAP → local).
-        Toggle(isOn: Binding(
-          get: { podcast.autoTranscribeNewEpisodes },
-          set: { newValue in
-            let wasOff = !podcast.autoTranscribeNewEpisodes
-            podcast.autoTranscribeNewEpisodes = newValue
-            modelContext.saveOrLog()
-            if newValue && wasOff {
-              showTranscribeBackfillSheet = true
-            }
-          }
-        )) {
+        Toggle(isOn: $podcast.autoTranscribeNewEpisodes) {
           Label("Auto-transcribe new episodes", systemImage: "waveform.badge.plus")
         }
 
@@ -102,6 +96,11 @@ struct PodcastContextMenu: ViewModifier {
         } label: {
           Label("Unsubscribe", systemImage: "minus.circle")
         }
+      }
+      .onChange(of: podcast.autoTranscribeNewEpisodes) { _, isOn in
+        modelContext.saveOrLog()
+        // Offer to backfill only when switching on, not when switching off.
+        if isOn { showTranscribeBackfillSheet = true }
       }
       .sheet(isPresented: $showEpisodeFilterSheet) {
         PodcastEpisodeFilterView(podcast: podcast, modelContext: modelContext)

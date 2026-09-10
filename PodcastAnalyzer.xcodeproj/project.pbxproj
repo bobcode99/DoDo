@@ -350,6 +350,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 15ED5F102EC44BC9001B6CD7 /* Build configuration list for PBXNativeTarget "PodcastAnalyzer" */;
 			buildPhases = (
+				5E11117D2FF0000000005111 /* SwiftLint */,
 				15ED5EE92EC44BC6001B6CD7 /* Sources */,
 				15ED5EEA2EC44BC6001B6CD7 /* Frameworks */,
 				15ED5EEB2EC44BC6001B6CD7 /* Resources */,
@@ -603,6 +604,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		5E11117D2FF0000000005111 /* SwiftLint */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.swiftlint.yml",
+				"$(SRCROOT)/PodcastAnalyzer",
+				"$(SRCROOT)/SharedCore",
+			);
+			name = SwiftLint;
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if ! command -v swiftlint >/dev/null 2>&1; then\n  echo \"warning: SwiftLint not installed — brew install swiftlint\"\n  exit 0\nfi\n# Reported as warnings only: the repo still carries error-level violations\n# that predate this phase, and a red build on every compile helps nobody.\n# Drop the sed once `swiftlint lint --quiet` exits clean.\nswiftlint lint --quiet --config \"$SRCROOT/.swiftlint.yml\" | sed 's/error:/warning:/'\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		15AEEADB2F26464200D90D05 /* Sources */ = {

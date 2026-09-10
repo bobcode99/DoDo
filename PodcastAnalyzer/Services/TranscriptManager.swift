@@ -131,8 +131,14 @@ class TranscriptManager {
   // dictionary doesn't invalidate every SwiftUI consumer on each tick.
   private var lastYapProgressUpdate: [String: Date] = [:]
 
-  private static let speechDeniedError = String(localized: "Speech recognition permission denied. Enable in Settings > Privacy > Speech Recognition.")
-  private static let speechRestrictedError = String(localized: "Speech recognition is restricted on this device.")
+  // Computed, not `static let`: a stored constant caches the string from the
+  // first language the app ran in and never follows an in-app language change.
+  private static var speechDeniedError: String {
+    .appLocalized("Speech recognition permission denied. Enable in Settings > Privacy > Speech Recognition.")
+  }
+  private static var speechRestrictedError: String {
+    .appLocalized("Speech recognition is restricted on this device.")
+  }
 
   private init() {}
 

@@ -8,8 +8,8 @@
 import SwiftUI
 
 struct AIAnalysisTabHeader: View {
-  let title: String
-  let description: String
+  let title: LocalizedStringResource
+  let description: LocalizedStringResource
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {

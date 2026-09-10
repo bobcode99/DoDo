@@ -20,6 +20,16 @@ struct TranscriptGenerationProgressOverallView: View {
   /// the host stack and supplies the route registration itself.
   var embedNavigationStack: Bool = true
 
+  /// Handed the tapped job instead of this view pushing it itself.
+  ///
+  /// iOS presents this as a sheet, so a push inside it lands the episode
+  /// detail *in the modal* — no tab bar, no mini player, and its Transcript /
+  /// AI Insights rows dead, because those routes are registered on the tab
+  /// root and not in here. The presenter takes the route instead and pushes it
+  /// onto the library's own stack once the sheet is gone. macOS embeds this in
+  /// the host stack, where a plain NavigationLink is already correct.
+  var onSelectJob: ((TranscriptJobRoute) -> Void)?
+
   @Environment(\.dismiss) private var dismiss
   @State private var manager = TranscriptManager.shared
 
@@ -55,14 +65,19 @@ struct TranscriptGenerationProgressOverallView: View {
 
   var body: some View {
     if embedNavigationStack {
-      NavigationStack {
-        listContent
-          .navigationDestination(for: TranscriptJobRoute.self) { route in
-            TranscriptJobEpisodeDestination(route: route, onNavigated: { dismiss() })
-          }
-      }
+      NavigationStack { listContent }
     } else {
       listContent
+    }
+  }
+
+  /// Nil when nobody is listening, which is what keeps the macOS embedding on
+  /// its plain NavigationLink.
+  private var rowSelection: ((TranscriptJobRoute) -> Void)? {
+    guard let onSelectJob else { return nil }
+    return { route in
+      onSelectJob(route)
+      dismiss()
     }
   }
 
@@ -77,28 +92,28 @@ struct TranscriptGenerationProgressOverallView: View {
       if !active.isEmpty {
         Section("Active") {
           ForEach(active) { job in
-            TranscriptJobRow(jobID: job.id, action: .cancel)
+            TranscriptJobRow(jobID: job.id, action: .cancel, onSelect: rowSelection)
           }
         }
       }
       if !queued.isEmpty {
         Section("Queued") {
           ForEach(queued) { job in
-            TranscriptJobRow(jobID: job.id, action: .cancel)
+            TranscriptJobRow(jobID: job.id, action: .cancel, onSelect: rowSelection)
           }
         }
       }
       if !failed.isEmpty {
         Section("Failed") {
           ForEach(failed) { job in
-            TranscriptJobRow(jobID: job.id, action: .retry)
+            TranscriptJobRow(jobID: job.id, action: .retry, onSelect: rowSelection)
           }
         }
       }
       if !completed.isEmpty {
         Section("Completed") {
           ForEach(completed) { job in
-            TranscriptJobRow(jobID: job.id, action: .none)
+            TranscriptJobRow(jobID: job.id, action: .none, onSelect: rowSelection)
           }
         }
       }
@@ -135,6 +150,7 @@ struct TranscriptGenerationProgressOverallView: View {
 private struct TranscriptJobRow: View {
   let jobID: String
   let action: Action
+  var onSelect: ((TranscriptJobRoute) -> Void)?
 
   @State private var manager = TranscriptManager.shared
 
@@ -144,11 +160,15 @@ private struct TranscriptJobRow: View {
 
   var body: some View {
     if let job {
-      NavigationLink(value: TranscriptJobRoute(
+      let route = TranscriptJobRoute(
         podcastTitle: job.podcastTitle,
         episodeTitle: job.episodeTitle
-      )) {
-        content(for: job)
+      )
+      if let onSelect {
+        Button { onSelect(route) } label: { content(for: job) }
+          .buttonStyle(.plain)
+      } else {
+        NavigationLink(value: route) { content(for: job) }
       }
     }
   }
@@ -271,14 +291,16 @@ private struct TranscriptConfigBanner: View {
         case .appleSpeech, .yapServer:
           ConfigChip(
             icon: "rectangle.split.3x1",
-            label: settings.splitLongAudio ? "Split: On" : "Split: Off",
+            label: settings.splitLongAudio
+              ? String(localized: "Split: On")
+              : String(localized: "Split: Off"),
             tint: settings.splitLongAudio ? .green : .secondary
           )
           ConfigChip(
             icon: "music.note",
             label: settings.enableMusicDetection
-              ? "Music: \(settings.musicDetectionSensitivity.displayName)"
-              : "Music: Off",
+              ? String(localized: "Music: \(settings.musicDetectionSensitivity.displayName)")
+              : String(localized: "Music: Off"),
             tint: settings.enableMusicDetection ? .purple : .secondary
           )
         case .whisper:
@@ -341,15 +363,13 @@ struct TranscriptJobEpisodeBridgeView: View {
 
 private struct TranscriptJobEpisodeDestination: View {
   let route: TranscriptJobRoute
-  var onNavigated: (() -> Void)? = nil
 
   @Environment(\.modelContext) private var modelContext
 
   @Query private var podcasts: [PodcastInfoModel]
 
-  init(route: TranscriptJobRoute, onNavigated: (() -> Void)? = nil) {
+  init(route: TranscriptJobRoute) {
     self.route = route
-    self.onNavigated = onNavigated
     let title = route.podcastTitle
     _podcasts = Query(filter: #Predicate<PodcastInfoModel> { $0.title == title })
   }

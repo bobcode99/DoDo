@@ -272,6 +272,57 @@ struct TranscriptHighlightTests {
         #expect(result.contains { $0.text == MusicDetectionService.markerText })
     }
 
+    /// A song whose classifier confidence dips mid-way arrives as two abutting
+    /// ranges. The sentence grouper gives every marker its own line, so without
+    /// coalescing the reader sees one song as two [♪ Music] blocks.
+    @Test("Adjacent music ranges with no speech between them become one marker")
+    func adjacentMusicRangesCoalesce() {
+        let musicRanges = [
+            MusicDetectionService.TimeRange(start: 480, end: 573),
+            MusicDetectionService.TimeRange(start: 573, end: 655),
+        ]
+        let result = ChunkedTranscriptionService.annotateMusicSegments(
+            speechSegments: [], musicRanges: musicRanges
+        )
+        let markers = result.filter { $0.text == MusicDetectionService.markerText }
+        #expect(markers.count == 1)
+        #expect(markers.first?.startTime == 480)
+        #expect(markers.first?.endTime == 655)
+    }
+
+    @Test("Speech between two music ranges keeps them separate")
+    func speechBetweenMusicRangesPreventsMerge() {
+        let speech = [
+            ChunkedTranscriptionService.ChunkSegment(
+                startTime: 575, endTime: 600, text: "That was our theme"
+            )
+        ]
+        let musicRanges = [
+            MusicDetectionService.TimeRange(start: 480, end: 573),
+            MusicDetectionService.TimeRange(start: 605, end: 655),
+        ]
+        let result = ChunkedTranscriptionService.annotateMusicSegments(
+            speechSegments: speech, musicRanges: musicRanges
+        )
+        let markers = result.filter { $0.text == MusicDetectionService.markerText }
+        #expect(markers.count == 2)
+    }
+
+    /// Two songs either side of a long silence are not one passage, even with
+    /// nothing said between them.
+    @Test("A gap longer than the cap keeps music ranges separate")
+    func longSilentGapPreventsMerge() {
+        let musicRanges = [
+            MusicDetectionService.TimeRange(start: 0, end: 60),
+            MusicDetectionService.TimeRange(start: 200, end: 260),
+        ]
+        let result = ChunkedTranscriptionService.annotateMusicSegments(
+            speechSegments: [], musicRanges: musicRanges
+        )
+        let markers = result.filter { $0.text == MusicDetectionService.markerText }
+        #expect(markers.count == 2)
+    }
+
     @Test("Empty music ranges leaves speech segments untouched")
     func emptyMusicRangesPassthrough() {
         let speech = [

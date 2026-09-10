@@ -75,22 +75,22 @@ enum TranslationTargetLanguage: String, CaseIterable, Codable, Sendable {
 
   var displayName: String {
     switch self {
-    case .deviceLanguage: return String(localized: "Device Language")
-    case .english: return String(localized: "English")
-    case .traditionalChinese: return String(localized: "Traditional Chinese")
-    case .simplifiedChinese: return String(localized: "Simplified Chinese")
-    case .japanese: return String(localized: "Japanese")
-    case .korean: return String(localized: "Korean")
-    case .spanish: return String(localized: "Spanish")
-    case .french: return String(localized: "French")
-    case .german: return String(localized: "German")
-    case .portuguese: return String(localized: "Portuguese")
-    case .italian: return String(localized: "Italian")
-    case .russian: return String(localized: "Russian")
-    case .arabic: return String(localized: "Arabic")
-    case .hindi: return String(localized: "Hindi")
-    case .thai: return String(localized: "Thai")
-    case .vietnamese: return String(localized: "Vietnamese")
+    case .deviceLanguage: return String.appLocalized("Device Language")
+    case .english: return String.appLocalized("English")
+    case .traditionalChinese: return String.appLocalized("Traditional Chinese")
+    case .simplifiedChinese: return String.appLocalized("Simplified Chinese")
+    case .japanese: return String.appLocalized("Japanese")
+    case .korean: return String.appLocalized("Korean")
+    case .spanish: return String.appLocalized("Spanish")
+    case .french: return String.appLocalized("French")
+    case .german: return String.appLocalized("German")
+    case .portuguese: return String.appLocalized("Portuguese")
+    case .italian: return String.appLocalized("Italian")
+    case .russian: return String.appLocalized("Russian")
+    case .arabic: return String.appLocalized("Arabic")
+    case .hindi: return String.appLocalized("Hindi")
+    case .thai: return String.appLocalized("Thai")
+    case .vietnamese: return String.appLocalized("Vietnamese")
     }
   }
 

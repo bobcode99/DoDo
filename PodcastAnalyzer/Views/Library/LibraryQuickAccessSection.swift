@@ -55,7 +55,7 @@ struct LibraryQuickAccessSection: View {
         HStack {
           HStack(spacing: 8) {
             Image(systemName: "clock.fill")
-              .font(.system(size: 16))
+              .font(.body)
               .foregroundStyle(.blue)
             Text("Latest Episodes")
               .font(.subheadline)
@@ -99,7 +99,7 @@ private struct TranscriptingCard: View {
         HStack {
           HStack(spacing: 8) {
             Image(systemName: "waveform.badge.plus")
-              .font(.system(size: 16))
+              .font(.body)
               .foregroundStyle(.blue)
             Text("Transcribing")
               .font(.subheadline)

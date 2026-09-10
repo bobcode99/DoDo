@@ -183,7 +183,7 @@ struct PodcastHeroHeader<Description: View>: View {
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
           .font(.title3)
-          .fontWeight(.bold)
+          .bold()
           .foregroundStyle(.white)
           .lineLimit(2)
 
@@ -222,12 +222,12 @@ struct PodcastHeroHeader<Description: View>: View {
       Button(action: onPlay) {
         HStack(spacing: 7) {
           Image(systemName: "play.fill")
-            .font(.system(size: 13))
+            .font(.footnote)
           Text(playTitle)
-            .font(.system(size: 15, weight: .semibold))
+            .font(.subheadline.weight(.semibold))
         }
         .foregroundStyle(deep)
-        .frame(maxWidth: .infinity, minHeight: 42)
+        .frame(maxWidth: .infinity, minHeight: 44)  // Apple's minimum tap target
         .background(.white, in: .rect(cornerRadius: 12))
         .shadow(color: .black.opacity(0.16), radius: 6, y: 3)
       }
@@ -237,10 +237,10 @@ struct PodcastHeroHeader<Description: View>: View {
 
       Button(action: onToggleSubscribe) {
         Text(isSubscribed ? "Following" : "Follow")
-          .font(.system(size: 15, weight: .semibold))
+          .font(.subheadline.weight(.semibold))
           .foregroundStyle(.white)
           .padding(.horizontal, 18)
-          .frame(minHeight: 42)
+          .frame(minHeight: 44)  // Apple's minimum tap target
           .background(.white.opacity(0.24), in: .rect(cornerRadius: 12))
       }
       .buttonStyle(.plain)

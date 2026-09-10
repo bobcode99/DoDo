@@ -44,9 +44,11 @@ struct TranscriptGeneratingView: View {
 
     private var headline: String {
         if isDownloadingAssets {
-            return engine == .whisper ? "Downloading Model…" : "Downloading Assets…"
+            return engine == .whisper
+                ? String(localized: "Downloading Model…")
+                : String(localized: "Downloading Assets…")
         }
-        return "Generating Transcript (\(languageName))…"
+        return String(localized: "Generating Transcript (\(languageName))…")
     }
 
     // MARK: - Ring
@@ -84,7 +86,7 @@ struct TranscriptGeneratingView: View {
     }
 
     private var partDetail: String? {
-        partProgress.map { "Part \(min($0.completed + 1, $0.total))/\($0.total)" }
+        partProgress.map { String(localized: "Part \(min($0.completed + 1, $0.total))/\($0.total)") }
     }
 
     private var stages: [Stage] {
@@ -107,36 +109,36 @@ struct TranscriptGeneratingView: View {
             done ? .done : (active ? .active : .pending)
         }
         return [
-            Stage(title: "Download assets", detail: nil,
+            Stage(title: String(localized: "Download assets"), detail: nil,
                   state: isDownloadingAssets ? .active : .done),
-            Stage(title: "Prepare & split audio", detail: nil,
+            Stage(title: String(localized: "Prepare & split audio"), detail: nil,
                   state: isDownloadingAssets ? .pending : s(transcribing || merging, splitting)),
-            Stage(title: "Transcribe", detail: partDetail,
+            Stage(title: String(localized: "Transcribe"), detail: partDetail,
                   state: s(merging, transcribing),
                   showsChunks: transcribing && partProgress != nil),
-            Stage(title: "Merge & align", detail: nil,
+            Stage(title: String(localized: "Merge & align"), detail: nil,
                   state: s(progress >= 1, merging)),
         ]
     }
 
     private var whisperStages: [Stage] {
         [
-            Stage(title: "Download model", detail: nil,
+            Stage(title: String(localized: "Download model"), detail: nil,
                   state: isDownloadingAssets ? .active : .done),
-            Stage(title: "Transcribe", detail: nil,
+            Stage(title: String(localized: "Transcribe"), detail: nil,
                   state: isDownloadingAssets ? .pending : (progress >= 0.99 ? .done : .active)),
-            Stage(title: "Finalize & align", detail: nil,
+            Stage(title: String(localized: "Finalize & align"), detail: nil,
                   state: progress >= 0.99 ? .active : .pending),
         ]
     }
 
     private var yapStages: [Stage] {
         [
-            Stage(title: "Upload to server", detail: nil,
+            Stage(title: String(localized: "Upload to server"), detail: nil,
                   state: progress > 0 ? .done : .active),
-            Stage(title: "Transcribe on server", detail: nil,
+            Stage(title: String(localized: "Transcribe on server"), detail: nil,
                   state: progress >= 0.99 ? .done : .active),
-            Stage(title: "Finalize", detail: nil,
+            Stage(title: String(localized: "Finalize"), detail: nil,
                   state: progress >= 0.99 ? .active : .pending),
         ]
     }
@@ -212,7 +214,9 @@ struct TranscriptGeneratingView: View {
                 case .appleSpeech:
                     ConfigChip(
                         icon: "rectangle.split.3x1",
-                        label: settings.splitLongAudio ? "Split: On" : "Split: Off",
+                        label: settings.splitLongAudio
+                            ? String(localized: "Split: On")
+                            : String(localized: "Split: Off"),
                         tint: settings.splitLongAudio ? .green : .secondary)
                     musicChip
                 case .yapServer:
@@ -229,7 +233,7 @@ struct TranscriptGeneratingView: View {
                     // when progress stops) — same chip, close enough.
                     ConfigChip(
                         icon: "timer",
-                        label: "Timeout: \(Int(timeoutSeconds / 60))m",
+                        label: String(localized: "Timeout: \(Int(timeoutSeconds / 60))m"),
                         tint: .orange)
                 }
             }
@@ -242,8 +246,8 @@ struct TranscriptGeneratingView: View {
         ConfigChip(
             icon: "music.note",
             label: settings.enableMusicDetection
-                ? "Music: \(settings.musicDetectionSensitivity.displayName)"
-                : "Music: Off",
+                ? String(localized: "Music: \(settings.musicDetectionSensitivity.displayName)")
+                : String(localized: "Music: Off"),
             tint: settings.enableMusicDetection ? .purple : .secondary)
     }
 }

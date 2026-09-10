@@ -19,7 +19,7 @@ struct ImportShortcutInstructionsView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 22) {
-      StepRow(number: 1, title: String(localized: "Get the shortcut")) {
+      StepRow(number: 1, title: "Get the shortcut") {
         Text("Tap below to open the **ApplePodcast to Dodo** shortcut in the Shortcuts app.")
         Button("Get Shortcut", systemImage: "square.and.arrow.down") {
           openURL(shortcutLink)
@@ -28,15 +28,15 @@ struct ImportShortcutInstructionsView: View {
         .padding(.top, 2)
       }
 
-      StepRow(number: 2, title: String(localized: "Add it")) {
+      StepRow(number: 2, title: "Add it") {
         Text("Tap **Add Shortcut** to install it on your device.")
       }
 
-      StepRow(number: 3, title: String(localized: "Find it")) {
+      StepRow(number: 3, title: "Find it") {
         Text("In the Shortcuts app, open **All Shortcuts**.")
       }
 
-      StepRow(number: 4, title: String(localized: "Run it")) {
+      StepRow(number: 4, title: "Run it") {
         Text("Tap **ApplePodcast to Dodo** to import all your shows.")
         Button("Run Shortcut", systemImage: "play.fill") {
           openURL(runLink)
@@ -50,7 +50,9 @@ struct ImportShortcutInstructionsView: View {
 
 private struct StepRow<Content: View>: View {
   let number: Int
-  let title: String
+  /// `LocalizedStringKey`, not `String`: a `String(localized:)` title reads the
+  /// *system* language and ignores the in-app language picker.
+  let title: LocalizedStringKey
   @ViewBuilder let content: Content
 
   var body: some View {

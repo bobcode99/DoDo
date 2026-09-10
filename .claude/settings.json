@@ -1,4 +1,7 @@
 {
   "enabledPlugins": {},
-  "extraKnownMarketplaces": {}
+  "extraKnownMarketplaces": {},
+  "worktree": {
+    "bgIsolation": "none"
+  }
 }
