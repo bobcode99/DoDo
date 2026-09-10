@@ -380,7 +380,7 @@ struct TranscriptSettingsScreen: View {
         }
 
         if SubtitleSettingsManager.shared.enableMusicDetection {
-          Picker("Sensitivity", selection: Binding(
+          Picker("Music Sensitivity", selection: Binding(
             get: { SubtitleSettingsManager.shared.musicDetectionSensitivity },
             set: { SubtitleSettingsManager.shared.musicDetectionSensitivity = $0 }
           )) {
