@@ -16589,13 +16589,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "逐字稿已下载的单集"
+            "value" : "下载时自动生成逐字稿"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "逐字稿已下載的單集"
+            "value" : "下載時自動生成逐字稿"
           }
         }
       }
