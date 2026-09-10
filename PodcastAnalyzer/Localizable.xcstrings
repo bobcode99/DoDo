@@ -9160,13 +9160,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音乐灵敏度"
+            "value" : "音乐识别灵敏度"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音樂靈敏度"
+            "value" : "音樂識別靈敏度"
           }
         }
       }
