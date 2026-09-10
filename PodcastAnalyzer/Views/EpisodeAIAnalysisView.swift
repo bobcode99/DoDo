@@ -180,7 +180,7 @@ struct EpisodeAIAnalysisView: View {
       let label = HStack(spacing: 6) {
         Image(systemName: tab.icon)
           .font(.system(size: 12))
-        Text(tab.rawValue)
+        Text(tab.displayName)
           .font(.subheadline)
       }
       .padding(.horizontal, 12)
