@@ -20,7 +20,7 @@ struct RegionOnboardingPage: View {
   /// A short, broad list. The full 174 live in Settings; offering them here
   /// would turn a setup step into a scroll.
   private var suggestions: [Storefront] {
-    let codes = [Constants.defaultRegion, "us", "gb", "tw", "jp", "kr", "de", "fr", "ca", "au"]
+    let codes = [Constants.defaultRegion, "us", "gb", "tw", "jp", "kr", "my", "de", "fr", "ca", "au"]
     var seen = Set<String>()
     return codes
       .filter { seen.insert($0).inserted }
@@ -41,7 +41,7 @@ struct RegionOnboardingPage: View {
         .bold()
         .multilineTextAlignment(.center)
 
-      Text("Pick the countries whose charts you want on Home. You can change this any time in Settings.")
+      Text("Pick the countries or regions whose charts you want on Home. You can change this any time in Settings.")
         .font(.subheadline)
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)

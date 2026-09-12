@@ -10883,7 +10883,7 @@
         }
       }
     },
-    "Pick the countries whose charts you want on Home. You can change this any time in Settings." : {
+    "Pick the countries or regions whose charts you want on Home. You can change this any time in Settings." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
