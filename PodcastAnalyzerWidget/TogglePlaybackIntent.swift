@@ -22,7 +22,6 @@ import WidgetKit
 struct ResumePlaybackIntent: AudioPlaybackIntent {
   static let title: LocalizedStringResource = "Resume Playback"
   static let description: IntentDescription = "Resumes podcast playback in the background"
-  static let openAppWhenRun: Bool = false
 
   func perform() async throws -> some IntentResult {
     // Post Darwin notification so the main app can resume immediately
@@ -58,8 +57,6 @@ struct ResumePlaybackIntent: AudioPlaybackIntent {
 struct TogglePlaybackIntent: AudioPlaybackIntent {
   static let title: LocalizedStringResource = "Toggle Playback"
   static let description: IntentDescription = "Play or pause the current episode"
-  // Do not open the app – handle in background via Darwin notification
-  static let openAppWhenRun: Bool = false
 
   func perform() async throws -> some IntentResult {
     guard let defaults = WidgetDataManager.sharedDefaults else {

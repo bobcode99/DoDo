@@ -85,83 +85,52 @@ nonisolated enum WidgetDataManager {
     sharedContainerURL?.appending(path: "widget_artwork.jpg")
   }
 
-  /// Write artwork image data to the shared container (called from main app)
-  static func writeArtworkData(_ data: Data) {
-    guard let fileURL = artworkFileURL else { return }
-    try? data.write(to: fileURL, options: .atomic)
-  }
+  /// The `imageURL` whose artwork the shared file currently holds. The widget
+  /// draws the file only when this matches its entry's `imageURL`. It used to
+  /// draw whatever file was there, so while a download was in flight — or
+  /// after it failed, or for an episode with no artwork — the widget paired
+  /// the new episode's title with the previous show's cover.
+  static let artworkSourceKey = "widgetArtworkSourceURL"
 
-  /// Read artwork image data from the shared container (called from widget)
-  static func readArtworkData() -> Data? {
-    guard let fileURL = artworkFileURL else { return nil }
-    return try? Data(contentsOf: fileURL)
-  }
+  @MainActor private static var pendingArtworkURL: String?
 
-  /// Clear the cached artwork file
-  static func clearArtwork() {
-    guard let fileURL = artworkFileURL else { return }
-    try? FileManager.default.removeItem(at: fileURL)
-  }
-
-  /// Download and cache artwork image from URL using Nuke.
-  /// Skips download if the same URL was already cached.
-  /// Called from @MainActor context (EnhancedAudioManager).
-  /// Resize an image to at most 300×300 points so it stays within WidgetKit's
-  /// pixel-area limit (~2,275,490 px²). Images already smaller are returned as-is.
-  private static func resizedForWidget(_ image: WidgetImage) -> WidgetImage {
-    let maxDimension: CGFloat = 300
-    let size = image.size
-    guard size.width > maxDimension || size.height > maxDimension else { return image }
-    let scale = min(maxDimension / size.width, maxDimension / size.height)
-    let newSize = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
-    #if os(iOS)
-    let renderer = UIGraphicsImageRenderer(size: newSize)
-    return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
-    #else
-    let resized = NSImage(size: newSize)
-    resized.lockFocus()
-    image.draw(in: CGRect(origin: .zero, size: newSize))
-    resized.unlockFocus()
-    return resized
-    #endif
-  }
-
-  @MainActor private static var lastCachedArtworkURL: String?
-
+  /// Download (or read from Nuke's disk cache — works offline for art the app
+  /// has shown) the artwork for `imageURLString` and hand it to the widget.
   @MainActor static func cacheArtworkIfNeeded(from imageURLString: String?) {
-    guard let imageURLString, imageURLString != lastCachedArtworkURL,
-          let imageURL = URL(string: imageURLString) else {
-      return
-    }
-    lastCachedArtworkURL = imageURLString
+    guard let imageURLString, imageURLString != pendingArtworkURL,
+          sharedDefaults?.string(forKey: artworkSourceKey) != imageURLString,
+          let url = URL(string: AppleArtworkURL.canonical(imageURLString)) else { return }
+    pendingArtworkURL = imageURLString
+    // 300pt fit keeps the file under WidgetKit's ~2.27M px² image limit at any
+    // scale; Nuke downsamples while decoding instead of a second resize pass.
+    let request = ImageRequest(url: url, processors: [
+      ImageProcessors.Resize(
+        size: CGSize(width: 300, height: 300), unit: .points,
+        contentMode: .aspectFit, crop: false, upscale: false)
+    ])
     Task.detached(priority: .utility) {
-      do {
-        let image = try await ImagePipeline.shared.image(for: imageURL)
-        // WidgetKit rejects images whose pixel area exceeds ~2,275,490 px²
-        // (roughly 1508×1508). Resize to 300×300 pt — enough for any widget
-        // size at 3× scale — before saving to the shared container.
-        let widgetImage = Self.resizedForWidget(image)
-        #if os(iOS)
-        if let jpegData = widgetImage.jpegData(compressionQuality: 0.85) {
-          writeArtworkData(jpegData)
-          // Trigger a second reload now that the artwork file is on disk.
-          await MainActor.run {
-            WidgetCenter.shared.reloadTimelines(ofKind: "NowPlayingWidget")
-          }
-        }
-        #else
-        if let tiffData = widgetImage.tiffRepresentation,
-           let bitmap = NSBitmapImageRep(data: tiffData),
-           let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.85]) {
-          writeArtworkData(jpegData)
-          await MainActor.run {
-            WidgetCenter.shared.reloadTimelines(ofKind: "NowPlayingWidget")
-          }
-        }
-        #endif
-      } catch {
-        // Image download failed — widget will show placeholder
+      let jpeg = (try? await ImagePipeline.shared.image(for: request)).flatMap(jpegData)
+      await MainActor.run {
+        // A newer episode started while this loaded — its request owns the file now.
+        guard pendingArtworkURL == imageURLString else { return }
+        // Cleared on failure too, so the next play/pause retries.
+        pendingArtworkURL = nil
+        guard let jpeg, let fileURL = artworkFileURL else { return }
+        sharedDefaults?.removeObject(forKey: artworkSourceKey)
+        guard (try? jpeg.write(to: fileURL, options: .atomic)) != nil else { return }
+        sharedDefaults?.set(imageURLString, forKey: artworkSourceKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: "NowPlayingWidget")
       }
     }
+  }
+
+  private static func jpegData(_ image: WidgetImage) -> Data? {
+    #if os(iOS)
+    image.jpegData(compressionQuality: 0.85)
+    #else
+    image.tiffRepresentation
+      .flatMap(NSBitmapImageRep.init(data:))?
+      .representation(using: .jpeg, properties: [.compressionFactor: 0.85])
+    #endif
   }
 }

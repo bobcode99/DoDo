@@ -275,13 +275,10 @@ struct DataManagementView: View {
     ) { result in
       handleBackupImport(result)
     }
-    .alert("Backup Error", isPresented: Binding(
-      get: { backupErrorAlert != nil },
-      set: { if !$0 { backupErrorAlert = nil } }
-    )) {
-      Button("OK", role: .cancel) { backupErrorAlert = nil }
-    } message: {
-      Text(backupErrorAlert ?? "")
+    .alert("Backup Error", item: $backupErrorAlert) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { error in
+      Text(error)
     }
     .navigationTitle("Data Management")
     #if os(iOS)

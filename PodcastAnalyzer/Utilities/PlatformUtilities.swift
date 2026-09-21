@@ -46,9 +46,15 @@ struct PlatformShareSheet {
   @MainActor
   static func share(items: [Any]) {
     #if os(iOS)
-    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-          let window = windowScene.windows.first,
-          let rootVC = window.rootViewController else { return }
+    // The active scene's key window, not `.first`: with several iPad windows
+    // `.first` can be a background one and the sheet appears elsewhere.
+    guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })?.keyWindow,
+          var presenter = window.rootViewController else { return }
+    // Present from the top of the stack — root refuses while any sheet (e.g.
+    // the expanded player) is up, and the share sheet silently never appeared.
+    while let presented = presenter.presentedViewController { presenter = presented }
 
     let activityVC = UIActivityViewController(
       activityItems: items,
@@ -62,7 +68,7 @@ struct PlatformShareSheet {
       popover.permittedArrowDirections = []
     }
 
-    rootVC.present(activityVC, animated: true)
+    presenter.present(activityVC, animated: true)
     #else
     // macOS sharing via NSSharingServicePicker
     let picker = NSSharingServicePicker(items: items)

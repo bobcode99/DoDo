@@ -247,14 +247,7 @@ struct EpisodeListView: View {
   private var loadingView: some View {
     VStack(spacing: 20) {
       if case .browse(_, let name, _, let artwork, _) = source {
-        // Use CachedAsyncImage for browse mode artwork
-        CachedAsyncImage(url: URL(string: artwork.replacingOccurrences(of: "100x100", with: "300x300"))) { image in
-             image.resizable().scaledToFit()
-        } placeholder: {
-            Color.gray
-        }
-        .frame(width: 150, height: 150)
-        .clipShape(.rect(cornerRadius: 12))
+        CachedArtworkImage(urlString: artwork, size: 150, cornerRadius: 12)
 
         Text(name)
           .font(.headline)
@@ -465,35 +458,29 @@ struct EpisodeListView: View {
     .toolbarBackground(.hidden, for: .navigationBar)
     #endif
     .toolbar {
-      ToolbarItem(placement: toolbarPlacement) {
-        // Label, not a bare Image: a toolbar Menu renders icon-only anyway, and
-        // this is the only thing VoiceOver has to announce it with.
-        Menu("More", systemImage: "ellipsis.circle") {
-          showActionsMenu
-        }
+      #if os(iOS)
+      if #available(iOS 27, *) {
+        // The system's own overflow (•••) button — same glyph, placement and
+        // accessibility label as every other app, no hand-rolled Menu.
+        ToolbarOverflowMenu { showActionsMenu }
+      } else {
+        moreMenuItem
       }
+      #else
+      moreMenuItem
+      #endif
     }
     .refreshable {
       // An explicit pull always makes the round trip; the staleness window is
       // there to throttle the automatic refresh, not the user's gesture.
       await viewModel?.refreshPodcast(force: true)
     }
-    .confirmationDialog(
-      "Delete Download",
-      isPresented: Binding(
-        get: { episodeToDelete != nil },
-        set: { if !$0 { episodeToDelete = nil } }
-      ),
-      titleVisibility: .visible
-    ) {
+    .confirmationDialog("Delete Download", item: $episodeToDelete, titleVisibility: .visible) { episode in
       Button("Delete", role: .destructive) {
-        if let episode = episodeToDelete {
-          viewModel?.deleteDownload(episode)
-        }
-        episodeToDelete = nil
+        viewModel?.deleteDownload(episode)
       }
-      Button("Cancel", role: .cancel) { episodeToDelete = nil }
-    } message: {
+      Button("Cancel", role: .cancel) {}
+    } message: { _ in
       Text(
         "Are you sure you want to delete this downloaded episode? You can download it again later."
       )
@@ -743,6 +730,17 @@ struct EpisodeListView: View {
     return code.uppercased()
   }
 
+  /// Pre-iOS 27 (and macOS) stand-in for `ToolbarOverflowMenu`.
+  private var moreMenuItem: some ToolbarContent {
+    ToolbarItem(placement: toolbarPlacement) {
+      // Label, not a bare Image: a toolbar Menu renders icon-only anyway, and
+      // this is the only thing VoiceOver has to announce it with.
+      Menu("More", systemImage: "ellipsis.circle") {
+        showActionsMenu
+      }
+    }
+  }
+
   /// Contents of the ••• menu.
   @ViewBuilder
   private var showActionsMenu: some View {
@@ -888,13 +886,17 @@ struct FilterChip: View {
       chipLabel
     }
     .buttonStyle(.plain)
+    // Selection is otherwise only a fill colour, which VoiceOver can't see.
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 
   @ViewBuilder
   private var chipLabel: some View {
     let content = HStack(spacing: 4) {
+      // Decorative — `checkmark.circle` (Played) reads as "Selected".
       Image(systemName: icon)
         .font(.caption)
+        .accessibilityHidden(true)
       Text(title)
         .font(.caption)
         .fontWeight(isSelected ? .semibold : .regular)

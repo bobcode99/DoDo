@@ -46,14 +46,12 @@ struct MacEpisodeAIAnalysisView: View {
         .navigationTitle("AI Analysis")
         .navigationSubtitle(viewModel.title)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                EpisodeDetailToolbarItems(
-                    viewModel: viewModel,
-                    selectedTab: 2, // AI tab — translate button is hidden
-                    showTranslationLanguagePicker: $showTranslationLanguagePicker,
-                    showDeleteConfirmation: $showDeleteConfirmation
-                )
-            }
+            EpisodeDetailToolbarItems(
+                viewModel: viewModel,
+                selectedTab: 2, // AI tab — translate button is hidden
+                showTranslationLanguagePicker: $showTranslationLanguagePicker,
+                showDeleteConfirmation: $showDeleteConfirmation
+            )
         }
         .episodeDetailSheetsAndAlerts(
             viewModel: viewModel,

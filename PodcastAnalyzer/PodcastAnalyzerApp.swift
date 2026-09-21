@@ -181,16 +181,10 @@ struct PodcastAnalyzerApp: App {
     WindowGroup {
       ContentView()
         .environment(\.locale, languageManager.locale)
-        .alert(
-          "Transcript Import",
-          isPresented: Binding(
-            get: { transcriptImportMessage != nil },
-            set: { if !$0 { transcriptImportMessage = nil } }
-          )
-        ) {
+        .alert("Transcript Import", item: $transcriptImportMessage) { _ in
           Button("OK", role: .cancel) {}
-        } message: {
-          Text(transcriptImportMessage ?? "")
+        } message: { message in
+          Text(message)
         }
         .task {
           // Critical: initialize playback state and sync manager first
@@ -230,6 +224,7 @@ struct PodcastAnalyzerApp: App {
           // phrase mappings stay current after a fresh install or app update.
           // Cheap to call; no-op on Siri's side if nothing changed.
           PodcastAnalyzerShortcuts.updateAppShortcutParameters()
+          Task { await AppIntentsModelStore.donateRelevantPodcasts() }
 
           // Request critical permissions early so they don't interrupt mid-session.
           // Only for users who already finished onboarding — new users grant these

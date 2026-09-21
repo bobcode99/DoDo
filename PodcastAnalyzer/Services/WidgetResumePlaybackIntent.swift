@@ -15,7 +15,6 @@ import OSLog
 struct ResumePlaybackIntent: AudioPlaybackIntent {
   static let title: LocalizedStringResource = "Resume Playback"
   static let description: IntentDescription = "Resumes podcast playback in the background"
-  static let openAppWhenRun: Bool = false
 
   private static let logger = Logger(subsystem: "com.podcast.analyzer", category: "WidgetResume")
 

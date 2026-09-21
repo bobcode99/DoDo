@@ -20,7 +20,6 @@ struct UpNextListView: View {
 
   @Environment(\.modelContext) private var modelContext
   @State private var episodeToDelete: LibraryEpisode?
-  @State private var showDeleteConfirmation = false
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
 
   // Access singleton directly to determine now-playing without creating a timer
@@ -47,21 +46,12 @@ struct UpNextListView: View {
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
     #endif
-    .confirmationDialog(
-      "Delete Download",
-      isPresented: $showDeleteConfirmation,
-      titleVisibility: .visible
-    ) {
+    .confirmationDialog("Delete Download", item: $episodeToDelete, titleVisibility: .visible) { episode in
       Button("Delete", role: .destructive) {
-        if let episode = episodeToDelete {
-          onDeleteDownload(episode)
-        }
-        episodeToDelete = nil
+        onDeleteDownload(episode)
       }
-      Button("Cancel", role: .cancel) {
-        episodeToDelete = nil
-      }
-    } message: {
+      Button("Cancel", role: .cancel) {}
+    } message: { _ in
       Text("Are you sure you want to delete this downloaded episode?")
     }
   }
@@ -73,10 +63,7 @@ struct UpNextListView: View {
       episodeModel: episodeModels[episode.id],
       onToggleStar: { onToggleStar(episode) },
       onDownload: { onDownload(episode) },
-      onDeleteRequested: {
-        episodeToDelete = episode
-        showDeleteConfirmation = true
-      },
+      onDeleteRequested: { episodeToDelete = episode },
       onTogglePlayed: { onTogglePlayed(episode) },
       // "Remove from Up Next" now means "get this off the list", and the list
       // holds two kinds of row: a queued episode is dequeued, a suggested one

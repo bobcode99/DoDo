@@ -91,14 +91,12 @@ struct EpisodeDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                EpisodeDetailToolbarItems(
-                    viewModel: viewModel,
-                    selectedTab: 0, // Summary — translate button shown (acts on description)
-                    showTranslationLanguagePicker: $showTranslationLanguagePicker,
-                    showDeleteConfirmation: $showDeleteConfirmation
-                )
-            }
+            EpisodeDetailToolbarItems(
+                viewModel: viewModel,
+                selectedTab: 0, // Summary — translate button shown (acts on description)
+                showTranslationLanguagePicker: $showTranslationLanguagePicker,
+                showDeleteConfirmation: $showDeleteConfirmation
+            )
         }
         .episodeDetailSheetsAndAlerts(
             viewModel: viewModel,

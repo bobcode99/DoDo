@@ -37,6 +37,8 @@ struct DiscoveryRegionsTests {
 
     @Test("Every entry has a name and a flag")
     func catalogueWellFormed() {
+        // A loop, not `@Test(arguments:)`: `Storefront.all` is main-actor
+        // isolated (the module's default), so it can't feed test arguments.
         for storefront in Storefront.all {
             #expect(!storefront.name.isEmpty, "\(storefront.code) has no name")
             #expect(storefront.flag.count == 1, "\(storefront.code) flag should be one grapheme")
@@ -158,13 +160,13 @@ struct DiscoveryRegionsTests {
         #expect(Color.black.contrastingLabel == .white)
         #expect(Color(.sRGB, white: 0.11).contrastingLabel == .white, "the shipped light-mode default")
         #expect(AccentPreset.indigo.color.contrastingLabel == .white)
+    }
 
-        for preset in AccentPreset.allCases {
-            let fill = preset.color
-            let label = fill.contrastingLabel
-            let gap = abs(fill.relativeLuminance - label.relativeLuminance)
-            #expect(gap > 0.35, "\(preset.rawValue) label is too close to its fill")
-        }
+    @Test("Every accent preset's label stands clear of its fill", arguments: AccentPreset.allCases)
+    func presetContrast(_ preset: AccentPreset) {
+        let fill = preset.color
+        let gap = abs(fill.relativeLuminance - fill.contrastingLabel.relativeLuminance)
+        #expect(gap > 0.35, "label is too close to its fill")
     }
 
     @Test("Luminance ranks colours the way the eye does")

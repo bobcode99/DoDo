@@ -35,8 +35,7 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
     @Binding var showRegenerateConfirmation: Bool
     @Binding var showTranslationLanguagePicker: Bool
 
-    @State private var showTranslationError = false
-    @State private var translationErrorMessage = ""
+    @State private var translationError: String?
 
     @State private var transcriptTranslationConfig: TranslationSession.Configuration?
     @State private var descriptionTranslationConfig: TranslationSession.Configuration?
@@ -47,15 +46,14 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .alert("Translation Failed", isPresented: $showTranslationError) {
+            .alert("Translation Failed", item: $translationError) { _ in
                 Button("OK", role: .cancel) {}
-            } message: {
-                Text(translationErrorMessage)
+            } message: { error in
+                Text(error)
             }
             .onChange(of: viewModel.translation.translationStatus) { _, newStatus in
                 if case .failed(let error) = newStatus {
-                    translationErrorMessage = error
-                    showTranslationError = true
+                    translationError = error
                 }
             }
             .confirmationDialog(

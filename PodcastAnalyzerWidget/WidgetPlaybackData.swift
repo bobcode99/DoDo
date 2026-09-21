@@ -134,9 +134,15 @@ nonisolated enum WidgetDataManager {
     sharedContainerURL?.appending(path: "widget_artwork.jpg")
   }
 
-  /// Read artwork image data from the shared container (called from widget)
-  static func readArtworkData() -> Data? {
-    guard let fileURL = artworkFileURL else { return nil }
+  /// Must match the app's `WidgetDataManager.artworkSourceKey`.
+  private static let artworkSourceKey = "widgetArtworkSourceURL"
+
+  /// The shared artwork, but only if it was made from `imageURL`. Otherwise
+  /// (still downloading, download failed, episode has no art) nil — the
+  /// placeholder beats the previous episode's cover under the new title.
+  static func readArtworkData(for imageURL: String?) -> Data? {
+    guard let imageURL, sharedDefaults?.string(forKey: artworkSourceKey) == imageURL,
+          let fileURL = artworkFileURL else { return nil }
     return try? Data(contentsOf: fileURL)
   }
 }

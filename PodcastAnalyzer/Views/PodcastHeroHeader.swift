@@ -25,9 +25,9 @@ enum ArtworkTint {
 
   static func resolve(for urlString: String) async -> Color? {
     if let hit = cache[urlString] { return hit }
-    // 100px is far more than an average needs, and it is a size Nuke has
-    // usually already fetched for the artwork itself.
-    guard let url = URL(string: AppleArtworkURL.upgrade(urlString, targetPixels: 100)),
+    // The canonical URL is the one the artwork itself loads, so this is a
+    // disk-cache hit (and works offline) rather than a second download.
+    guard let url = URL(string: AppleArtworkURL.canonical(urlString)),
       let (data, _) = try? await ImagePipeline.shared.data(for: ImageRequest(url: url)),
       let color = saturationWeightedAverage(of: data)
     else { return nil }

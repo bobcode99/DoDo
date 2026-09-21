@@ -111,16 +111,10 @@ struct MacContentView: View {
         }
       }
     }
-    .alert(
-      "Can't Play Offline",
-      isPresented: Binding(
-        get: { playbackAlertMessage != nil },
-        set: { if !$0 { playbackAlertMessage = nil } }
-      )
-    ) {
-      Button("OK", role: .cancel) { playbackAlertMessage = nil }
-    } message: {
-      Text(playbackAlertMessage ?? "")
+    .alert("Can't Play Offline", item: $playbackAlertMessage) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { message in
+      Text(message)
     }
   }
 

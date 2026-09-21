@@ -159,7 +159,7 @@ class ApplePodcastService: Sendable {
     // MARK: - Trending Episodes
 
     /// A trending episode with podcast context
-    struct TrendingEpisode: Identifiable, Sendable {
+    struct TrendingEpisode: Codable, Identifiable, Sendable {
         let id: String  // collectionId + episodeTitle
         let podcastName: String
         let podcastArtworkUrl: String?

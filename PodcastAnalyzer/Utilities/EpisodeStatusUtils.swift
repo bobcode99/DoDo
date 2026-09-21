@@ -243,8 +243,8 @@ final class EpisodeStatusObserver {
     withObservationTracking {
       // Access the property to register observation
       _ = downloadManager.downloadStates
-    } onChange: {
-      Task { @MainActor [weak self] in
+    } onChange: { [weak self] in
+      Task { @MainActor in
         guard let self, !self.isCleaned else { return }
         // Fast-path: only run the expensive updateDownloadStatus (which does
         // synchronous disk I/O) when THIS episode's state actually changed.
@@ -290,8 +290,8 @@ final class EpisodeStatusObserver {
       // Access properties to register observation
       _ = transcriptManager.activeJobs
       _ = transcriptManager.isProcessing
-    } onChange: {
-      Task { @MainActor [weak self] in
+    } onChange: { [weak self] in
+      Task { @MainActor in
         guard let self, !self.isCleaned else { return }
         self.updateTranscriptStatus()
         self.observeTranscriptManager()

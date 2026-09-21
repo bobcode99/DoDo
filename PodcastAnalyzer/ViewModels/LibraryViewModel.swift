@@ -371,8 +371,8 @@ final class LibraryViewModel {
       // Only fires on state transitions (start/finish/fail/cancel),
       // not on progress ticks. Progress is polled by progressTimer.
       _ = downloadManager.downloadStates
-    } onChange: {
-      Task { @MainActor [weak self] in
+    } onChange: { [weak self] in
+      Task { @MainActor in
         guard let self else { return }
         self.updateDownloadingEpisodes()
         self.manageProgressTimer()

@@ -251,8 +251,8 @@ final class TranscriptCoordinator {
     guard isObservingTranscriptManager else { return }
     withObservationTracking {
       _ = TranscriptManager.shared.activeJobs
-    } onChange: {
-      Task { @MainActor [weak self] in
+    } onChange: { [weak self] in
+      Task { @MainActor in
         guard let self, self.isObservingTranscriptManager else { return }
         self.syncTranscriptState()
         self.startTranscriptObservation()

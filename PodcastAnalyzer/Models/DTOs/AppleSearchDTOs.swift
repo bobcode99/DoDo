@@ -30,12 +30,12 @@ struct Podcast: Decodable, Identifiable, Sendable {
     let genres: [String]?  // Like List<String> in Java
 }
 /// Genre object from Apple API
-struct EpisodeGenre: Decodable, Sendable {
+struct EpisodeGenre: Codable, Sendable {
     let name: String
     let id: String
 }
 
-struct Episode: Decodable, Identifiable, Sendable {
+struct Episode: Codable, Identifiable, Sendable {
     /// Stable across accesses, in the order Apple actually populates: the
     /// numeric track id from search, the guid from RSS, the title as a
     /// last resort. Never a fresh UUID — that breaks ForEach diffing.

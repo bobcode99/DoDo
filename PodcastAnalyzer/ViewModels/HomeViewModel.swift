@@ -227,6 +227,7 @@ final class HomeViewModel {
     // Otherwise paint Popular Shows from the on-disk cache for an instant first frame
     // (works with no internet too); a network refresh later swaps in fresh data.
     hydratePopularShowsFromDisk()
+    trendingEpisodes = DiscoveryCacheStore.loadTrendingEpisodes(region: selectedRegion) ?? []
 
     // Observers are started lazily in restartObserversIfNeeded() (called from setModelContext),
     // so they survive tab-switch cleanup/onAppear cycles without creating duplicates.
@@ -870,35 +871,34 @@ final class HomeViewModel {
 
     // Use cache if available
     if !forceRefresh && !Self.cachedTrendingEpisodes.isEmpty && Self.cachedTrendingRegion == regionToLoad {
-      if trendingEpisodes.isEmpty {
-        trendingEpisodes = Self.cachedTrendingEpisodes
-      }
+      // Unconditional: init may have painted an older list from disk.
+      trendingEpisodes = Self.cachedTrendingEpisodes
       return
     }
 
     isLoadingTrendingEpisodes = true
-    do {
-      // Use first 10 from already-loaded topPodcasts (lightweight iTunes Lookup API)
-      let podcastsToSample = Array(topPodcasts.prefix(10))
-      guard !podcastsToSample.isEmpty else {
-        logger.warning("No top podcasts available for trending episodes")
-        isLoadingTrendingEpisodes = false
-        return
+    defer { isLoadingTrendingEpisodes = false }
+    // First 10 of the already-loaded topPodcasts (lightweight iTunes Lookup API).
+    // Per-podcast failures are swallowed, so offline this returns [] instead of
+    // throwing — treat empty as "nothing fresh" and never wipe what's on screen.
+    let episodes = (try? await applePodcastService.fetchTrendingEpisodesFromLookup(
+      topPodcasts: Array(topPodcasts.prefix(10)),
+      episodesPerPodcast: 2
+    )) ?? []
+    guard !episodes.isEmpty else {
+      logger.warning("No trending episodes fetched for \(regionToLoad); keeping saved list")
+      if trendingEpisodes.isEmpty, selectedRegion == regionToLoad {
+        trendingEpisodes = DiscoveryCacheStore.loadTrendingEpisodes(region: regionToLoad) ?? []
       }
-      let episodes = try await applePodcastService.fetchTrendingEpisodesFromLookup(
-        topPodcasts: podcastsToSample,
-        episodesPerPodcast: 2
-      )
-      Self.cachedTrendingEpisodes = episodes
-      Self.cachedTrendingRegion = regionToLoad
-      if selectedRegion == regionToLoad {
-        trendingEpisodes = episodes
-      }
-      logger.info("Loaded \(episodes.count) trending episodes for \(regionToLoad)")
-    } catch {
-      logger.error("Failed to load trending episodes: \(error.localizedDescription, privacy: .public)")
+      return
     }
-    isLoadingTrendingEpisodes = false
+    Self.cachedTrendingEpisodes = episodes
+    Self.cachedTrendingRegion = regionToLoad
+    DiscoveryCacheStore.saveTrendingEpisodes(episodes, region: regionToLoad)
+    if selectedRegion == regionToLoad {
+      trendingEpisodes = episodes
+    }
+    logger.info("Loaded \(episodes.count) trending episodes for \(regionToLoad)")
   }
 
   func cleanup() {

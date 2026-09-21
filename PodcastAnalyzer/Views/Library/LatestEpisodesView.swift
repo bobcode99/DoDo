@@ -13,7 +13,6 @@ struct LatestEpisodesView: View {
   let showEpisodeArtwork: Bool
   @Environment(\.modelContext) private var modelContext
   @State private var episodeToDelete: LibraryEpisode?
-  @State private var showDeleteConfirmation = false
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
 
   var body: some View {
@@ -31,10 +30,7 @@ struct LatestEpisodesView: View {
               viewModel.setModelContext(modelContext)
             },
             onDownload: { LibraryEpisodeActions.downloadEpisode(episode) },
-            onDeleteRequested: {
-              episodeToDelete = episode
-              showDeleteConfirmation = true
-            },
+            onDeleteRequested: { episodeToDelete = episode },
             onTogglePlayed: {
               LibraryEpisodeActions.togglePlayed(episode, episodeModels: &episodeModels, context: modelContext, createIfMissing: true)
               viewModel.setModelContext(modelContext)
@@ -57,22 +53,13 @@ struct LatestEpisodesView: View {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
     }
-    .confirmationDialog(
-      "Delete Download",
-      isPresented: $showDeleteConfirmation,
-      titleVisibility: .visible
-    ) {
+    .confirmationDialog("Delete Download", item: $episodeToDelete, titleVisibility: .visible) { episode in
       Button("Delete", role: .destructive) {
-        if let episode = episodeToDelete {
-          LibraryEpisodeActions.deleteDownload(episode, episodeModels: episodeModels, context: modelContext)
-          viewModel.setModelContext(modelContext)
-        }
-        episodeToDelete = nil
+        LibraryEpisodeActions.deleteDownload(episode, episodeModels: episodeModels, context: modelContext)
+        viewModel.setModelContext(modelContext)
       }
-      Button("Cancel", role: .cancel) {
-        episodeToDelete = nil
-      }
-    } message: {
+      Button("Cancel", role: .cancel) {}
+    } message: { _ in
       Text("Are you sure you want to delete this downloaded episode?")
     }
   }
