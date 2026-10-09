@@ -26,6 +26,21 @@ enum EpisodeFilter: String, CaseIterable {
   /// everything" semantics when no filter fields are set.
   case custom = "Custom"
 
+  /// Display name. Not `rawValue`: a String reaches `Text` through its
+  /// StringProtocol overload and is never localized — the chips stayed English
+  /// in a Chinese UI.
+  var title: LocalizedStringResource {
+    switch self {
+    case .all: "All"
+    case .unplayed: "Unplayed"
+    case .played: "Played"
+    case .starred: "Starred"
+    case .downloaded: "Downloaded"
+    case .transcript: "Transcript"
+    case .custom: "Custom"
+    }
+  }
+
   var icon: String {
     switch self {
     case .all: return "list.bullet"
@@ -826,7 +841,7 @@ struct EpisodeListView: View {
         HStack(spacing: 7) {
           ForEach(EpisodeFilter.allCases, id: \.self) { filter in
             FilterChip(
-              title: filter.rawValue,
+              title: filter.title,
               icon: filter.icon,
               isSelected: viewModel.selectedFilter == filter
             ) {
@@ -876,7 +891,7 @@ struct EpisodeListView: View {
 // MARK: - Filter Chip Component
 
 struct FilterChip: View {
-  let title: String
+  let title: LocalizedStringResource
   let icon: String
   let isSelected: Bool
   let action: () -> Void
@@ -1012,7 +1027,7 @@ struct FilterChip: View {
     ScrollView(.horizontal) {
       HStack(spacing: 7) {
         ForEach(EpisodeFilter.allCases, id: \.self) { filter in
-          FilterChip(title: filter.rawValue, icon: filter.icon, isSelected: filter == .unplayed) {}
+          FilterChip(title: filter.title, icon: filter.icon, isSelected: filter == .unplayed) {}
         }
       }
       .padding()

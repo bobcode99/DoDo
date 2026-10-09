@@ -188,6 +188,13 @@ nonisolated enum AnalysisLanguage: String, CaseIterable, Codable {
         }
     }
 
+    /// English name of a language identifier for the prompt, script and region
+    /// included: "zh-Hant-TW" → "Chinese, Traditional (Taiwan)". The language
+    /// code alone ("中文") let models answer Taiwanese users in Simplified.
+    static func promptLanguageName(for identifier: String) -> String {
+        Locale(identifier: "en").localizedString(forIdentifier: identifier) ?? identifier
+    }
+
     /// Returns the language instruction to include in AI prompts.
     /// `customLanguageName` is only consulted when `self == .custom`.
     func getLanguageInstruction(
@@ -196,12 +203,11 @@ nonisolated enum AnalysisLanguage: String, CaseIterable, Codable {
     ) -> String {
         switch self {
         case .deviceLanguage:
-            let preferredLanguage = Locale.preferredLanguages.first ?? "en"
-            let languageName = Locale.current.localizedString(forLanguageCode: preferredLanguage) ?? "English"
+            let languageName = Self.promptLanguageName(for: Locale.preferredLanguages.first ?? "en")
             return "IMPORTANT: Respond in \(languageName)."
         case .matchPodcast:
             if let podcastLang = podcastLanguage, !podcastLang.isEmpty {
-                let languageName = Locale.current.localizedString(forLanguageCode: podcastLang) ?? podcastLang
+                let languageName = Self.promptLanguageName(for: podcastLang)
                 return "IMPORTANT: Respond in \(languageName) (the podcast's language)."
             }
             return "" // No instruction if podcast language unknown

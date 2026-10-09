@@ -116,7 +116,7 @@ struct PodcastHeroHeader<Description: View>: View {
   var topBleed: CGFloat = 0
   /// "Resume" when the host resolved an episode the user was part-way through,
   /// "Latest" when it fell back to the newest one.
-  var playTitle: String = "Latest"
+  var playTitle: LocalizedStringResource = "Latest"
   let canPlay: Bool
   let onPlay: () -> Void
   let onToggleSubscribe: () -> Void

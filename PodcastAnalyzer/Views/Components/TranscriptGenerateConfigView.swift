@@ -89,7 +89,9 @@ struct TranscriptGenerateConfigView: View {
         }
     }
 
-    private var headerTitle: String {
+    // LocalizedStringResource, not String: a String reaches Text via its
+    // StringProtocol overload and skips the catalog — this screen stayed English.
+    private var headerTitle: LocalizedStringResource {
         if canGenerate { return "Ready to Generate" }
         switch viewModel.downloadState {
         case .downloading: return "Downloading Episode"
@@ -99,7 +101,7 @@ struct TranscriptGenerateConfigView: View {
         }
     }
 
-    private var statusDescription: String {
+    private var statusDescription: LocalizedStringResource {
         if canGenerate {
             if !viewModel.transcript.isModelReady && effectiveEngine == .whisper {
                 return "Speech recognition model will be downloaded on first use."
@@ -175,7 +177,7 @@ struct TranscriptGenerateConfigView: View {
         .buttonStyle(.plain)
     }
 
-    private func engineTagline(_ engine: TranscriptEngine) -> String {
+    private func engineTagline(_ engine: TranscriptEngine) -> LocalizedStringResource {
         switch engine {
         case .appleSpeech: "Fastest · built-in · 50+ languages"
         case .whisper: "Most accurate · on-device"
