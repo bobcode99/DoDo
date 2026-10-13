@@ -597,7 +597,11 @@ final class HomeViewModel {
       duration: episode.episodeInfo.duration,
       guid: episode.episodeInfo.guid
     )
-    let startTime = episode.isCompleted ? 0 : episode.lastPlaybackPosition
+    // Live store, not `episode.lastPlaybackPosition`: the Up Next snapshot is
+    // built once and isn't refreshed on position saves, so an episode played to
+    // near the end resumed from wherever it was when Home loaded.
+    let startTime = PlaybackStateCoordinator.savedPlaybackPosition(
+      podcastTitle: episode.podcastTitle, episodeTitle: episode.episodeInfo.title)
     EnhancedAudioManager.shared.play(
       episode: playbackEpisode,
       audioURL: audioURL,
