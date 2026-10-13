@@ -27,7 +27,7 @@ struct EpisodeDetailHeaderView: View {
     private let artworkCornerRadius: CGFloat = 10
     private let topSpacing: CGFloat = 12
     private let titleFont: Font = .subheadline
-    private let podcastTitleFont: Font = .caption
+    private let podcastTitleFont: Font = .footnote
     private let metadataFont: Font = .caption
     private let statusIconSize: CGFloat = 12
     #endif
@@ -171,7 +171,7 @@ struct EpisodeDetailHeaderView: View {
                         .foregroundStyle(.blue)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 8))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.blue)
             }
         }
