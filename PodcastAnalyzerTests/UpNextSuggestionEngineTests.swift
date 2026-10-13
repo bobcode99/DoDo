@@ -97,10 +97,10 @@ struct UpNextSuggestionEngineTests {
     func shortPlaybackIsNotProgress() {
         // Below the 15-second gate: a mis-tap must not pin an episode to Up Next.
         let brushed = scored([input(episode("brushed", position: 10))])[0]
-        #expect(brushed.reason != .inProgress(percentComplete: 0))
+        #expect(brushed.reason != .inProgress)
 
         let started = scored([input(episode("started", position: 60))])[0]
-        #expect(started.reason == .inProgress(percentComplete: 1))
+        #expect(started.reason == .inProgress)
     }
 
     @Test("A finished episode is not treated as in progress even with a saved position")
@@ -109,7 +109,7 @@ struct UpNextSuggestionEngineTests {
         let ongoing = episode("ongoing", position: 3500)
 
         #expect(score(input(done)) < score(input(ongoing)))
-        #expect(scored([input(done)])[0].reason != .inProgress(percentComplete: 97))
+        #expect(scored([input(done)])[0].reason != .inProgress)
     }
 
     @Test("Progress is reported from the measured duration, not the feed's claim")
@@ -241,7 +241,7 @@ struct UpNextSuggestionEngineTests {
         // Starred and downloaded both apply, but being mid-episode wins.
         let midEpisode = episode("mid", pubDate: daysAgo(30), position: 1800,
                                  isStarred: true, isDownloaded: true)
-        #expect(scored([input(midEpisode)])[0].reason == .inProgress(percentComplete: 50))
+        #expect(scored([input(midEpisode)])[0].reason == .inProgress)
 
         // Not started: starred outranks downloaded.
         let saved = episode("saved", pubDate: daysAgo(30), isStarred: true, isDownloaded: true)
@@ -266,16 +266,16 @@ struct UpNextSuggestionEngineTests {
     func noReason() {
         let anonymous = episode("anon", pubDate: nil)
         #expect(scored([input(anonymous)])[0].reason == .none)
-        #expect(SuggestionReason.none.label.isEmpty)
+        #expect(String(localized: SuggestionReason.none.label).isEmpty)
         #expect(SuggestionReason.none.systemImage.isEmpty)
     }
 
     @Test("Every badge that is shown has both a label and an icon",
           arguments: [SuggestionReason.inQueue(position: 1),
-                      .inProgress(percentComplete: 50), .starred, .downloaded,
+                      .inProgress, .starred, .downloaded,
                       .listenOften, .newEpisode, .recentPodcast])
     func reasonsAreDisplayable(_ reason: SuggestionReason) {
-        #expect(reason.label.isEmpty == false)
+        #expect(String(localized: reason.label).isEmpty == false)
         #expect(reason.systemImage.isEmpty == false)
     }
 

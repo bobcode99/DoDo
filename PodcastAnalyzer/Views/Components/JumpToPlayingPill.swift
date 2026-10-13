@@ -56,14 +56,12 @@ struct JumpToPlayingPill: View {
     private var pill: some View {
         let fill = AccentFill.color(accent, colorScheme)
         return Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: "text.line.first.and.arrowtriangle.forward")
-                    .font(.subheadline.weight(.semibold))
-                Text("Jump to playing")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            Label("Jump to playing", systemImage: "text.line.first.and.arrowtriangle.forward")
+                .font(.body.weight(.semibold))
+                // ~50pt tall: comfortably over the 44pt minimum hit target.
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .contentShape(.capsule)
             // One material, tinted — not glass painted over a separate
             // `.tint` fill. Two of them fight: the glass washes the
             // fill out, and the label was hardcoded `.white`, so the
@@ -76,7 +74,6 @@ struct JumpToPlayingPill: View {
         .buttonStyle(.plain)
         .padding(.trailing, Self.edgeInset)
         .padding(.bottom, Self.edgeInset)
-        .accessibilityLabel("Jump to currently playing sentence")
     }
 
     private func dragGesture(in container: CGSize) -> some Gesture {

@@ -11,6 +11,10 @@ struct UpNextSection: View {
   let viewModel: HomeViewModel
 
   @Environment(\.zoomNamespace) private var zoomNamespace
+  @Environment(\.episodeRowPlayButtonSize) private var rowPlayButtonSize
+  @AppStorage(UpNextCardSize.storageKey) private var cardSizeRaw = UpNextCardSize.standard.rawValue
+
+  private var cardSize: UpNextCardSize { UpNextCardSize(rawValue: cardSizeRaw) ?? .standard }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -82,8 +86,10 @@ struct UpNextSection: View {
             UpNextCard(
               episode: scored.episode,
               onPlay: { viewModel.playEpisode(scored.episode) },
-              reason: scored.reason
+              reason: scored.reason,
+              width: cardSize.width
             )
+            .environment(\.episodeRowPlayButtonSize, cardSize.playButtonSize ?? rowPlayButtonSize)
           }
           .buttonStyle(.plain)
           .contextMenu {

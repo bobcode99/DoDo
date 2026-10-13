@@ -11,14 +11,15 @@ import Foundation
 // MARK: - SuggestionReason
 
 /// Why an episode was surfaced in Up Next.
-/// The highest-priority applicable reason is shown as a badge on the card.
+/// The highest-priority applicable reason is shown as a badge on the card
+/// (except `.inProgress` — the play button already shows time left).
 enum SuggestionReason: Equatable {
     /// The user explicitly queued this episode. Not produced by scoring — the
     /// view model stamps it on rows taken from `EnhancedAudioManager.queue`,
     /// which are ordered ahead of every scored suggestion. Explicit intent
     /// outranks anything the engine can infer.
     case inQueue(position: Int)
-    case inProgress(percentComplete: Int)  // "32% done"
+    case inProgress                         // "In Progress"
     case starred                            // "Saved"
     case downloaded                         // "Downloaded"
     case listenOften                        // "You listen often"
@@ -26,10 +27,12 @@ enum SuggestionReason: Equatable {
     case recentPodcast                      // "From a show you follow"
     case none
 
-    var label: String {
+    // LocalizedStringResource, not String: a String reaches Text through its
+    // StringProtocol overload and skips the catalog.
+    var label: LocalizedStringResource {
         switch self {
         case .inQueue:             return "In Queue"
-        case .inProgress(let pct): return "\(pct)% done"
+        case .inProgress:          return "In Progress"
         case .starred:             return "Saved"
         case .downloaded:          return "Downloaded"
         case .listenOften:         return "You listen often"
@@ -73,7 +76,7 @@ struct ScoredEpisode: Identifiable {
     let downloadModel: EpisodeDownloadModel?
     let score: Double
     let reason: SuggestionReason
-    let progressRatio: Double  // 0 if not in-progress; drives "X% done" label
+    let progressRatio: Double  // 0 if not in-progress
 
     var id: String { episode.id }
 }
@@ -317,7 +320,7 @@ struct UpNextSuggestionEngine {
             }
         }
         if isInProgress {
-            return .inProgress(percentComplete: Int(progressRatio * 100))
+            return .inProgress
         }
         if isStarred {
             return .starred

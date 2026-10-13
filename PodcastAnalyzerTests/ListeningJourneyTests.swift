@@ -332,9 +332,8 @@ struct ListeningJourneyTests {
         let ranked = UpNextSuggestionEngine().score(inputs: [untouched, started], now: .now)
 
         #expect(ranked.first?.episode.episodeInfo.title == "Started", "resume-where-you-left-off outranks a cold episode")
-        #expect(ranked.first?.reason == .inProgress(percentComplete: 16))
-        #expect(ranked.first?.reason.label == "16% done")
-        #expect(ranked.last?.reason != .inProgress(percentComplete: 0))
+        #expect(ranked.first?.reason == .inProgress)
+        #expect(ranked.last?.reason != .inProgress)
     }
 
     private func isInProgress(_ reason: SuggestionReason?) -> Bool {
@@ -459,7 +458,7 @@ struct ListeningJourneyTests {
 
     @Test("The In Queue badge reads as explicit intent")
     func inQueueReasonLabel() {
-        #expect(SuggestionReason.inQueue(position: 1).label == "In Queue")
+        #expect(String(localized: SuggestionReason.inQueue(position: 1).label) == "In Queue")
     }
 
     // MARK: - Marking played from the Library

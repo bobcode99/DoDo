@@ -309,7 +309,7 @@ private func mockTrendingEpisode(title: String, podcast: String, podcastId: Stri
 
 private let mockUpNext: [ScoredEpisode] = [
   mockScoredEpisode(title: "The 45-Minute Rule", podcast: "The Daily", reason: .inQueue(position: 1)),
-  mockScoredEpisode(title: "Think Baseball Is Boring? The Sabermetrics Revolution", podcast: "Freakonomics Radio", reason: .inProgress(percentComplete: 32), progressRatio: 0.32),
+  mockScoredEpisode(title: "Think Baseball Is Boring? The Sabermetrics Revolution", podcast: "Freakonomics Radio", reason: .inProgress, progressRatio: 0.32),
   mockScoredEpisode(title: "Understanding Swift Concurrency in Practice", podcast: "The Swift Podcast", reason: .newEpisode),
   mockScoredEpisode(title: "A Deep Dive Into Ambient Sound Design", podcast: "20,000 Hertz", reason: .downloaded),
 ]
