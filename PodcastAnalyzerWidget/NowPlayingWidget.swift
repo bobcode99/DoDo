@@ -167,7 +167,7 @@ struct SmallWidgetView: View {
         HStack {
           Spacer()
           if data.isPlaying {
-            Button(intent: TogglePlaybackIntent()) {
+            Button(intent: PausePlaybackIntent()) {
               ZStack {
                 Circle()
                   .fill(.black.opacity(0.38))
@@ -308,7 +308,7 @@ struct MediumWidgetView: View {
             HStack {
               Spacer()
               if data.isPlaying {
-                Button(intent: TogglePlaybackIntent()) {
+                Button(intent: PausePlaybackIntent()) {
                   Image(systemName: "pause.circle.fill")
                     .font(.system(size: 36))
                     .foregroundStyle(.blue)

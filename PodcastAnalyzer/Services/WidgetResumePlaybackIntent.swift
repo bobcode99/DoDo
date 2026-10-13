@@ -2,11 +2,11 @@
 //  WidgetResumePlaybackIntent.swift
 //  PodcastAnalyzer
 //
-//  App-side handler for the widget play button.
-//  Conforms to AudioPlaybackIntent so iOS runs it in the background
-//  without bringing the app to the foreground — same as the pause button.
-//  The widget extension defines a matching ResumePlaybackIntent;
-//  iOS routes perform() here (matched by type name).
+//  App-side handlers for the widget play and pause buttons.
+//  Conform to AudioPlaybackIntent so iOS runs them in the background
+//  without bringing the app to the foreground.
+//  The widget extension defines matching ResumePlaybackIntent and
+//  PausePlaybackIntent; iOS routes perform() here (matched by type name).
 //
 
 import AppIntents
@@ -41,6 +41,23 @@ struct ResumePlaybackIntent: AudioPlaybackIntent {
       Self.logger.info("Playback resumed from widget intent")
     }
 
+    return .result()
+  }
+}
+
+/// Explicit pause, not a toggle: the button is only shown while the widget says
+/// "playing", and a toggle fired from a stale widget would start audio instead.
+struct PausePlaybackIntent: AudioPlaybackIntent {
+  static let title: LocalizedStringResource = "Pause Playback"
+  static let description: IntentDescription = "Pauses podcast playback in the background"
+
+  @MainActor
+  func perform() async throws -> some IntentResult {
+    // On a cold launch, creating `shared` also corrects a widget left on "playing".
+    let audioManager = EnhancedAudioManager.shared
+    if audioManager.isPlaying {
+      audioManager.pause()
+    }
     return .result()
   }
 }

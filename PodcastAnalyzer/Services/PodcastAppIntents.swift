@@ -435,6 +435,9 @@ extension PodcastAppEntity {
 struct PodcastEntityQuery: EntityStringQuery {
     @MainActor
     func entities(for identifiers: [String]) async throws -> [PodcastAppEntity] {
+        #if DEBUG && os(iOS)
+        NowPlayingLaunchProbe.log("PodcastEntityQuery.entities(for: \(identifiers))")
+        #endif
         let needles = Set(identifiers)
         return AppIntentsModelStore.subscribedPodcasts { needles.contains($0.rssUrl) }
     }
