@@ -24,9 +24,9 @@ struct PopularShowsSection: View {
         list
       }
     }
-    // Silent swap: when fresh data lands (reconnect / pull-to-refresh) the list
-    // updates in place with a gentle crossfade rather than a hard cut.
-    .animation(.smooth(duration: 0.25), value: viewModel.popularShowsFetchedAt)
+    // No `.animation` on refresh: rows re-ranked by fresh data would slide, and
+    // a sliding row hit-tests at its final spot, so a tap mid-slide opens the
+    // show below the finger. Swap in place instead.
   }
 
   /// "Updated 2h ago" online, "Offline · saved 2h ago" when showing saved data.
@@ -100,4 +100,3 @@ struct PopularShowsSection: View {
     .padding(.horizontal)
   }
 }
-

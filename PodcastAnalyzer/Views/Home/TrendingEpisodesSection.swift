@@ -23,7 +23,9 @@ struct TrendingEpisodesSection: View {
             ProgressView()
             Spacer()
           }
-          .frame(height: 120)
+          // Same height as TrendingEpisodesPagedView so content below doesn't
+          // jump when the episodes land.
+          .frame(height: 210)
         } else {
           TrendingEpisodesPagedView(
             episodes: Array(viewModel.trendingEpisodes.prefix(12))

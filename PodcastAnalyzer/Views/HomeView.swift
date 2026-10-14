@@ -45,15 +45,15 @@ struct TrendingEpisodeDetailDestination: Hashable, Identifiable {
   }
 
   private static let isoFormatter: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
   }()
 
   private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter
   }()
 
   /// Convert to PodcastEpisodeInfo for EpisodeDetailView
@@ -194,7 +194,12 @@ struct HomeView: View {
       .presentationDetents([.medium])
     }
     .refreshable {
-      await viewModel.refresh()
+      // Don't hold the spinner for the network (Apple's chart API can hang
+      // ~30s): while it shows, iOS 27 draws the content ~60pt lower than it
+      // hit-tests, so a tap on a row opens the one below. Each section shows its
+      // own loading indicator instead. Unstructured, so a re-render mid-refresh
+      // can't cancel it either.
+      Task { await viewModel.refresh() }
     }
     .onAppear {
       // This is the key: set the context once
