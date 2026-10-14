@@ -4,9 +4,9 @@ import SwiftData
 // MARK: - AutoDownloadSetting
 
 enum AutoDownloadSetting: String, CaseIterable {
-  case enabled       = "enabled"
-  case disabled      = "disabled"
-  case inheritGlobal = "inheritGlobal"
+  case enabled
+  case disabled
+  case inheritGlobal
 
   var displayName: String {
     switch self {
@@ -21,9 +21,9 @@ enum AutoDownloadSetting: String, CaseIterable {
 
 /// Where new episodes of a show go in the play queue when a sync finds them.
 enum AutoAddToQueueSetting: String, CaseIterable {
-  case off    = "off"
-  case top    = "top"
-  case bottom = "bottom"
+  case off
+  case top
+  case bottom
 
   var displayName: String {
     switch self {
@@ -62,12 +62,12 @@ class PodcastInfoModel {
   // lookups by rssUrl/title, and recency sorting.
   #Index<PodcastInfoModel>([\.isSubscribed], [\.rssUrl], [\.title], [\.lastUpdated])
 
-  var id: UUID = UUID()
+  var id = UUID()
 
-  var podcastInfo: PodcastInfo = PodcastInfo()
+  var podcastInfo = PodcastInfo()
 
-  var dateAdded: Date = Date()
-  var lastUpdated: Date = Date()
+  var dateAdded = Date()
+  var lastUpdated = Date()
 
   /// Whether the user has subscribed to this podcast.
   /// false = browsed/cached podcast, true = subscribed podcast

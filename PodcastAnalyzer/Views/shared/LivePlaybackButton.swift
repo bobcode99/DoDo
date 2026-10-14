@@ -20,14 +20,14 @@ struct LivePlaybackButton: View {
   @Environment(\.episodeRowPlayButtonSize) private var compactSize
 
   // MARK: - Episode Identity
-  
+
   /// Episode title for matching with audio manager
   let episodeTitle: String
   /// Podcast title for matching with audio manager
   let podcastTitle: String
-  
+
   // MARK: - Episode Metadata (fallback when not playing)
-  
+
   /// Duration in seconds from episode metadata
   let duration: TimeInterval?
   /// Formatted duration string (e.g., "45m") - used when no progress
@@ -38,45 +38,45 @@ struct LivePlaybackButton: View {
   var playbackProgress: Double = 0
   /// Whether the episode has been completed
   var isCompleted: Bool = false
-  
+
   // MARK: - Actions
-  
+
   /// Action to perform when play/pause button is tapped
   let onPlay: () -> Void
-  
+
   // MARK: - Style
-  
+
   /// Visual style variant
   var style: ButtonStyle = .compact
-  
+
   /// Whether the button should be disabled (e.g., no audio URL)
   var isDisabled: Bool = false
-  
+
   enum ButtonStyle {
     case compact      // For list rows (smaller, capsule shape)
     case standard     // For detail views (larger, bordered prominent)
     case iconOnly     // Icon + duration only, capsule with semantic color
   }
-  
+
   // MARK: - Live State from AudioManager
-  
+
   private var audioManager: EnhancedAudioManager { .shared }
-  
+
   /// Unique key for this episode (matches episodeKey format)
   private var episodeKey: String {
     "\(podcastTitle)\u{1F}\(episodeTitle)"
   }
-  
+
   /// Whether this episode is currently loaded in the audio manager
   private var isCurrentEpisode: Bool {
     audioManager.currentEpisode?.id == episodeKey
   }
-  
+
   /// Whether this episode is currently playing
   private var isPlayingThisEpisode: Bool {
     isCurrentEpisode && audioManager.isPlaying
   }
-  
+
   /// Live progress - from audio manager if playing, otherwise from SwiftData
   private var liveProgress: Double {
     if isCurrentEpisode, audioManager.duration > 0 {
@@ -94,7 +94,7 @@ struct LivePlaybackButton: View {
     }
     return min(max(liveProgress, 0), 1)
   }
-  
+
   /// Live position - from audio manager if playing, otherwise from SwiftData
   private var livePosition: TimeInterval {
     if isCurrentEpisode {
@@ -102,7 +102,7 @@ struct LivePlaybackButton: View {
     }
     return lastPlaybackPosition
   }
-  
+
   /// Live duration - from audio manager if playing, otherwise from metadata
   private var liveDuration: TimeInterval? {
     if isCurrentEpisode, audioManager.duration > 0 {
@@ -110,24 +110,24 @@ struct LivePlaybackButton: View {
     }
     return duration
   }
-  
+
   /// Computed duration text for display
   private var durationText: String? {
     let isInProgress = showsPlaybackProgress
-    
+
     // If we have duration, use it for precise calculation
     if let totalSeconds = liveDuration, totalSeconds > 0 {
       let secondsToFormat = isInProgress ? (totalSeconds - livePosition) : totalSeconds
       let timeString = formatTimeUnits(Int(secondsToFormat))
       return timeString
     }
-    
+
     // Fallback to formatted duration from episode metadata (for unplayed episodes)
     return formattedDuration
   }
-  
+
   // MARK: - Body
-  
+
   var body: some View {
     switch style {
     case .compact:
@@ -163,31 +163,31 @@ struct LivePlaybackButton: View {
   private var usesSimplifiedChinese: Bool {
     localeIdentifier.contains("hans")
   }
-  
+
   // MARK: - Compact Style (for list rows)
-  
+
   private var compactButton: some View {
-    let s = compactSize.scale
+    let scale = compactSize.scale
     return Button(action: onPlay) {
-      HStack(spacing: 4 * s) {
+      HStack(spacing: 4 * scale) {
         // Icon
-        playIcon(size: 9 * s)
+        playIcon(size: 9 * scale)
 
         // Progress bar (only show when partially played)
         if showsPlaybackProgress {
-          progressBar(width: 24 * s, height: 3 * s)
+          progressBar(width: 24 * scale, height: 3 * scale)
         }
 
         // Duration text
         if let duration = durationText {
           Text(duration)
-            .font(.system(size: 10 * s))
+            .font(.system(size: 10 * scale))
             .fontWeight(.medium)
         }
       }
       .foregroundStyle(.white)
-      .padding(.horizontal, 8 * s)
-      .padding(.vertical, 5 * s)
+      .padding(.horizontal, 8 * scale)
+      .padding(.vertical, 5 * scale)
       .background(Color.blue)
       .clipShape(Capsule())
       .contentShape(Capsule())
@@ -195,9 +195,9 @@ struct LivePlaybackButton: View {
     .buttonStyle(.borderless)
     .disabled(isDisabled)
   }
-  
+
   // MARK: - Standard Style (for detail views)
-  
+
   private var standardButton: some View {
     Button(action: onPlay) {
       HStack(spacing: 6) {
@@ -225,7 +225,7 @@ struct LivePlaybackButton: View {
     .disabled(isDisabled)
     .transaction { $0.animation = nil }
   }
-  
+
   // MARK: - Icon Only Style (capsule with icon, progress bar, and duration)
   //
   // Tap responsiveness: every time `audioManager.currentTime` ticks, this
@@ -263,9 +263,9 @@ struct LivePlaybackButton: View {
     .disabled(isDisabled)
     .transaction { $0.animation = nil }
   }
-  
+
   // MARK: - Helpers
-  
+
   @ViewBuilder
   private func playIcon(size: CGFloat) -> some View {
     if isPlayingThisEpisode {
@@ -279,7 +279,7 @@ struct LivePlaybackButton: View {
         .font(.system(size: size))
     }
   }
-  
+
   private var buttonLabel: String {
     if isPlayingThisEpisode {
       return "Pause"
@@ -305,22 +305,22 @@ struct LivePlaybackButton: View {
     }
     .accessibilityHidden(true)
   }
-  
+
   /// Format seconds into human-readable time units
   private func formatTimeUnits(_ totalSeconds: Int) -> String {
     let seconds = max(0, totalSeconds)
-    let h = seconds / 3600
-    let m = (seconds % 3600) / 60
-    let s = seconds % 60
+    let hours = seconds / 3600
+    let minutes = (seconds % 3600) / 60
+    let secs = seconds % 60
     let hourUnit = usesChineseUnits ? (usesSimplifiedChinese ? "时" : "時") : "h"
     let minuteUnit = "分"
-    
-    if h > 0 {
-      return usesChineseUnits ? "\(h)\(hourUnit) \(m)\(minuteUnit)" : "\(h)h \(m)m"
-    } else if m > 0 {
-      return usesChineseUnits ? "\(m)\(minuteUnit)" : "\(m)m"
+
+    if hours > 0 {
+      return usesChineseUnits ? "\(hours)\(hourUnit) \(minutes)\(minuteUnit)" : "\(hours)h \(minutes)m"
+    } else if minutes > 0 {
+      return usesChineseUnits ? "\(minutes)\(minuteUnit)" : "\(minutes)m"
     } else {
-      return String(format: "0:%02d", s)
+      return String(format: "0:%02d", secs)
     }
   }
 }

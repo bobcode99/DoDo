@@ -95,10 +95,11 @@ struct AnalysisView: View {
   /// Episode artwork URL, with podcast-level fallback. When the podcast is
   /// still subscribed we look up the episode's own image; otherwise we fall
   /// back to the podcast art (or nil, which yields the placeholder).
-  // Each of these runs per analysis row. Bind `podcastInfo` once and pass the
-  // decoded value down — reading it repeatedly re-materializes the podcast's
-  // whole episode array each time. `imageURL` comes from the mirror, so the
-  // artwork path needs no decode at all.
+  ///
+  /// Each of these runs per analysis row. Bind `podcastInfo` once and pass the
+  /// decoded value down — reading it repeatedly re-materializes the podcast's
+  /// whole episode array each time. `imageURL` comes from the mirror, so the
+  /// artwork path needs no decode at all.
   private func artworkURL(for analysis: EpisodeAIAnalysis) -> String? {
     let podcast = podcastByTitle[analysis.podcastTitle]
     let enriched = enrichedEpisode(for: analysis, info: podcast?.podcastInfo)

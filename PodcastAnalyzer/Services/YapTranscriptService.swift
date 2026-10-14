@@ -424,10 +424,10 @@ actor YapTranscriptService {
         let scriptMap: [String: String] = [
             "zh-hant": "zh-TW",
             "zh-hans": "zh-CN",
-            "zh-hk":   "zh-HK",
-            "zh-tw":   "zh-TW",
-            "zh-cn":   "zh-CN",
-            "yue-cn":  "yue-CN",
+            "zh-hk": "zh-HK",
+            "zh-tw": "zh-TW",
+            "zh-cn": "zh-CN",
+            "yue-cn": "yue-CN",
         ]
         if let mapped = scriptMap[lower] { return mapped }
 

@@ -91,5 +91,4 @@ struct MacWhisperModelRow: View {
   }
 }
 
-
 #endif

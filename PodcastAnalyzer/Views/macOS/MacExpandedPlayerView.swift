@@ -212,7 +212,7 @@ struct MacExpandedPlayerView: View {
         )
       } else {
         List {
-          ForEach(viewModel.queue.enumerated().map { $0 }, id: \.element.id) { index, episode in
+          ForEach(Array(viewModel.queue.enumerated()), id: \.element.id) { index, episode in
             MacQueueRow(episode: episode)
               .contentShape(Rectangle())
               .onTapGesture {
@@ -276,4 +276,3 @@ private struct MacQueueRow: View {
 }
 
 #endif
-

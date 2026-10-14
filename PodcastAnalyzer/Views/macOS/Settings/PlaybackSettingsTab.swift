@@ -62,5 +62,4 @@ struct PlaybackSettingsTab: View {
 
 }
 
-
 #endif

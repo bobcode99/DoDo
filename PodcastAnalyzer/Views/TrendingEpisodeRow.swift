@@ -5,7 +5,6 @@
 //  Created by JunNianLo on 2026/5/16.
 //
 
-
 import SwiftData
 import SwiftUI
 #if canImport(UIKit)
@@ -17,15 +16,15 @@ struct TrendingEpisodeRow: View {
   let rank: Int
 
   private static let isoFormatter: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
   }()
 
   private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter
   }()
 
   private var formattedDuration: String {

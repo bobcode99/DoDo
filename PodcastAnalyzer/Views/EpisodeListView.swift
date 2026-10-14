@@ -429,40 +429,7 @@ struct EpisodeListView: View {
 
       // MARK: - Episodes List
       Section {
-        if let viewModel {
-          ForEach(viewModel.filteredEpisodes) { episode in
-            let key = viewModel.makeEpisodeKey(episode)
-            EpisodeRowView(
-              episode: episode,
-              podcastTitle: viewModel.podcastInfo.title,
-              fallbackImageURL: viewModel.podcastInfo.imageURL,
-              podcastLanguage: viewModel.podcastInfo.language,
-              downloadManager: downloadManager,
-              episodeModel: viewModel.episodeModels[key],
-              precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
-              precomputedHasTranscript: viewModel.transcriptKeys.contains(key),
-              precomputedHasAIAnalysis: episode.audioURL.map {
-                viewModel.aiAnalysisAudioURLs.contains($0)
-              } ?? false,
-              showArtwork: showEpisodeArtwork,
-              onToggleStar: {
-                viewModel.toggleStar(for: episode)
-              },
-              onDownload: { viewModel.downloadEpisode(episode) },
-              onDeleteRequested: { episodeToDelete = episode },
-              onTogglePlayed: {
-                viewModel.togglePlayed(for: episode)
-              }
-            )
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-          }
-        } else {
-          ProgressView("Loading episodes\u{2026}")
-            .frame(maxWidth: .infinity)
-            .padding(.vertical)
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-        }
+        episodeRows(viewModel: viewModel)
       }
     }
     .listStyle(.plain)
@@ -515,25 +482,73 @@ struct EpisodeListView: View {
       )
     }
     .sheet(item: $activeSheet) { sheet in
-      switch sheet {
-      case .episodeFilter(let model):
-        PodcastEpisodeFilterView(podcast: model, modelContext: modelContext) {
-          // Promote the user's freshly-saved filter into a visible result —
-          // switch the chip row to .custom so the list updates immediately.
-          // Always assigning (even when already .custom) is intentional:
-          // didSet fires unconditionally, so the filter re-evaluates against
-          // the new include/exclude/min-duration values.
-          withAnimation(.easeInOut(duration: 0.2)) {
-            viewModel?.selectedFilter = .custom
+      sheetContent(sheet)
+    }
+  }
+
+}
+
+// Split from the struct body to keep it a readable size; same file, so these
+// still reach the view's private state.
+extension EpisodeListView {
+  @ViewBuilder
+  private func episodeRows(viewModel: EpisodeListViewModel?) -> some View {
+    if let viewModel {
+      ForEach(viewModel.filteredEpisodes) { episode in
+        let key = viewModel.makeEpisodeKey(episode)
+        EpisodeRowView(
+          episode: episode,
+          podcastTitle: viewModel.podcastInfo.title,
+          fallbackImageURL: viewModel.podcastInfo.imageURL,
+          podcastLanguage: viewModel.podcastInfo.language,
+          downloadManager: downloadManager,
+          episodeModel: viewModel.episodeModels[key],
+          precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
+          precomputedHasTranscript: viewModel.transcriptKeys.contains(key),
+          precomputedHasAIAnalysis: episode.audioURL.map {
+            viewModel.aiAnalysisAudioURLs.contains($0)
+          } ?? false,
+          showArtwork: showEpisodeArtwork,
+          onToggleStar: {
+            viewModel.toggleStar(for: episode)
+          },
+          onDownload: { viewModel.downloadEpisode(episode) },
+          onDeleteRequested: { episodeToDelete = episode },
+          onTogglePlayed: {
+            viewModel.togglePlayed(for: episode)
           }
-        }
-      case .transcribeBackfill(let model):
-        TranscribeBackfillSheet(
-          podcastTitle: model.podcastInfo.title,
-          podcastLanguage: model.podcastInfo.language,
-          episodes: model.podcastInfo.episodes
         )
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
       }
+    } else {
+      ProgressView("Loading episodes\u{2026}")
+        .frame(maxWidth: .infinity)
+        .padding(.vertical)
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+  }
+
+  @ViewBuilder
+  private func sheetContent(_ sheet: EpisodeListSheet) -> some View {
+    switch sheet {
+    case .episodeFilter(let model):
+      PodcastEpisodeFilterView(podcast: model, modelContext: modelContext) {
+        // Promote the user's freshly-saved filter into a visible result —
+        // switch the chip row to .custom so the list updates immediately.
+        // Always assigning (even when already .custom) is intentional:
+        // didSet fires unconditionally, so the filter re-evaluates against
+        // the new include/exclude/min-duration values.
+        withAnimation(.easeInOut(duration: 0.2)) {
+          viewModel?.selectedFilter = .custom
+        }
+      }
+    case .transcribeBackfill(let model):
+      TranscribeBackfillSheet(
+        podcastTitle: model.podcastInfo.title,
+        podcastLanguage: model.podcastInfo.language,
+        episodes: model.podcastInfo.episodes
+      )
     }
   }
 
@@ -885,50 +900,6 @@ struct EpisodeListView: View {
     .padding(.top, 8)
     .padding(.bottom, 8)
     .background(.bar)
-  }
-}
-
-// MARK: - Filter Chip Component
-
-struct FilterChip: View {
-  let title: LocalizedStringResource
-  let icon: String
-  let isSelected: Bool
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      chipLabel
-    }
-    .buttonStyle(.plain)
-    // Selection is otherwise only a fill colour, which VoiceOver can't see.
-    .accessibilityAddTraits(isSelected ? .isSelected : [])
-  }
-
-  @ViewBuilder
-  private var chipLabel: some View {
-    let content = HStack(spacing: 4) {
-      // Decorative — `checkmark.circle` (Played) reads as "Selected".
-      Image(systemName: icon)
-        .font(.caption)
-        .accessibilityHidden(true)
-      Text(title)
-        .font(.caption)
-        .fontWeight(isSelected ? .semibold : .regular)
-    }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 6)
-
-    if isSelected {
-      content
-        .background(Color.blue)
-        .foregroundStyle(.white)
-        .clipShape(.rect(cornerRadius: 16))
-    } else {
-      content
-        .foregroundStyle(.primary)
-        .background(.regularMaterial, in: .rect(cornerRadius: 16))
-    }
   }
 }
 

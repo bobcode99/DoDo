@@ -21,16 +21,16 @@ struct EpisodeMenuActions: View {
   let onCancelDownload: () -> Void
   let onDeleteDownload: () -> Void
   let onShare: () -> Void
-  var onPlayNext: (() -> Void)? = nil
-  var onAddToQueue: (() -> Void)? = nil
+  var onPlayNext: (() -> Void)?
+  var onAddToQueue: (() -> Void)?
   /// Apple-Podcasts-style "Remove from Up Next". When non-nil the menu appends
   /// a destructive remove button after Share. Only the Up Next list passes
   /// this closure — other call sites leave it nil.
-  var onRemoveFromUpNext: (() -> Void)? = nil
+  var onRemoveFromUpNext: (() -> Void)?
 
   // For Apple Podcast URL sharing
-  var episodeTitle: String? = nil
-  var podcastCollectionId: Int? = nil
+  var episodeTitle: String?
+  var podcastCollectionId: Int?
 
   var body: some View {
     // Star/Unstar

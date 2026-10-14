@@ -176,5 +176,4 @@ struct TranscriptSettingsTab: View {
   }
 }
 
-
 #endif

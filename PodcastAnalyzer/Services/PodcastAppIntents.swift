@@ -129,16 +129,19 @@ struct AnalyzeTranscriptIntent: AppIntent {
     }
 
     private func buildPrompt(for type: ShortcutAnalysisType, transcript: String, episodeTitle: String, podcastName: String) -> String {
-        switch type {
-        case .summary:
-            return """
-            Please provide a comprehensive summary of this podcast episode.
-
+        let source = """
             Podcast: \(podcastName)
             Episode: \(episodeTitle)
 
             Transcript:
             \(transcript)
+            """
+        switch type {
+        case .summary:
+            return """
+            Please provide a comprehensive summary of this podcast episode.
+
+            \(source)
 
             Provide:
             1. A 2-3 paragraph summary
@@ -151,11 +154,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Please identify the key highlights from this podcast episode.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             Provide:
             1. Top 5 highlights or key moments
@@ -168,11 +167,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Please extract all named entities from this podcast episode.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             List:
             1. People mentioned (names, roles if known)
@@ -186,11 +181,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Please provide a complete analysis of this podcast episode.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             Provide a comprehensive analysis including:
             1. Executive Summary (2-3 paragraphs)
@@ -206,11 +197,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Based on this podcast transcript, please answer questions about the content.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             (User will ask their question after this prompt)
             """

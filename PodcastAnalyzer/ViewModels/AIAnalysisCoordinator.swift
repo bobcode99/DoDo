@@ -37,11 +37,10 @@ final class AIAnalysisCoordinator {
 
   // MARK: - On-Device State
 
-
   // MARK: - Cloud State
 
   var cloudQuestionState: AnalysisState = .idle
-  var cloudAnalysisCache: CachedCloudAnalysis = CachedCloudAnalysis()
+  var cloudAnalysisCache = CachedCloudAnalysis()
 
   @ObservationIgnored
   private var _localCloudAnalysisState: AnalysisState = .idle

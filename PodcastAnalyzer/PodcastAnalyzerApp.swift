@@ -236,9 +236,11 @@ struct PodcastAnalyzerApp: App {
           }
           #endif
 
-          // Register low-memory warning handler to clear caches
+          // Register low-memory warning handler to clear caches. Lives as long
+          // as the app, so the observer token is intentionally not kept.
           #if os(iOS)
-          NotificationCenter.default.addObserver(
+          // swiftlint:disable:next discarded_notification_center_observer
+          _ = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
             queue: .main

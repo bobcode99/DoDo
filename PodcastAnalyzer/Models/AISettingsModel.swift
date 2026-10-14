@@ -60,12 +60,12 @@ nonisolated enum TranscriptFormatForAI: String, CaseIterable, Codable {
         let segments = SRTParser.parseSegments(from: srtContent)
         return segments.map { segment in
             let totalSeconds = Int(segment.startTime)
-            let h = totalSeconds / 3600
-            let m = (totalSeconds % 3600) / 60
-            let s = totalSeconds % 60
-            let timestamp = h > 0
-                ? String(format: "[%d:%02d:%02d]", h, m, s)
-                : String(format: "[%02d:%02d]", m, s)
+            let hours = totalSeconds / 3600
+            let minutes = (totalSeconds % 3600) / 60
+            let secs = totalSeconds % 60
+            let timestamp = hours > 0
+                ? String(format: "[%d:%02d:%02d]", hours, minutes, secs)
+                : String(format: "[%02d:%02d]", minutes, secs)
             return "\(timestamp) \(segment.text)"
         }.joined(separator: "\n")
     }

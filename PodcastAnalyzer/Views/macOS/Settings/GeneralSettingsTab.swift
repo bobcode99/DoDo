@@ -127,5 +127,4 @@ struct GeneralSettingsTab: View {
   }
 }
 
-
 #endif

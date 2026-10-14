@@ -12,9 +12,10 @@ import OSLog
 @available(iOS 26.0, *)
 extension TranscriptService {
 
+  // TODO: split chunk planning, the parallel transcribe and the stitch step.
   /// Transcribes audio using parallel chunks for files ≥ 1 minute.
   /// Falls back to sequential ``audioToSRTWithProgress(inputFile:maxLength:)`` for shorter audio.
-  public func audioToSRTChunkedWithProgress(
+  public func audioToSRTChunkedWithProgress( // swiftlint:disable:this function_body_length
     inputFile: URL,
     maxLength: Int? = nil,
     chunkDuration: TimeInterval = 300

@@ -41,6 +41,7 @@ nonisolated enum NowPlayingLaunchProbe {
       UIApplication.protectedDataWillBecomeUnavailableNotification,
     ]
     for name in names {
+      // swiftlint:disable:next discarded_notification_center_observer
       _ = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
         log("notification \(name.rawValue)")
       }
@@ -123,8 +124,9 @@ final class NowPlayingProbeSceneDelegate: NSObject, UIWindowSceneDelegate {
   }
 
   func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-    NowPlayingLaunchProbe.log(
-      "continueUserActivity \(userActivity.activityType) url=\(userActivity.webpageURL?.absoluteString ?? "nil") keys=\(userActivity.userInfo?.keys.map { "\($0)" } ?? [])")
+    let url = userActivity.webpageURL?.absoluteString ?? "nil"
+    let keys = userActivity.userInfo?.keys.map { "\($0)" } ?? []
+    NowPlayingLaunchProbe.log("continueUserActivity \(userActivity.activityType) url=\(url) keys=\(keys)")
   }
 
   func windowScene(

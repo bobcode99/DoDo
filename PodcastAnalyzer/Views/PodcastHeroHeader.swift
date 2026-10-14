@@ -70,14 +70,14 @@ private nonisolated func saturationWeightedAverage(of data: Data) -> Color? {
 
   var red = 0.0, green = 0.0, blue = 0.0, weightSum = 0.0
   for index in stride(from: 0, to: pixels.count, by: 4) {
-    let r = Double(pixels[index]) / 255
-    let g = Double(pixels[index + 1]) / 255
-    let b = Double(pixels[index + 2]) / 255
+    let pixelRed = Double(pixels[index]) / 255
+    let pixelGreen = Double(pixels[index + 1]) / 255
+    let pixelBlue = Double(pixels[index + 2]) / 255
     // Floor so a fully greyscale cover still averages to itself.
-    let weight = 0.12 + (max(r, g, b) - min(r, g, b))
-    red += r * weight
-    green += g * weight
-    blue += b * weight
+    let weight = 0.12 + (max(pixelRed, pixelGreen, pixelBlue) - min(pixelRed, pixelGreen, pixelBlue))
+    red += pixelRed * weight
+    green += pixelGreen * weight
+    blue += pixelBlue * weight
     weightSum += weight
   }
   guard weightSum > 0 else { return nil }
@@ -86,15 +86,15 @@ private nonisolated func saturationWeightedAverage(of data: Data) -> Color? {
   // average to something that cannot carry white text. Scale the result into a
   // mid band — this keeps the hue and the relative channel mix, and only moves
   // the level.
-  var r = red / weightSum, g = green / weightSum, b = blue / weightSum
-  let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  var meanRed = red / weightSum, meanGreen = green / weightSum, meanBlue = blue / weightSum
+  let luminance = 0.2126 * meanRed + 0.7152 * meanGreen + 0.0722 * meanBlue
   if luminance > 0.001 {
     let scale = min(max(luminance, 0.28), 0.55) / luminance
-    r = min(r * scale, 1)
-    g = min(g * scale, 1)
-    b = min(b * scale, 1)
+    meanRed = min(meanRed * scale, 1)
+    meanGreen = min(meanGreen * scale, 1)
+    meanBlue = min(meanBlue * scale, 1)
   }
-  return Color(.sRGB, red: r, green: g, blue: b)
+  return Color(.sRGB, red: meanRed, green: meanGreen, blue: meanBlue)
 }
 
 // MARK: - Hero header

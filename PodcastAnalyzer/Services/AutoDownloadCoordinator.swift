@@ -57,17 +57,9 @@ actor AutoDownloadCoordinator {
 
   // MARK: - Run
 
-  func run(reason: AutoDownloadTriggerReason) async {
-    guard !isRunning else {
-      logger.debug("AutoDownloadCoordinator already running, skipping \(String(describing: reason))")
-      return
-    }
-    guard !pendingEpisodes.isEmpty else { return }
-
-    isRunning = true
-    defer { isRunning = false }
-    logger.info("AutoDownloadCoordinator.run(reason: \(String(describing: reason)))")
-
+  /// Network, power and storage gates for a run, read from MainActor state in
+  /// one hop. Nil (after logging why) when this run should be skipped.
+  private func eligibleRunSettings() async -> (container: ModelContainer, globalEnabled: Bool, cacheLimit: Int)? {
     // Read all MainActor-isolated state in a single hop.
     let (networkOK, powerOK, container, globalEnabled, cacheLimit) =
       await MainActor.run { () -> (Bool, Bool, ModelContainer?, Bool, Int) in
@@ -87,20 +79,36 @@ actor AutoDownloadCoordinator {
 
     guard networkOK else {
       logger.info("Auto-download skipped: network not eligible")
-      return
+      return nil
     }
     guard powerOK else {
       logger.info("Auto-download skipped: power not eligible")
-      return
+      return nil
     }
     guard !ProcessInfo.processInfo.isLowPowerModeEnabled else {
       logger.info("Auto-download skipped: Low Power Mode active")
-      return
+      return nil
     }
     guard let container else {
       logger.warning("Auto-download skipped: ModelContainer not available")
+      return nil
+    }
+    return (container, globalEnabled, cacheLimit)
+  }
+
+  func run(reason: AutoDownloadTriggerReason) async {
+    guard !isRunning else {
+      logger.debug("AutoDownloadCoordinator already running, skipping \(String(describing: reason))")
       return
     }
+    guard !pendingEpisodes.isEmpty else { return }
+
+    isRunning = true
+    defer { isRunning = false }
+    logger.info("AutoDownloadCoordinator.run(reason: \(String(describing: reason)))")
+
+    guard let settings = await eligibleRunSettings() else { return }
+    let (container, globalEnabled, cacheLimit) = settings
 
     // Cache budget: count currently downloaded episodes.
     let ctx = ModelContext(container)

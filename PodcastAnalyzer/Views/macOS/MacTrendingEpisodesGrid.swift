@@ -5,7 +5,6 @@
 //  Created by JunNianLo on 2026/5/16.
 //
 
-
 #if os(macOS)
 import SwiftData
 import SwiftUI

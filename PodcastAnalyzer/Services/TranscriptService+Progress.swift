@@ -43,6 +43,13 @@ extension TranscriptService {
 
   // MARK: - Streaming SRT
 
+  /// Punctuation restore (CJK), segmentation and SRT formatting of a finished transcript.
+  nonisolated static func makeSRT(from transcript: AttributedString, isCJK: Bool, maxLength: Int) -> String {
+    let processed = isCJK ? ChinesePunctuationRestorer().restore(transcript: transcript) : transcript
+    let segmenter = TranscriptSegmenter(isCJK: isCJK, maxLength: maxLength)
+    return SRTFormatter.format(segments: segmenter.splitTranscriptIntoSegments(transcript: processed))
+  }
+
   /// Transcribes an audio file to SRT, streaming ``TranscriptionProgress`` updates.
   public func audioToSRTWithProgress(
     inputFile: URL,
@@ -124,17 +131,7 @@ extension TranscriptService {
               "Transcription produced no content. The audio may be silent or in an unsupported format."])
         }
 
-        let processed: AttributedString
-        if isCJK {
-          processed = ChinesePunctuationRestorer().restore(transcript: transcript)
-        } else {
-          processed = transcript
-        }
-
-        let effectiveMaxLength = maxLength ?? defaultMaxLen
-        let segmenter = TranscriptSegmenter(isCJK: isCJK, maxLength: effectiveMaxLength)
-        let segments = segmenter.splitTranscriptIntoSegments(transcript: processed)
-        let srtContent = SRTFormatter.format(segments: segments)
+        let srtContent = Self.makeSRT(from: transcript, isCJK: isCJK, maxLength: maxLength ?? defaultMaxLen)
 
         continuation.yield(TranscriptionProgress(
           progress: 1.0,

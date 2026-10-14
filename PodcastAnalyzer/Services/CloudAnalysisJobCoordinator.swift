@@ -42,11 +42,11 @@ final class CloudAnalysisJobCoordinator {
         var isStreaming: Bool
         /// When the job started, so the UI can show elapsed time — a long
         /// request is otherwise indistinguishable from a hung one.
-        var startedAt: Date = Date()
+        var startedAt = Date()
         /// Identifies this run. Cancelling a Task does not drop callbacks it
         /// already enqueued, so a restart on the same key must not be written
         /// to by the run it replaced.
-        var runID: UUID = UUID()
+        var runID = UUID()
     }
 
     /// Keyed by `PodcastEpisodeInfo.audioURL`. The view model passes the same key
@@ -79,7 +79,11 @@ final class CloudAnalysisJobCoordinator {
     /// Start (or restart) an analysis for `audioURL`. Cancels any existing
     /// job for the same key — matches the previous `cloudAnalysisTask?.cancel()`
     /// behavior in `EpisodeDetailViewModel.generateCloudAnalysis`.
-    func startAnalysis(
+    ///
+    /// One job end to end (background grace, streaming callbacks, persist,
+    /// completion) sharing `runID`; one call site. Group the parameters into a
+    /// request struct if a second caller appears.
+    func startAnalysis( // swiftlint:disable:this function_body_length function_parameter_count
         audioURL: String,
         transcript: String,
         transcriptSegments: [QuotesFinder.Segment],

@@ -76,6 +76,12 @@ line_length:
   error: 240
   ignores_comments: true
   ignores_urls: true
+  ignores_multiline_strings: true
+  # Long prose literals (UI copy that doubles as a localization key, AI
+  # prompts, MCP tool descriptions, Logger messages, which must stay a single
+  # literal) can't be wrapped without changing the string itself.
+  excluded_lines_patterns:
+    - '"[^"]{100,}'
 
 file_length:
   warning: 800

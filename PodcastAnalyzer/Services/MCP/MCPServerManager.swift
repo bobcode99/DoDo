@@ -67,6 +67,7 @@ final class MCPServerManager {
   /// a new one; `start()` checks `Task.isCancelled` before it would otherwise
   /// overwrite state a newer reconcile already owns.
   private var reconcileTask: Task<Void, Never>?
+  @ObservationIgnored private var terminateObserver: NSObjectProtocol?
   private let logger = Logger(subsystem: "com.podcast.analyzer", category: "MCPServerManager")
 
   // MARK: - Init
@@ -89,7 +90,7 @@ final class MCPServerManager {
     self.modelContainer = modelContainer
     reconcile()
     // Stop cleanly on app quit so the port is released.
-    NotificationCenter.default.addObserver(
+    terminateObserver = NotificationCenter.default.addObserver(
       forName: NSNotification.Name("NSApplicationWillTerminateNotification"),
       object: nil,
       queue: .main

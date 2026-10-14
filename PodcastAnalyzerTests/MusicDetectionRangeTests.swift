@@ -73,7 +73,9 @@ struct MusicDetectionRangeTests {
 
     @Test("Ranges compare by value, so the same span is the same range")
     func equality() {
-        #expect(range(10, 20) == range(10, 20))
+        let span = range(10, 20)
+        let sameSpan = range(10, 20)
+        #expect(span == sameSpan)
         #expect(range(10, 20) != range(10, 21))
     }
 

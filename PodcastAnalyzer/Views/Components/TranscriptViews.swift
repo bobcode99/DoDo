@@ -289,8 +289,8 @@ struct SentenceBasedTranscriptView: View {
     var flashedSentenceID: Int?
 
     private var activeSentenceID: Int? {
-        guard let t = currentTime else { return nil }
-        return sentences.activeID(at: t)
+        guard let time = currentTime else { return nil }
+        return sentences.activeID(at: time)
     }
 
     /// Active segment index *within* the given sentence, or nil if this is not
@@ -304,8 +304,8 @@ struct SentenceBasedTranscriptView: View {
     /// the karaoke as "broken" on the row they know is currently playing.
     private func activeSegmentIndex(for sentence: TranscriptSentence, isActive: Bool) -> Int? {
         guard isActive else { return nil }
-        guard let t = currentTime else { return 0 }
-        return sentence.activeSegmentIndex(at: t) ?? 0
+        guard let time = currentTime else { return 0 }
+        return sentence.activeSegmentIndex(at: time) ?? 0
     }
 
     var body: some View {
@@ -545,8 +545,8 @@ struct FullTranscriptContent: View {
     }
 
     private var activeSentenceID: Int? {
-        guard let t = currentTime else { return nil }
-        return sentences.activeID(at: t)
+        guard let time = currentTime else { return nil }
+        return sentences.activeID(at: time)
     }
 
     @State private var currentSearchIndex: Int = 0
@@ -572,16 +572,16 @@ struct FullTranscriptContent: View {
         // text. CJK-aware joining ensures e.g. "海峽過路" + "費用高達" matches "過路費".
         if sentences.count >= 2 {
             for i in 0..<(sentences.count - 1) {
-                let a = sentences[i]
-                let b = sentences[i + 1]
-                if matched.contains(a.id) && matched.contains(b.id) { continue }
-                let joined = CJKTextUtils.joinTexts([a.text, b.text])
+                let current = sentences[i]
+                let next = sentences[i + 1]
+                if matched.contains(current.id) && matched.contains(next.id) { continue }
+                let joined = CJKTextUtils.joinTexts([current.text, next.text])
                 guard joined.localizedStandardContains(query) else { continue }
                 // Confirm the match actually crosses the boundary — if it lives
-                // entirely in `a` or `b` we already caught it above.
-                if !a.text.localizedStandardContains(query) || !b.text.localizedStandardContains(query) {
-                    if matched.insert(a.id).inserted { ordered.append(a.id) }
-                    if matched.insert(b.id).inserted { ordered.append(b.id) }
+                // entirely in `current` or `next` we already caught it above.
+                if !current.text.localizedStandardContains(query) || !next.text.localizedStandardContains(query) {
+                    if matched.insert(current.id).inserted { ordered.append(current.id) }
+                    if matched.insert(next.id).inserted { ordered.append(next.id) }
                 }
             }
             // Re-sort by appearance order in the transcript.

@@ -47,28 +47,28 @@ struct EpisodePlayButtonWithProgress: View {
       // Determine which value to format: remaining time or total duration
       let isInProgress = playbackProgress > 0 && playbackProgress < 1
       guard let totalSeconds = duration, totalSeconds > 0 else { return nil }
-      
+
       let secondsToFormat = isInProgress ? (totalSeconds - lastPlaybackPosition) : totalSeconds
       let timeString = formatTimeUnits(Int(secondsToFormat))
-      
+
       return isInProgress ? "\(timeString) left" : timeString
   }
 
   private func formatTimeUnits(_ totalSeconds: Int) -> String {
       let seconds = max(0, totalSeconds)
-      let h = seconds / 3600
-      let m = (seconds % 3600) / 60
-      let s = seconds % 60
+      let hours = seconds / 3600
+      let minutes = (seconds % 3600) / 60
+      let secs = seconds % 60
 
-      if h > 0 {
+      if hours > 0 {
           // "1h 5m"
-          return "\(h)h \(m)m"
-      } else if m > 0 {
+          return "\(hours)h \(minutes)m"
+      } else if minutes > 0 {
           // "50m"
-          return "\(m)m"
+          return "\(minutes)m"
       } else {
           // "0:44"
-          return String(format: "0:%02d", s)
+          return String(format: "0:%02d", secs)
       }
   }
 

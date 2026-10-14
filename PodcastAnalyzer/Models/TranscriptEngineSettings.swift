@@ -163,7 +163,7 @@ final class WhisperModelManager {
     /// Per-variant download/readiness status.
     var modelStatuses: [WhisperModelVariant: WhisperModelStatus] = {
         var dict: [WhisperModelVariant: WhisperModelStatus] = [:]
-        for v in WhisperModelVariant.allCases { dict[v] = .notDownloaded }
+        for variant in WhisperModelVariant.allCases { dict[variant] = .notDownloaded }
         return dict
     }()
 

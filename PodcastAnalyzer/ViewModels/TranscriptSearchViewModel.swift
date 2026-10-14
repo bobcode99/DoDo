@@ -46,7 +46,7 @@ final class TranscriptSearchViewModel {
     }
     var isSearching = false
     /// When non-nil, filters results to the named podcast.
-    var selectedPodcastFilter: String? = nil
+    var selectedPodcastFilter: String?
 
     // MARK: Search
 

@@ -105,7 +105,7 @@ class PodcastImportManager {
         // 1. Check existing URL
         let urlPredicate = #Predicate<PodcastInfoModel> { $0.rssUrl == rssURL }
         let existing = try context.fetch(FetchDescriptor<PodcastInfoModel>(predicate: urlPredicate)).first
-        
+
         if let existing {
             if existing.isSubscribed { return .skipped }
             existing.setSubscribed(true)

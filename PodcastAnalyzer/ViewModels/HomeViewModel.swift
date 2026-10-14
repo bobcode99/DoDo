@@ -90,7 +90,6 @@ final class HomeViewModel {
     }
   }
 
-
   @ObservationIgnored
   private var loadTask: Task<Void, Never>?
 
@@ -99,7 +98,6 @@ final class HomeViewModel {
 
   @ObservationIgnored
   private var regionChangeTask: Task<Void, Never>?
-
 
   @ObservationIgnored
   private var podcastInfoModelList: [PodcastInfoModel] = []
@@ -400,29 +398,29 @@ final class HomeViewModel {
     }
   }
 
+}
+
+// Loading and episode actions, split from the class body to keep it a readable
+// size; same file, so they still reach the model's private state.
+extension HomeViewModel {
   // MARK: - Up Next Episodes
 
-  private func loadUpNextEpisodes() async {
-    guard let context = modelContext else { return }
-
-    // Batch fetch all EpisodeDownloadModels once (instead of N+1 individual queries)
-    let allDescriptor = FetchDescriptor<EpisodeDownloadModel>()
-    let allModels = (try? context.fetch(allDescriptor)) ?? []
-    var modelsByKey: [String: EpisodeDownloadModel] = [:]
-    for model in allModels {
-      modelsByKey[model.id] = model
-    }
-
+  /// Unplayed candidates for the engine (in-progress, plus up to 10 unstarted per
+  /// show), each tagged with its show's play count and most recent play.
+  private func upNextCandidates(
+    from allModels: [EpisodeDownloadModel],
+    modelsByKey: [String: EpisodeDownloadModel]
+  ) -> [EpisodeInput] {
     // Compute per-podcast aggregates for UpNextSuggestionEngine signals
     var podcastPlayCounts: [String: Int] = [:]
     var podcastRecentPlayDates: [String: Date] = [:]
     for model in allModels {
       podcastPlayCounts[model.podcastTitle, default: 0] += model.playCount
-      if let d = model.lastPlayedDate {
+      if let playedDate = model.lastPlayedDate {
         if let existing = podcastRecentPlayDates[model.podcastTitle] {
-          if d > existing { podcastRecentPlayDates[model.podcastTitle] = d }
+          if playedDate > existing { podcastRecentPlayDates[model.podcastTitle] = playedDate }
         } else {
-          podcastRecentPlayDates[model.podcastTitle] = d
+          podcastRecentPlayDates[model.podcastTitle] = playedDate
         }
       }
     }
@@ -470,11 +468,57 @@ final class HomeViewModel {
         ))
       }
     }
+    return inputs
+  }
+
+  /// The play queue, in order, ahead of the scored rows (minus the now-playing
+  /// episode); queued rows get an `.inQueue` badge in `scoredByKey`.
+  private func prependingQueue(
+    to result: [LibraryEpisode],
+    scoredByKey: inout [String: ScoredEpisode],
+    modelsByKey: [String: EpisodeDownloadModel],
+    currentKey: String?
+  ) -> [LibraryEpisode] {
+    let queuedEpisodes = EnhancedAudioManager.shared.queue
+    guard !queuedEpisodes.isEmpty else { return result }
+    var queuedRows: [LibraryEpisode] = []
+    for (index, playbackEpisode) in queuedEpisodes.enumerated() {
+      let key = playbackEpisode.id
+      guard key != currentKey else { continue }
+      let model = modelsByKey[key]
+      let libraryEpisode = scoredByKey[key]?.episode
+        ?? Self.makeLibraryEpisode(from: playbackEpisode, model: model)
+      queuedRows.append(libraryEpisode)
+      // Overwrite any scored entry: the badge should say the episode is
+      // queued, which is more useful than why the engine would have picked it.
+      scoredByKey[key] = ScoredEpisode(
+        episode: libraryEpisode,
+        downloadModel: model,
+        score: .infinity,
+        reason: .inQueue(position: index + 1),
+        progressRatio: scoredByKey[key]?.progressRatio ?? 0
+      )
+    }
+    return UpNextSuggestionEngine.merge(queued: queuedRows, scored: result)
+  }
+
+  private func loadUpNextEpisodes() async {
+    guard let context = modelContext else { return }
+
+    // Batch fetch all EpisodeDownloadModels once (instead of N+1 individual queries)
+    let allDescriptor = FetchDescriptor<EpisodeDownloadModel>()
+    let allModels = (try? context.fetch(allDescriptor)) ?? []
+    var modelsByKey: [String: EpisodeDownloadModel] = [:]
+    for model in allModels {
+      modelsByKey[model.id] = model
+    }
+
+    let inputs = upNextCandidates(from: allModels, modelsByKey: modelsByKey)
 
     // ── Score a large pool; the engine returns a single composite-ordered list ──
     let allScored = UpNextSuggestionEngine().score(inputs: inputs, limit: 50)
     var scoredByKey: [String: ScoredEpisode] = [:]
-    for s in allScored { scoredByKey[s.id] = s }
+    for scored in allScored { scoredByKey[scored.id] = scored }
 
     // Now-playing key (pinned to position 0 below).
     let currentEpisode = EnhancedAudioManager.shared.currentEpisode
@@ -504,28 +548,7 @@ final class HomeViewModel {
     // anything the scoring engine inferred. A queued episode may come from an
     // unsubscribed show and so be absent from the scored pool entirely — hence
     // the synthetic fallback.
-    let queuedEpisodes = EnhancedAudioManager.shared.queue
-    if !queuedEpisodes.isEmpty {
-      var queuedRows: [LibraryEpisode] = []
-      for (index, playbackEpisode) in queuedEpisodes.enumerated() {
-        let key = playbackEpisode.id
-        guard key != currentKey else { continue }
-        let model = modelsByKey[key]
-        let libraryEpisode = scoredByKey[key]?.episode
-          ?? Self.makeLibraryEpisode(from: playbackEpisode, model: model)
-        queuedRows.append(libraryEpisode)
-        // Overwrite any scored entry: the badge should say the episode is
-        // queued, which is more useful than why the engine would have picked it.
-        scoredByKey[key] = ScoredEpisode(
-          episode: libraryEpisode,
-          downloadModel: model,
-          score: .infinity,
-          reason: .inQueue(position: index + 1),
-          progressRatio: scoredByKey[key]?.progressRatio ?? 0
-        )
-      }
-      result = UpNextSuggestionEngine.merge(queued: queuedRows, scored: result)
-    }
+    result = prependingQueue(to: result, scoredByKey: &scoredByKey, modelsByKey: modelsByKey, currentKey: currentKey)
 
     // ── Prepend Tier 1 ────────────────────────────────────────────────────────
     if let currentEpisode {
@@ -670,6 +693,32 @@ final class HomeViewModel {
 
   // MARK: - Load Top Podcasts
 
+  /// Shared fetch for a region's chart with retry and limit fallback: some
+  /// regions return 500 for high limits, so step down 200 → 100 → 50.
+  private func makeTopPodcastsTask(region regionToLoad: String) -> Task<[AppleRSSPodcast], Error> {
+    Task { () -> [AppleRSSPodcast] in
+      // Try with limit 200 first; some regions return 500 for high limits
+      let limits = [200, 100, 50]
+      var lastError: Error?
+      for limit in limits {
+        do {
+          return try await applePodcastService.fetchTopPodcasts(region: regionToLoad, limit: limit)
+        } catch {
+          lastError = error
+          let isServerError = (error as NSError).domain == NSURLErrorDomain ||
+                              (error as? URLError)?.code == .badServerResponse
+          if isServerError {
+            logger.warning("Region \(regionToLoad) failed with limit \(limit), trying smaller: \(error.localizedDescription, privacy: .public)")
+            try? await Task.sleep(for: .milliseconds(300))
+            continue
+          }
+          throw error
+        }
+      }
+      throw lastError ?? URLError(.unknown)
+    }
+  }
+
   private func loadTopPodcasts(forceRefresh: Bool = false) async {
     let regionToLoad = selectedRegion
 
@@ -725,28 +774,7 @@ final class HomeViewModel {
       Self.cachedRegion = saved == nil ? "" : regionToLoad
     }
 
-    // Create shared task with retry logic and limit fallback for API failures
-    let task = Task { () -> [AppleRSSPodcast] in
-      // Try with limit 200 first; some regions return 500 for high limits
-      let limits = [200, 100, 50]
-      var lastError: Error?
-      for limit in limits {
-        do {
-          return try await applePodcastService.fetchTopPodcasts(region: regionToLoad, limit: limit)
-        } catch {
-          lastError = error
-          let isServerError = (error as NSError).domain == NSURLErrorDomain ||
-                              (error as? URLError)?.code == .badServerResponse
-          if isServerError {
-            logger.warning("Region \(regionToLoad) failed with limit \(limit), trying smaller: \(error.localizedDescription, privacy: .public)")
-            try? await Task.sleep(for: .milliseconds(300))
-            continue
-          }
-          throw error
-        }
-      }
-      throw lastError ?? URLError(.unknown)
-    }
+    let task = makeTopPodcastsTask(region: regionToLoad)
     Self.loadingTask = task
 
     do {

@@ -84,5 +84,4 @@ struct SyncSettingsTab: View {
   }
 }
 
-
 #endif

@@ -27,7 +27,8 @@ struct ContentView: View {
 // MARK: - iOS Content View
 
 #if os(iOS)
-struct iOSContentView: View {
+// swiftlint:disable:next type_name
+struct iOSContentView: View { // "iOS" keeps Apple's casing
   // Access singletons directly without @State to avoid unnecessary observation overhead
   private var audioManager: EnhancedAudioManager { .shared }
   // importManager needs @State because $binding syntax is required for sheet
@@ -41,8 +42,9 @@ struct iOSContentView: View {
   /// Transient playback/queue problem to surface. Carries its own title so one
   /// alert can serve every such notification instead of stacking a modifier per
   /// message kind.
-  // LocalizedStringResource, not String: a String title takes Text's
-  // StringProtocol path and is never localized.
+  ///
+  /// LocalizedStringResource, not String: a String title takes Text's
+  /// StringProtocol path and is never localized.
   @State private var playbackAlert: (title: LocalizedStringResource, message: String)?
   /// Matches a Library artwork tile to the episode list that zooms out of it.
   /// Declared here because it has to be visible to both the grid and the

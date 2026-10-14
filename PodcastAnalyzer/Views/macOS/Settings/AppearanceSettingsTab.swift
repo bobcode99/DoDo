@@ -65,5 +65,4 @@ struct AppearanceSettingsTab: View {
   }
 }
 
-
 #endif

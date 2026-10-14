@@ -1,4 +1,3 @@
-
 import SwiftData
 import SwiftUI
 
@@ -284,11 +283,11 @@ struct EpisodeDetailHeaderView: View {
         // refreshed — surfacing the old episode list when the header link
         // pushes a new EpisodeListView. Prefer the subscribed, freshest row.
         if let results = try? modelContext.fetch(descriptor), !results.isEmpty {
-            let best = results.max { a, b in
-                if a.isSubscribed != b.isSubscribed {
-                    return !a.isSubscribed && b.isSubscribed
+            let best = results.max { lhs, rhs in
+                if lhs.isSubscribed != rhs.isSubscribed {
+                    return !lhs.isSubscribed && rhs.isSubscribed
                 }
-                return a.lastUpdated < b.lastUpdated
+                return lhs.lastUpdated < rhs.lastUpdated
             }
             if let best {
                 cachedPodcastModel = best

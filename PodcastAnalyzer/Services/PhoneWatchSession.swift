@@ -92,7 +92,7 @@ final class PhoneWatchSession: NSObject {
     let manager = EnhancedAudioManager.shared
     switch command {
     case .togglePlayPause:
-      manager.isPlaying ? manager.pause() : manager.resume()
+      if manager.isPlaying { manager.pause() } else { manager.resume() }
     case .skipForward:
       manager.skipForward()
     case .skipBackward:

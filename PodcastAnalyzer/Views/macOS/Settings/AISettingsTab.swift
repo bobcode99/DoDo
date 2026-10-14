@@ -17,5 +17,4 @@ struct AISettingsTab: View {
   }
 }
 
-
 #endif

@@ -14,7 +14,7 @@ struct HTMLTextView: View {
     ///
     /// A parameter rather than SwiftUI's `.lineLimit()`, which only applies to
     /// `Text` and is silently ignored by the text views below.
-    var lineLimit: Int? = nil
+    var lineLimit: Int?
 
     /// Forwarded to the text view's delegate so link taps keep flowing through
     /// whatever `OpenURLAction` the host installed — a UIKit/AppKit text view

@@ -97,12 +97,12 @@ struct EpisodeKeyUtilsTests {
 
     @Test("Keys differ whenever either title differs")
     func keysAreDistinct() {
-        let a = EpisodeKeyUtils.makeKey(podcastTitle: "Show", episodeTitle: "One")
-        let b = EpisodeKeyUtils.makeKey(podcastTitle: "Show", episodeTitle: "Two")
-        let c = EpisodeKeyUtils.makeKey(podcastTitle: "Other", episodeTitle: "One")
+        let showOne = EpisodeKeyUtils.makeKey(podcastTitle: "Show", episodeTitle: "One")
+        let showTwo = EpisodeKeyUtils.makeKey(podcastTitle: "Show", episodeTitle: "Two")
+        let otherOne = EpisodeKeyUtils.makeKey(podcastTitle: "Other", episodeTitle: "One")
 
-        #expect(a != b)
-        #expect(a != c)
+        #expect(showOne != showTwo)
+        #expect(showOne != otherOne)
     }
 
     @Test("The delimiter can't be spoofed by concatenating the titles differently")

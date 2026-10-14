@@ -79,9 +79,9 @@ struct ReleaseScheduleGuesser {
   // MARK: - Helpers
 
   private static func median(_ values: [TimeInterval]) -> TimeInterval {
-    let s = values.sorted()
-    let mid = s.count / 2
-    return s.count % 2 == 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid]
+    let sorted = values.sorted()
+    let mid = sorted.count / 2
+    return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
   }
 
   /// Checks whether all dates fall on Mon–Fri (weekday-only publishing).

@@ -27,12 +27,12 @@ struct UpNextContextMenu: View {
   /// Optional "Remove from Queue". Non-nil only when this episode is actually
   /// in `EnhancedAudioManager.queue` — the caller decides, because the menu
   /// itself has no business observing the player.
-  var onRemoveFromQueue: (() -> Void)? = nil
+  var onRemoveFromQueue: (() -> Void)?
   /// Optional "Not Interested". Hides the episode from the Up Next
   /// *suggestions* without marking it played; replaying resurfaces it because
   /// `lastPlayedDate` overtakes `upNextDismissedAt`. Deliberately distinct
   /// from `onRemoveFromQueue`: this one never touches the play queue.
-  var onDismissSuggestion: (() -> Void)? = nil
+  var onDismissSuggestion: (() -> Void)?
 
   var body: some View {
     goToShowSection

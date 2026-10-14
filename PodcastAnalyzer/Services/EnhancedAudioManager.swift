@@ -4,6 +4,7 @@
 //
 //  Created by Bob on 2025/12/17.
 //
+// swiftlint:disable file_length
 
 //
 //  EnhancedAudioManager.swift
@@ -97,7 +98,10 @@ enum SleepTimerOption: Equatable, CaseIterable {
   }
 }
 
+// TODO: split remote-command/Now Playing, interruption handling and widget
+// sync into their own files; until then this type and file exceed the limits.
 @MainActor @Observable
+// swiftlint:disable:next type_body_length
 class EnhancedAudioManager: NSObject {
   static let shared = EnhancedAudioManager()
 
@@ -315,12 +319,11 @@ private func handleAudioInterruption(_ notification: Notification) {
 
     logger.info("Handling audio interruption: type=\(type.rawValue, privacy: .public)")
 
-
     switch type {
     case .began:
         // 1. Mark our state BEFORE we call pause()
         wasPlayingBeforeInterruption = isPlaying
-        
+
         if isPlaying {
             // We use a local pause here to stop the player
             // but we don't necessarily want to treat this as a "user-stop"
@@ -340,10 +343,10 @@ private func handleAudioInterruption(_ notification: Notification) {
                 shouldResume = true
             }
         }
-        
+
         // If system says yes OR our manual state says we were playing
         let finalDecisionToResume = shouldResume || wasPlayingBeforeInterruption
-        
+
         if finalDecisionToResume {
             // 3. Session reactivation happens in resume() → activateAudioSession().
 
@@ -454,6 +457,38 @@ private func handleAudioInterruption(_ notification: Notification) {
     }
   }
 
+  /// The URL to actually play. If the caller passed a remote URL but the episode
+  /// is already downloaded, prefer the local file. Only block on "no network" if
+  /// NWPathMonitor has actually reported back at least once and confirmed we're
+  /// offline — otherwise the default `isConnected = false` would falsely refuse
+  /// playback during the ~200ms window between NetworkMonitor init and the first
+  /// path update. Nil after posting `.audioPlaybackUnavailable`.
+  private func resolvePlaybackURL(for episode: PlaybackEpisode, requested initialURL: URL) -> URL? {
+    if initialURL.isFileURL {
+      return initialURL
+    } else if case .downloaded(let localPath) = DownloadManager.shared
+      .getDownloadState(episodeTitle: episode.title, podcastTitle: episode.podcastTitle),
+      FileManager.default.fileExists(atPath: localPath)
+    {
+      logger.info("Using downloaded copy for \(episode.title)")
+      return URL(fileURLWithPath: localPath)
+    } else {
+      let monitor = NetworkMonitor.shared
+      if monitor.hasReceivedFirstUpdate && !monitor.isConnected {
+        let message =
+          "Can't reach the internet right now. Download \"\(episode.title)\" while you're on Wi-Fi to listen offline."
+        logger.warning(
+          "Refusing playback: NWPathMonitor reports offline and no local copy for \(episode.title)")
+        NotificationCenter.default.post(
+          name: .audioPlaybackUnavailable,
+          object: nil,
+          userInfo: ["message": message, "episodeTitle": episode.title])
+        return nil
+      }
+      return initialURL
+    }
+  }
+
   // MARK: - Play
   func play(
     episode: PlaybackEpisode, audioURL: String, startTime: TimeInterval = 0,
@@ -485,36 +520,7 @@ private func handleAudioInterruption(_ notification: Notification) {
     // for the previous one.
     playbackStateGeneration &+= 1
 
-    // Resolve the URL we will actually play. If the caller passed a remote URL
-    // but the episode is already downloaded, prefer the local file. Only block
-    // on "no network" if NWPathMonitor has actually reported back at least
-    // once and confirmed we're offline — otherwise the default `isConnected =
-    // false` would falsely refuse playback during the ~200ms window between
-    // NetworkMonitor init and the first path update.
-    let url: URL
-    if initialURL.isFileURL {
-      url = initialURL
-    } else if case .downloaded(let localPath) = DownloadManager.shared
-      .getDownloadState(episodeTitle: episode.title, podcastTitle: episode.podcastTitle),
-      FileManager.default.fileExists(atPath: localPath)
-    {
-      url = URL(fileURLWithPath: localPath)
-      logger.info("Using downloaded copy for \(episode.title)")
-    } else {
-      let monitor = NetworkMonitor.shared
-      if monitor.hasReceivedFirstUpdate && !monitor.isConnected {
-        let message =
-          "Can't reach the internet right now. Download \"\(episode.title)\" while you're on Wi-Fi to listen offline."
-        logger.warning(
-          "Refusing playback: NWPathMonitor reports offline and no local copy for \(episode.title)")
-        NotificationCenter.default.post(
-          name: .audioPlaybackUnavailable,
-          object: nil,
-          userInfo: ["message": message, "episodeTitle": episode.title])
-        return
-      }
-      url = initialURL
-    }
+    guard let url = resolvePlaybackURL(for: episode, requested: initialURL) else { return }
 
     cleanup()
 
@@ -680,9 +686,10 @@ private func handleAudioInterruption(_ notification: Notification) {
       Task { @MainActor in
         guard let self else { return }
         let landed = self.player?.currentTime().seconds ?? .nan
-        self.logger.info(
-          "seek(to:) completion target=\(String(format: "%.3f", time))s landed=\(String(format: "%.3f", landed))s drift=\(String(format: "%.3f", landed - time))s finished=\(finished)"
-        )
+        let target = String(format: "%.3f", time)
+        let landedText = String(format: "%.3f", landed)
+        let drift = String(format: "%.3f", landed - time)
+        self.logger.info("seek(to:) completion target=\(target)s landed=\(landedText)s drift=\(drift)s finished=\(finished)")
         // Update currentTime immediately so observers (e.g. TranscriptContentView
         // polling timer) see the seeked position rather than the stale value that
         // the periodic time observer hasn't flushed yet.
@@ -712,15 +719,15 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   func skipForward(seconds: TimeInterval? = nil) {
-    let s = seconds ?? skipForwardInterval
+    let interval = seconds ?? skipForwardInterval
     let cap = pendingSeekCap
-    let newTime = cap > 0 ? min(currentTime + s, cap) : currentTime + s
+    let newTime = cap > 0 ? min(currentTime + interval, cap) : currentTime + interval
     seek(to: newTime)
   }
 
   func skipBackward(seconds: TimeInterval? = nil) {
-    let s = seconds ?? skipBackwardInterval
-    let newTime = max(currentTime - s, 0)
+    let interval = seconds ?? skipBackwardInterval
+    let newTime = max(currentTime - interval, 0)
     seek(to: newTime)
   }
 
@@ -1477,8 +1484,7 @@ private func handleAudioInterruption(_ notification: Notification) {
 
   private func setupTimeObserver() {
     let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
-    timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) {
-      [weak self] time in
+    timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
       Task { @MainActor in
         guard let self = self else { return }
 

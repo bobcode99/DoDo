@@ -128,13 +128,13 @@ nonisolated struct MCPBearerTokenValidator: HTTPRequestValidator {
     return nil
   }
 
-  private func timingSafeEqual(_ a: String, _ b: String) -> Bool {
-    let ad = Array(a.utf8)
-    let bd = Array(b.utf8)
-    guard ad.count == bd.count else { return false }
+  private func timingSafeEqual(_ lhs: String, _ rhs: String) -> Bool {
+    let lhsBytes = Array(lhs.utf8)
+    let rhsBytes = Array(rhs.utf8)
+    guard lhsBytes.count == rhsBytes.count else { return false }
     var diff: UInt8 = 0
-    for i in 0..<ad.count {
-      diff |= ad[i] ^ bd[i]
+    for i in 0..<lhsBytes.count {
+      diff |= lhsBytes[i] ^ rhsBytes[i]
     }
     return diff == 0
   }

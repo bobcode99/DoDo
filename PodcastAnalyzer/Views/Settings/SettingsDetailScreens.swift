@@ -613,7 +613,6 @@ struct AppearanceSettingsScreen: View {
     AppAccentColorDefaults.decode(accentRaw) ?? .accentColor
   }
 
-
   // MARK: - Theme
 
   private var themeSection: some View {
