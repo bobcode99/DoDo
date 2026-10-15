@@ -522,7 +522,7 @@ private func handleAudioInterruption(_ notification: Notification) {
 
     guard let url = resolvePlaybackURL(for: episode, requested: initialURL) else { return }
 
-    cleanup()
+    cancelItemTasks()
 
     // Activate audio session now that we're about to play
     activateAudioSession()
@@ -558,7 +558,17 @@ private func handleAudioInterruption(_ notification: Notification) {
     }
 
     let playerItem = AVPlayerItem(url: url)
-    player = AVPlayer(playerItem: playerItem)
+    if let player {
+      // Swap the item instead of building a new player. Tearing the old one
+      // down left a moment with no player at all, and in the background iOS
+      // can deactivate the session in that gap — so after an episode ended the
+      // next one never started, most often when it had to buffer from the
+      // network first ("Failed to activate audio session" in the log).
+      player.replaceCurrentItem(with: playerItem)
+    } else {
+      player = AVPlayer(playerItem: playerItem)
+      setupTimeObserver()
+    }
     player?.volume = volume
     currentEpisode = episode
 
@@ -581,7 +591,6 @@ private func handleAudioInterruption(_ notification: Notification) {
       )
     }
 
-    setupTimeObserver()
     setupPlayerObservers(playerItem: playerItem)
 
     player?.play()
@@ -1485,7 +1494,10 @@ private func handleAudioInterruption(_ notification: Notification) {
   private func setupTimeObserver() {
     let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
     timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-      Task { @MainActor in
+      // Synchronous on `.main`, not a Task hop: the player is reused across
+      // episodes, and a hopped tick from the old item could land after the
+      // swap and write the old episode's end time onto the new one.
+      MainActor.assumeIsolated {
         guard let self = self else { return }
 
         let newTime = time.seconds
@@ -1672,14 +1684,8 @@ private func handleAudioInterruption(_ notification: Notification) {
     // task assertion across the transition or the episode can be left unmarked
     // and the next one never starts.
     #if os(iOS)
-    var bgTask: UIBackgroundTaskIdentifier = .invalid
-    bgTask = UIApplication.shared.beginBackgroundTask(withName: "PlaybackEnded") {
-      UIApplication.shared.endBackgroundTask(bgTask)
-      bgTask = .invalid
-    }
-    defer {
-      if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) }
-    }
+    beginEndOfEpisodeBackgroundTask()
+    defer { releaseEndOfEpisodeBackgroundTaskOncePlaying() }
     #endif
 
     isPlaying = false
@@ -1760,6 +1766,38 @@ private func handleAudioInterruption(_ notification: Notification) {
     clearPlaybackState()
   }
 
+  #if os(iOS)
+  private var endOfEpisodeBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+  private func beginEndOfEpisodeBackgroundTask() {
+    endEndOfEpisodeBackgroundTask()
+    endOfEpisodeBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "PlaybackEnded") { [weak self] in
+      MainActor.assumeIsolated { self?.endEndOfEpisodeBackgroundTask() }
+    }
+  }
+
+  /// Ending the assertion when `handlePlaybackEnded` returns is too early: a
+  /// streamed next episode is still buffering, nothing is audible yet, and iOS
+  /// suspends us before it starts. Keep it until the player is actually
+  /// playing, or nothing is going to play.
+  private func releaseEndOfEpisodeBackgroundTaskOncePlaying() {
+    Task { [weak self] in
+      // ponytail: 0.5s poll, at most 30s (the assertion's own budget) — runs once per episode end.
+      for _ in 0..<60 {
+        guard let self, self.isPlaying, self.player?.timeControlStatus != .playing else { break }
+        try? await Task.sleep(for: .milliseconds(500))
+      }
+      self?.endEndOfEpisodeBackgroundTask()
+    }
+  }
+
+  private func endEndOfEpisodeBackgroundTask() {
+    guard endOfEpisodeBackgroundTask != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(endOfEpisodeBackgroundTask)
+    endOfEpisodeBackgroundTask = .invalid
+  }
+  #endif
+
   // MARK: - Cleanup
 
   private func cleanup() {
@@ -1767,8 +1805,13 @@ private func handleAudioInterruption(_ notification: Notification) {
       player?.removeTimeObserver(observer)
       timeObserver = nil
     }
+    cancelItemTasks()
+    player?.pause()
+    player = nil
+  }
 
-    // Cancel Task-based observers
+  /// Per-item observers and loads. The player itself survives for the next item.
+  private func cancelItemTasks() {
     interruptionResumeTask?.cancel()
     interruptionResumeTask = nil
     playerEndedTask?.cancel()
@@ -1781,9 +1824,6 @@ private func handleAudioInterruption(_ notification: Notification) {
     artworkFetchTask = nil
     durationLoadTask?.cancel()
     durationLoadTask = nil
-
-    player?.pause()
-    player = nil
   }
 
   // Note: This is a singleton designed to live for the app's lifetime.
