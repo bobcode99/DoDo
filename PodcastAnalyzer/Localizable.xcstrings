@@ -10294,13 +10294,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "分流到你自己的服务器"
+            "value" : "交由你的电脑处理"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "分流到你自己的伺服器"
+            "value" : "交由你的電腦處理"
           }
         }
       }
