@@ -122,65 +122,7 @@ struct MacContentView: View {
 
   @ViewBuilder
   private var sidebarContent: some View {
-    List(selection: $selectedSidebarItem) {
-      Section("Browse") {
-        Label("Home", systemImage: "house")
-          .tag(MacSidebarItem.home)
-
-        Label {
-          Text("Analysis")
-        } icon: {
-          Image(systemName: "sparkles")
-            .foregroundStyle(.purple)
-        }
-        .tag(MacSidebarItem.analysis)
-      }
-
-      Section("Library") {
-        Label {
-          Text("Your Podcasts")
-        } icon: {
-          Image(systemName: "square.stack")
-            .foregroundStyle(.blue)
-        }
-        .tag(MacSidebarItem.libraryPodcasts)
-
-        Label {
-          Text("Saved")
-        } icon: {
-          Image(systemName: "star.fill")
-            .foregroundStyle(.yellow)
-        }
-        .tag(MacSidebarItem.librarySaved)
-
-        Label {
-          Text("Downloaded")
-        } icon: {
-          Image(systemName: "arrow.down.circle.fill")
-            .foregroundStyle(.green)
-        }
-        .tag(MacSidebarItem.libraryDownloaded)
-
-        Label {
-          Text("Latest Episodes")
-        } icon: {
-          Image(systemName: "clock.fill")
-            .foregroundStyle(.blue)
-        }
-        .tag(MacSidebarItem.libraryLatest)
-
-        // Shows live counts from TranscriptManager.shared.activeJobs.
-        // Isolated subview so progress ticks don't invalidate the whole sidebar.
-        TranscribingSidebarLabel()
-          .tag(MacSidebarItem.libraryTranscribing)
-      }
-
-      Section("Discover") {
-        Label("Search", systemImage: "magnifyingglass")
-          .tag(MacSidebarItem.search)
-      }
-    }
-    .listStyle(.sidebar)
+    MacSidebar(selection: $selectedSidebarItem)
     .navigationTitle("Podcasts")
     .onChange(of: selectedSidebarItem) { _, _ in
       // Reset the navigation path so any pushed view (e.g. EpisodeDetail) is
@@ -295,38 +237,6 @@ struct MacContentView: View {
 
   // MARK: - Notification Navigation
 
-  // Sidebar label for the Transcribing destination. Observes TranscriptManager
-  // in isolation so progress ticks don't invalidate the entire sidebar List.
-  // The label is always present (so the row is consistently selectable) but
-  // its trailing badge only appears when there are jobs to surface.
-  private struct TranscribingSidebarLabel: View {
-    @State private var manager = TranscriptManager.shared
-
-    var body: some View {
-      let count = manager.activeJobCount
-      Label {
-        HStack {
-          Text("Transcribing")
-          Spacer()
-          if count > 0 {
-            Text("\(count)")
-              .font(.caption2.monospacedDigit())
-              .padding(.horizontal, 6)
-              .padding(.vertical, 1)
-              // Not `.background(.tint) + .foregroundStyle(.white)`: the
-              // shipped accent is white in dark mode, so the count was white
-              // on white.
-              .accentFilled(in: .capsule)
-          }
-        }
-      } icon: {
-        Image(systemName: "waveform.badge.plus")
-          .foregroundStyle(count > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
-          .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: count > 0)
-      }
-    }
-  }
-
   private func handleNotificationNavigation(target: NotificationNavigationTarget) {
     defer { notificationManager.clearNavigation() }
     guard let result = notificationManager.findEpisode(
@@ -340,6 +250,136 @@ struct MacContentView: View {
       podcastLanguage: result.language
     ))
   }
+}
+
+// MARK: - Sidebar
+
+/// The sidebar list. Separate from `MacContentView` so it previews on its own,
+/// without the detail column loading live data.
+struct MacSidebar: View {
+  @Binding var selection: MacSidebarItem?
+
+  var body: some View {
+    List(selection: $selection) {
+      Section("Browse") {
+        Label("Home", systemImage: "house")
+          .tag(MacSidebarItem.home)
+
+        Label {
+          Text("Analysis")
+        } icon: {
+          Image(systemName: "sparkles")
+            .foregroundStyle(.purple)
+        }
+        .tag(MacSidebarItem.analysis)
+      }
+
+      Section("Library") {
+        Label {
+          Text("Your Podcasts")
+        } icon: {
+          Image(systemName: "square.stack")
+            .foregroundStyle(.blue)
+        }
+        .tag(MacSidebarItem.libraryPodcasts)
+
+        Label {
+          Text("Saved")
+        } icon: {
+          Image(systemName: "star.fill")
+            .foregroundStyle(.yellow)
+        }
+        .tag(MacSidebarItem.librarySaved)
+
+        Label {
+          Text("Downloaded")
+        } icon: {
+          Image(systemName: "arrow.down.circle.fill")
+            .foregroundStyle(.green)
+        }
+        .tag(MacSidebarItem.libraryDownloaded)
+
+        Label {
+          Text("Latest Episodes")
+        } icon: {
+          Image(systemName: "clock.fill")
+            .foregroundStyle(.blue)
+        }
+        .tag(MacSidebarItem.libraryLatest)
+
+        // Shows live counts from TranscriptManager.shared.activeJobs.
+        // Isolated subview so progress ticks don't invalidate the whole sidebar.
+        TranscribingSidebarLabel()
+          .tag(MacSidebarItem.libraryTranscribing)
+      }
+
+      Section("Discover") {
+        Label("Search", systemImage: "magnifyingglass")
+          .tag(MacSidebarItem.search)
+      }
+    }
+    // Selection highlight comes from the app accent (AccentColor asset), not
+    // `.tint` — the asset carries a Mac-only grey for dark mode so the
+    // selected row isn't a white bar behind white text.
+    .listStyle(.sidebar)
+  }
+}
+
+// Sidebar label for the Transcribing destination. Observes TranscriptManager
+// in isolation so progress ticks don't invalidate the entire sidebar List.
+// The label is always present (so the row is consistently selectable) but
+// its trailing badge only appears when there are jobs to surface.
+private struct TranscribingSidebarLabel: View {
+  @State private var manager = TranscriptManager.shared
+
+  var body: some View {
+    let count = manager.activeJobCount
+    Label {
+      HStack {
+        Text("Transcribing")
+        Spacer()
+        if count > 0 {
+          Text("\(count)")
+            .font(.caption2.monospacedDigit())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            // Not `.background(.tint) + .foregroundStyle(.white)`: the
+            // shipped accent is white in dark mode, so the count was white
+            // on white.
+            .accentFilled(in: .capsule)
+        }
+      }
+    } icon: {
+      Image(systemName: "waveform.badge.plus")
+        .foregroundStyle(count > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+        .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: count > 0)
+    }
+  }
+}
+
+#Preview("Sidebar") {
+  @Previewable @State var selection: MacSidebarItem? = .home
+  NavigationSplitView {
+    MacSidebar(selection: $selection)
+      .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+      .navigationTitle("Podcasts")
+  } detail: {
+    Text(selection?.rawValue ?? "")
+  }
+  .frame(width: 720, height: 480)
+}
+
+#Preview("Sidebar – Dark") {
+  @Previewable @State var selection: MacSidebarItem? = .home
+  NavigationSplitView {
+    MacSidebar(selection: $selection)
+      .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+      .navigationTitle("Podcasts")
+  } detail: {
+    Text(selection?.rawValue ?? "")
+  }
+  .frame(width: 720, height: 480)
+  .preferredColorScheme(.dark)
 }
 
 #endif
