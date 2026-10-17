@@ -153,6 +153,16 @@ class EnhancedAudioManager: NSObject {
   // during the retry window can't be overridden by the resume retry firing.
   private var playbackStateGeneration: UInt64 = 0
 
+  /// When the current episode was loaded; remote seeks just after are stale.
+  private var episodeLoadedAt = Date.distantPast
+
+  /// When the user paused the current episode, for the resume rewind. Persisted
+  /// so a pause that outlives the process still rewinds on the next launch.
+  private var pausedAt: Date? {
+    get { UserDefaults.standard.object(forKey: Keys.pausedAt) as? Date }
+    set { UserDefaults.standard.set(newValue, forKey: Keys.pausedAt) }
+  }
+
   // Track last values pushed to widget to avoid burning WidgetKit reload budget
   private var lastWidgetAudioURL: String?
   private var lastWidgetIsPlaying: Bool?
@@ -162,6 +172,7 @@ class EnhancedAudioManager: NSObject {
   private var interruptionTask: Task<Void, Never>?
   private var interruptionResumeTask: Task<Void, Never>?
   private var routeChangeTask: Task<Void, Never>?
+  private var mediaServicesResetTask: Task<Void, Never>?
   private var playerEndedTask: Task<Void, Never>?
   private var playerStalledTask: Task<Void, Never>?
   private var playerFailedTask: Task<Void, Never>?
@@ -202,6 +213,7 @@ class EnhancedAudioManager: NSObject {
     static let lastEpisodeDescription = "lastEpisodeDescription"
     static let lastEpisodePubDate = "lastEpisodePubDate"
     static let lastEpisodeGuid = "lastEpisodeGuid"
+    static let pausedAt = "lastPausedAt"
   }
 
   override private init() {
@@ -237,8 +249,7 @@ class EnhancedAudioManager: NSObject {
   private func setupAudioSession() {
     #if os(iOS)
     do {
-      let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playback, mode: .spokenAudio, options: [])
+      try Self.configureSessionCategory()
       // Don't activate session here - only activate when actually playing
       logger.info("Audio session configured (will activate when playing)")
     } catch {
@@ -251,6 +262,12 @@ class EnhancedAudioManager: NSObject {
   }
 
   #if os(iOS)
+  /// `.longFormAudio` tells iOS this is spoken-word playback, so it routes to
+  /// the user's chosen AirPlay/Bluetooth output like Podcasts and Music do.
+  private nonisolated static func configureSessionCategory() throws {
+    try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
+  }
+
   private static let sessionQueue = DispatchQueue(label: "com.podcast.analyzer.audiosession", qos: .userInitiated)
   #endif
 
@@ -262,6 +279,9 @@ class EnhancedAudioManager: NSObject {
     // AVPlayer activates the session itself if play() wins the race.
     Self.sessionQueue.async { [logger] in
       do {
+        // Re-applied every time so a media-services reset (which wipes the
+        // category) heals on the next play.
+        try Self.configureSessionCategory()
         try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
         logger.info("Audio session activated")
       } catch {
@@ -306,6 +326,18 @@ class EnhancedAudioManager: NSObject {
         self.pause()
       }
     }
+    // The media server crashed and restarted: every AVPlayer and the session
+    // configuration are dead. Drop the player (keeping episode and position)
+    // so the next play rebuilds it, instead of silently doing nothing.
+    mediaServicesResetTask = Task { @MainActor [weak self] in
+      for await _ in NotificationCenter.default.notifications(named: AVAudioSession.mediaServicesWereResetNotification) {
+        guard let self else { return }
+        self.logger.warning("Media services were reset — rebuilding player on next play")
+        self.cleanup()
+        self.isPlaying = false
+        self.updateNowPlayingPlaybackRate()
+      }
+    }
     logger.info("Audio interruption observer configured")
     #endif
   }
@@ -321,6 +353,12 @@ private func handleAudioInterruption(_ notification: Notification) {
 
     switch type {
     case .began:
+        // A disconnected route (headphones out) arrives as an interruption with
+        // no matching .ended; the route-change observer already pauses for it.
+        if let reasonValue = userInfo[AVAudioSessionInterruptionReasonKey] as? UInt,
+           AVAudioSession.InterruptionReason(rawValue: reasonValue) == .routeDisconnected {
+            return
+        }
         // 1. Mark our state BEFORE we call pause()
         wasPlayingBeforeInterruption = isPlaying
 
@@ -328,6 +366,7 @@ private func handleAudioInterruption(_ notification: Notification) {
             // We use a local pause here to stop the player
             // but we don't necessarily want to treat this as a "user-stop"
             player?.pause()
+            pausedAt = Date()  // a long call earns the same rewind as a long pause
             isPlaying = false
             updateNowPlayingPlaybackRate()
             logger.info("Interruption began: Audio paused")
@@ -344,8 +383,11 @@ private func handleAudioInterruption(_ notification: Notification) {
             }
         }
 
-        // If system says yes OR our manual state says we were playing
-        let finalDecisionToResume = shouldResume || wasPlayingBeforeInterruption
+        // Both: we were playing, and the system says resuming is appropriate.
+        // Without the system hint (Siri, another media app took over) resuming
+        // would blast audio over whatever the user switched to; without our
+        // flag, an interruption while paused would start playback.
+        let finalDecisionToResume = shouldResume && wasPlayingBeforeInterruption
 
         if finalDecisionToResume {
             // 3. Session reactivation happens in resume() → activateAudioSession().
@@ -402,6 +444,13 @@ private func handleAudioInterruption(_ notification: Notification) {
     // Remote command handlers run on arbitrary queues, so dispatch to MainActor
     commandCenter.playCommand.isEnabled = true
     commandCenter.playCommand.addTarget { [weak self] _ in
+      #if os(iOS)
+      // A car head unit sends Play on connect. If another app's audio is
+      // already playing, starting over it is not what the user asked for.
+      if AVAudioSession.sharedInstance().secondaryAudioShouldBeSilencedHint {
+        return .commandFailed
+      }
+      #endif
       Task { @MainActor in self?.resume() }
       return .success
     }
@@ -452,7 +501,16 @@ private func handleAudioInterruption(_ notification: Notification) {
         return .commandFailed
       }
       let position = event.positionTime
-      Task { @MainActor in self?.seek(to: position) }
+      Task { @MainActor in
+        guard let self else { return }
+        // Car and Bluetooth head units replay their last known position just
+        // after a track change — a seek meant for the previous episode.
+        guard Date().timeIntervalSince(self.episodeLoadedAt) > 2 else {
+          self.logger.info("Ignoring remote seek right after an episode change")
+          return
+        }
+        self.seek(to: position)
+      }
       return .success
     }
   }
@@ -557,7 +615,13 @@ private func handleAudioInterruption(_ notification: Notification) {
       playbackRate = overrides.speed
     }
 
-    let playerItem = AVPlayerItem(url: url)
+    // Precise timing makes VBR MP3 durations and seeks exact (caption sync,
+    // resume position, the 30s played threshold). Local files only: on a stream
+    // it can mean reading far into the file before playback starts.
+    let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: url.isFileURL])
+    let playerItem = AVPlayerItem(asset: asset)
+    // ponytail: 10 min ≈ 10 MB of podcast audio — enough to ride out a tunnel.
+    playerItem.preferredForwardBufferDuration = 600
     if let player {
       // Swap the item instead of building a new player. Tearing the old one
       // down left a moment with no player at all, and in the background iOS
@@ -571,6 +635,8 @@ private func handleAudioInterruption(_ notification: Notification) {
     }
     player?.volume = volume
     currentEpisode = episode
+    episodeLoadedAt = Date()
+    pausedAt = nil
 
     // Update Now Playing info with cached duration (will be refined when AVPlayer reports actual duration)
     updateNowPlayingInfo(imageURL: imageURL ?? episode.imageURL)
@@ -606,6 +672,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   func pause() {
     playbackStateGeneration &+= 1
     player?.pause()
+    if isPlaying { pausedAt = Date() }
     isPlaying = false
     updateNowPlayingPlaybackRate()
     savePlaybackState()
@@ -613,8 +680,28 @@ private func handleAudioInterruption(_ notification: Notification) {
     updateWidgetPlaybackData()
   }
 
+  /// Seconds to step back when resuming after a pause, so the listener
+  /// regains the thread. Nothing for short pauses.
+  nonisolated static func resumeRewind(afterPause pause: TimeInterval) -> TimeInterval {
+    switch pause {
+    case ..<60: 0
+    case ..<3600: 5
+    case ..<86_400: 15
+    default: 30
+    }
+  }
+
   func resume() {
     playbackStateGeneration &+= 1
+    if let pausedAt {
+      self.pausedAt = nil
+      let rewind = Self.resumeRewind(afterPause: Date().timeIntervalSince(pausedAt))
+      if rewind > 0, currentTime > 0 {
+        logger.info("Resuming after a long pause — rewinding \(Int(rewind))s")
+        let target = max(currentTime - rewind, 0)
+        if player == nil { currentTime = target } else { seek(to: target) }
+      }
+    }
     // If we have a restored episode but no player, start playback
     if player == nil, let episode = currentEpisode {
       play(
@@ -758,6 +845,33 @@ private func handleAudioInterruption(_ notification: Notification) {
   /// Add an episode to the end of the queue
   private func onQueueChanged() {
     PlaybackStateCoordinator.shared?.saveQueue(queue)
+    prefetchUpcomingQueue()
+  }
+
+  /// Download the next two queued episodes while on Wi-Fi, so the advance —
+  /// often in the background, often off Wi-Fi by then — plays a local file
+  /// instead of depending on the network. Never-attempted episodes only: a
+  /// failed download isn't retried on every queue change.
+  private func prefetchUpcomingQueue() {
+    guard NetworkMonitor.shared.isOnWiFiOrEthernet, !ProcessInfo.processInfo.isLowPowerModeEnabled else { return }
+    for episode in queue.prefix(2) {
+      let state = DownloadManager.shared.getDownloadState(
+        episodeTitle: episode.title, podcastTitle: episode.podcastTitle)
+      guard state == .notDownloaded else { continue }
+      logger.info("Prefetching queued episode \(episode.title)")
+      DownloadManager.shared.downloadEpisode(
+        episode: PodcastEpisodeInfo(
+          title: episode.title,
+          podcastEpisodeDescription: episode.episodeDescription,
+          pubDate: episode.pubDate,
+          audioURL: episode.audioURL,
+          imageURL: episode.imageURL,
+          duration: episode.duration,
+          guid: episode.guid
+        ),
+        podcastTitle: episode.podcastTitle
+      )
+    }
   }
 
   /// Returns false when the episode was not queued — already present, already
@@ -939,12 +1053,15 @@ private func handleAudioInterruption(_ notification: Notification) {
 
   // MARK: - Sleep Timer
 
+  private static let sleepFadeDuration: TimeInterval = 10
+
   /// Set the sleep timer option
   func setSleepTimer(_ option: SleepTimerOption) {
     // Cancel existing timer
     sleepTimerTask?.cancel()
     sleepTimerTask = nil
     sleepTimerOption = option
+    player?.volume = volume  // undo any fade in progress
 
     switch option {
     case .off:
@@ -987,8 +1104,16 @@ private func handleAudioInterruption(_ notification: Notification) {
       return
     }
 
+    // Paused time doesn't count — the timer is about how much you listen.
+    guard isPlaying else { return }
+
     if sleepTimerRemaining > 0 {
       sleepTimerRemaining -= 1
+    }
+
+    // Fade over the last 10 seconds instead of cutting off mid-sentence.
+    if sleepTimerRemaining < Self.sleepFadeDuration {
+      player?.volume = volume * Float(max(sleepTimerRemaining, 0) / Self.sleepFadeDuration)
     }
 
     if sleepTimerRemaining <= 0 {
@@ -1000,6 +1125,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   private func triggerSleepTimer() {
     logger.info("Sleep timer triggered - pausing playback")
     pause()
+    player?.volume = volume
     sleepTimerTask?.cancel()
     sleepTimerTask = nil
     sleepTimerOption = .off
@@ -1078,7 +1204,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   /// or an indefinite live stream).
   private func loadRealDuration(from url: URL) {
     durationLoadTask?.cancel()
-    let asset = AVURLAsset(url: url)
+    let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: url.isFileURL])
     durationLoadTask = Task { [weak self] in
       guard let loaded = try? await asset.load(.duration) else { return }
       let seconds = loaded.seconds
@@ -1573,15 +1699,14 @@ private func handleAudioInterruption(_ notification: Notification) {
     playerEndedTask = Task { @MainActor [weak self, weak playerItem] in
       guard let playerItem else { return }
       for await _ in NotificationCenter.default.notifications(named: .AVPlayerItemDidPlayToEndTime, object: playerItem) {
-        self?.handlePlaybackEnded()
+        self?.handleItemDidPlayToEnd(playerItem)
       }
     }
 
-    // Observe playback stall using Task-based async sequence
-    playerStalledTask = Task { [weak self, weak playerItem] in
+    playerStalledTask = Task { @MainActor [weak self, weak playerItem] in
       guard let playerItem else { return }
       for await _ in NotificationCenter.default.notifications(named: .AVPlayerItemPlaybackStalled, object: playerItem) {
-        self?.logger.warning("Playback stalled")
+        self?.handlePlaybackStalled()
       }
     }
 
@@ -1596,6 +1721,49 @@ private func handleAudioInterruption(_ notification: Notification) {
         self?.handlePlaybackFailure(error: error)
       }
     }
+  }
+
+  // MARK: - Stalls and False Ends
+
+  /// The network ran dry mid-stream. AVPlayer waits for data by itself, but in
+  /// the background nothing audible keeps the app alive while it waits, and
+  /// some stalls never resume on their own — so hold a task assertion and nudge
+  /// the player until it is playing again.
+  private func handlePlaybackStalled() {
+    logger.warning("Playback stalled")
+    guard isPlaying else { return }
+    #if os(iOS)
+    beginPlaybackBackgroundTask("PlaybackStalled")
+    releasePlaybackBackgroundTaskOncePlaying()
+    #endif
+    player?.play()
+    player?.rate = playbackRate
+  }
+
+  /// Episode whose premature end we already retried once.
+  private var falseEndRetryEpisodeId: String?
+
+  /// A dropped stream can post DidPlayToEndTime well before the real end.
+  /// Treating that as finished would mark the episode played and skip to the
+  /// next one, so retry from where it stopped first — once per episode, so a
+  /// file that really is shorter than it claims still completes.
+  /// Streams only: a downloaded file can't drop, and in a VBR MP3 the reported
+  /// position can trail the precise duration, so the retry replayed its tail.
+  private func handleItemDidPlayToEnd(_ item: AVPlayerItem) {
+    let position = item.currentTime().seconds
+    let length = item.duration.seconds
+    let isStream = (item.asset as? AVURLAsset)?.url.isFileURL == false
+    let endedEarly = isStream && isPlaying
+      && length.isFinite && length > 0 && position.isFinite && position < length * 0.95
+    if endedEarly, let episode = currentEpisode, falseEndRetryEpisodeId != episode.id {
+      falseEndRetryEpisodeId = episode.id
+      logger.warning("End reported at \(Int(position))s of \(Int(length))s — retrying from there")
+      player?.seek(to: item.currentTime(), toleranceBefore: .zero, toleranceAfter: .zero)
+      player?.play()
+      player?.rate = playbackRate
+      return
+    }
+    handlePlaybackEnded()
   }
 
   // MARK: - Failure Recovery
@@ -1684,8 +1852,8 @@ private func handleAudioInterruption(_ notification: Notification) {
     // task assertion across the transition or the episode can be left unmarked
     // and the next one never starts.
     #if os(iOS)
-    beginEndOfEpisodeBackgroundTask()
-    defer { releaseEndOfEpisodeBackgroundTaskOncePlaying() }
+    beginPlaybackBackgroundTask("PlaybackEnded")
+    defer { releasePlaybackBackgroundTaskOncePlaying() }
     #endif
 
     isPlaying = false
@@ -1767,34 +1935,37 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   #if os(iOS)
-  private var endOfEpisodeBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+  /// Held while nothing is audible but playback should resume: an episode
+  /// ending and the next one starting, or a stream stalled on the network.
+  /// Without audio, the background audio mode alone won't keep us running.
+  private var playbackBackgroundTask: UIBackgroundTaskIdentifier = .invalid
 
-  private func beginEndOfEpisodeBackgroundTask() {
-    endEndOfEpisodeBackgroundTask()
-    endOfEpisodeBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "PlaybackEnded") { [weak self] in
-      MainActor.assumeIsolated { self?.endEndOfEpisodeBackgroundTask() }
+  private func beginPlaybackBackgroundTask(_ name: String) {
+    endPlaybackBackgroundTask()
+    playbackBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+      MainActor.assumeIsolated { self?.endPlaybackBackgroundTask() }
     }
   }
 
-  /// Ending the assertion when `handlePlaybackEnded` returns is too early: a
-  /// streamed next episode is still buffering, nothing is audible yet, and iOS
-  /// suspends us before it starts. Keep it until the player is actually
-  /// playing, or nothing is going to play.
-  private func releaseEndOfEpisodeBackgroundTaskOncePlaying() {
+  /// Ending the assertion when the caller returns is too early: a streamed
+  /// episode is still buffering, nothing is audible yet, and iOS suspends us
+  /// before it starts. Keep it until the player is actually playing, or
+  /// nothing is going to play.
+  private func releasePlaybackBackgroundTaskOncePlaying() {
     Task { [weak self] in
       // ponytail: 0.5s poll, at most 30s (the assertion's own budget) — runs once per episode end.
       for _ in 0..<60 {
         guard let self, self.isPlaying, self.player?.timeControlStatus != .playing else { break }
         try? await Task.sleep(for: .milliseconds(500))
       }
-      self?.endEndOfEpisodeBackgroundTask()
+      self?.endPlaybackBackgroundTask()
     }
   }
 
-  private func endEndOfEpisodeBackgroundTask() {
-    guard endOfEpisodeBackgroundTask != .invalid else { return }
-    UIApplication.shared.endBackgroundTask(endOfEpisodeBackgroundTask)
-    endOfEpisodeBackgroundTask = .invalid
+  private func endPlaybackBackgroundTask() {
+    guard playbackBackgroundTask != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(playbackBackgroundTask)
+    playbackBackgroundTask = .invalid
   }
   #endif
 

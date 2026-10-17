@@ -221,6 +221,215 @@ struct EpisodeAdvance {
         }
     }
 
+    /// A short AAC file on disk, like a downloaded episode.
+    private func localAudioFile(seconds: Double) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("advance-\(UUID().uuidString).m4a")
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
+        let file = try AVAudioFile(forWriting: url, settings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1,
+        ])
+        let frames = AVAudioFrameCount(seconds * 44_100)
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+        buffer.frameLength = frames
+        try file.write(from: buffer)
+        return url
+    }
+
+    @Test("A downloaded episode that plays to its real end stops and stays stopped")
+    func localFileEndDoesNotReplay() async throws {
+        try await withCleanManager(autoPlay: false) {
+            let url = try localAudioFile(seconds: 2)
+            defer { try? FileManager.default.removeItem(at: url) }
+            let ep = episode("Local")
+            manager.play(episode: ep, audioURL: url.absoluteString)
+
+            // Real playback to the real end, no posted notification.
+            for _ in 0..<100 where manager.isPlaying {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            #expect(!manager.isPlaying, "the episode ended")
+            try await Task.sleep(for: .seconds(2))
+
+            #expect(!manager.isPlaying, "nothing restarted it")
+            #expect(manager.player?.timeControlStatus != .playing)
+            #expect(manager.currentTime == 0)
+        }
+    }
+
+    @Test("An early end report on a downloaded file completes it instead of replaying")
+    func localFileEarlyEndCompletes() async throws {
+        try await withCleanManager(autoPlay: false) {
+            let url = try localAudioFile(seconds: 30)
+            defer { try? FileManager.default.removeItem(at: url) }
+            manager.play(episode: episode("Local"), audioURL: url.absoluteString)
+
+            // Wait until it's really playing, so the item knows its duration.
+            for _ in 0..<50 where !(manager.player?.currentItem?.duration.seconds.isFinite ?? false)
+                || (manager.player?.currentTime().seconds ?? 0) < 0.5 {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            // Ends "at 0.5s of 30s": a stream would be retried, a file is done.
+            try await finishCurrentEpisode()
+            try await Task.sleep(for: .milliseconds(300))
+
+            #expect(!manager.isPlaying)
+            #expect(manager.player?.timeControlStatus != .playing)
+            #expect(manager.currentTime == 0)
+        }
+    }
+
+    // MARK: - Finish action, downloaded vs streamed
+
+    enum Source: String, CaseIterable, CustomTestStringConvertible {
+        case downloaded, streamed
+        var testDescription: String { rawValue }
+    }
+
+    /// Starts `title` from a local file or a remote URL. A downloaded one is
+    /// played until the item has loaded, so its end is judged against its
+    /// real length. Returns the temp file to delete, if any.
+    @discardableResult
+    private func start(_ title: String, from source: Source) async throws -> URL? {
+        let ep = episode(title)
+        guard source == .downloaded else {
+            start(ep)
+            return nil
+        }
+        let url = try localAudioFile(seconds: 30)
+        manager.play(episode: ep, audioURL: url.absoluteString)
+        for _ in 0..<50 where !(manager.player?.currentItem?.duration.seconds.isFinite ?? false)
+            || (manager.player?.currentTime().seconds ?? 0) < 0.3 {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        return url
+    }
+
+    @Test("Finishing with nothing next stops at the start and keeps the episode loaded", arguments: Source.allCases)
+    func finishStopsAtStart(source: Source) async throws {
+        try await withCleanManager(autoPlay: false) {
+            let file = try await start("A", from: source)
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+            manager.autoPlayCandidates = [episode("A"), episode("C")]
+
+            try await finishCurrentEpisode()
+            try await Task.sleep(for: .milliseconds(500))
+
+            #expect(!manager.isPlaying)
+            #expect(manager.player?.timeControlStatus != .playing, "nothing restarted it")
+            #expect(manager.currentEpisode?.title == "A")
+            #expect(manager.currentTime == 0)
+            #expect(!manager.autoPlayCandidates.contains { $0.title == "A" }, "the finished episode is dropped even with autoplay off")
+        }
+    }
+
+    @Test("Finishing writes a forced position == duration, which marks it played", arguments: Source.allCases)
+    func finishMarksPlayed(source: Source) async throws {
+        try await withCleanManager(autoPlay: false) {
+            let file = try await start("A", from: source)
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+            var updates: [PlaybackPositionUpdate] = []
+            let observer = NotificationCenter.default.addObserver(
+                forName: .playbackPositionDidUpdate, object: nil, queue: nil
+            ) { note in
+                let update = note.userInfo?["update"] as? PlaybackPositionUpdate
+                MainActor.assumeIsolated { update.map { updates.append($0) } }
+            }
+            defer { NotificationCenter.default.removeObserver(observer) }
+
+            try await finishCurrentEpisode()
+
+            let final = try #require(updates.last { $0.episodeTitle == "A" })
+            #expect(final.duration > 0)
+            #expect(final.position == final.duration)
+            #expect(final.forceSync)
+        }
+    }
+
+    @Test("Finishing plays the next queued episode on the same player", arguments: Source.allCases)
+    func finishPlaysQueued(source: Source) async throws {
+        try await withCleanManager(autoPlay: false) {
+            let file = try await start("A", from: source)
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+            let player = try #require(manager.player)
+            manager.queue = [episode("B")]
+
+            try await finishCurrentEpisode()
+
+            #expect(manager.currentEpisode?.title == "B")
+            #expect(manager.isPlaying)
+            #expect(manager.queue.isEmpty)
+            #expect(manager.player === player)
+        }
+    }
+
+    @Test("Finishing with autoplay on plays the top suggestion", arguments: Source.allCases)
+    func finishAutoplays(source: Source) async throws {
+        try await withCleanManager(autoPlay: true) {
+            let file = try await start("A", from: source)
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+
+            let expected = try await finishCurrentEpisode(offering: [episode("A"), episode("C")])
+
+            #expect(expected != nil)
+            #expect(manager.currentEpisode?.id == expected?.id)
+            #expect(manager.currentEpisode?.title != "A", "never replays the finished one")
+            #expect(manager.isPlaying)
+        }
+    }
+
+    @Test("Finishing with autoplay on but no suggestions stops at the start", arguments: Source.allCases)
+    func finishAutoplayWithNothingStops(source: Source) async throws {
+        try await withCleanManager(autoPlay: true) {
+            let file = try await start("A", from: source)
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+
+            try await finishCurrentEpisode(offering: [episode("A")])
+
+            #expect(!manager.isPlaying)
+            #expect(manager.currentEpisode?.title == "A")
+            #expect(manager.currentTime == 0)
+        }
+    }
+
+    @Test("Sleep timer 'end of episode' stops at the finish", arguments: Source.allCases)
+    func finishWithSleepTimerStops(source: Source) async throws {
+        try await withCleanManager(autoPlay: true) {
+            let file = try await start("A", from: source)
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+            manager.queue = [episode("B")]
+            manager.setSleepTimer(.endOfEpisode)
+
+            try await finishCurrentEpisode()
+
+            #expect(!manager.isPlaying)
+            #expect(manager.queue.map(\.title) == ["B"])
+            #expect(manager.sleepTimerOption == .off)
+        }
+    }
+
+    @Test("Tapping play on a finished episode replays it from the start", arguments: Source.allCases)
+    func replayAfterFinish(source: Source) async throws {
+        try await withCleanManager(autoPlay: false) {
+            let file = try await start("A", from: source)
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+            try await finishCurrentEpisode()
+            let ep = try #require(manager.currentEpisode)
+
+            manager.play(episode: ep, audioURL: ep.audioURL)
+
+            #expect(manager.isPlaying)
+            #expect(manager.currentTime < 1)
+        }
+    }
+
+    @Test("Resuming rewinds more the longer the pause was", arguments: [
+        (30.0, 0.0), (59.0, 0.0), (60.0, 5.0), (3599.0, 5.0),
+        (3600.0, 15.0), (86_399.0, 15.0), (86_400.0, 30.0), (604_800.0, 30.0),
+    ])
+    func resumeRewindScalesWithPause(pause: TimeInterval, rewind: TimeInterval) {
+        #expect(EnhancedAudioManager.resumeRewind(afterPause: pause) == rewind)
+    }
+
     @Test("Stopping tears the player down; the next play builds a fresh one")
     func stopReleasesPlayer() async throws {
         try await withCleanManager(autoPlay: false) {
