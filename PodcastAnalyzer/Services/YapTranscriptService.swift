@@ -89,6 +89,19 @@ actor YapTranscriptService {
         )
     }
 
+    /// Probes `/health` before a job is submitted. The submit and upload run on
+    /// `URLSession.shared`, so an absent server (Mac asleep, other network)
+    /// cost a 60s wait per job — and an upload started for nothing. This fails
+    /// within `AIProbe.timeout` instead. A probe timing out means the host
+    /// isn't there, not that it's busy, so it's reported as unreachable.
+    func ensureReachable(baseURL: URL, apiKey: String?) async throws {
+        do {
+            _ = try await fetchHealth(baseURL: baseURL, apiKey: apiKey)
+        } catch let error as URLError where error.code == .timedOut {
+            throw URLError(.cannotConnectToHost)
+        }
+    }
+
     private func fetchHealth(baseURL: URL, apiKey: String?) async throws -> String {
         let url = baseURL.appending(path: "health")
         var request = URLRequest(url: url)

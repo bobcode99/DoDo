@@ -636,6 +636,7 @@ class TranscriptManager {
 
         let yapService = YapTranscriptService()
         let jobID = job.id
+        try await yapService.ensureReachable(baseURL: base, apiKey: key)
 
         // Submit first, then store the server job ID synchronously on the @MainActor
         // before polling begins — this eliminates the race where cancel() fires
