@@ -13,7 +13,7 @@ struct ImportShortcutInstructionsView: View {
   @Environment(\.openURL) private var openURL
 
   /// iCloud link to the "ApplePodcast to Dodo" shortcut.
-  private let shortcutLink = URL(string: "https://www.icloud.com/shortcuts/6063d502abc24d92951f4d8dbcfddd64")!
+  private let shortcutLink = URL(string: "https://github.com/bobcode99/DoDo/raw/refs/heads/main/Shortcuts/ApplePodcast%20To%20DoDo.shortcut")!
   /// Runs the installed shortcut by name.
   private let runLink = URL(string: "shortcuts://run-shortcut?name=ApplePodcast%20to%20Dodo")!
 
