@@ -25,6 +25,9 @@ final class HomeViewModel {
   var upNextEpisodes: [LibraryEpisode] = []
   // Scored version — used by HomeView cards to show reason badges
   var scoredUpNextEpisodes: [ScoredEpisode] = []
+  /// False until the first full Up Next load lands, so the section can tell
+  /// "still loading" from "nothing to suggest" instead of flashing its empty state.
+  private(set) var hasLoadedUpNext = false
   /// Stable ID list for `.animation(value:)` — avoids allocating a new array in view body.
   var scoredUpNextIDs: [String] { scoredUpNextEpisodes.map(\.id) }
 
@@ -263,6 +266,7 @@ final class HomeViewModel {
   func setModelContext(_ context: ModelContext) {
     self.modelContext = context
     isHomeVisible = true
+    seedUpNextWithCurrentEpisode(context: context)
     // Restart long-lived observers that cleanup() may have cancelled on tab switch.
     restartObserversIfNeeded()
     if !hasLoadedInitialContent {
@@ -274,6 +278,26 @@ final class HomeViewModel {
         await self.refreshDiscoveryContent(forceRefresh: true)
       }
     }
+  }
+
+  /// The first frame shows what the user was listening to, read straight from
+  /// the store (one keyed fetch, no feed decoding). The scored list replaces it
+  /// when `loadAll()` lands.
+  private func seedUpNextWithCurrentEpisode(context: ModelContext) {
+    guard !hasLoadedUpNext, upNextEpisodes.isEmpty else { return }
+    let audioManager = EnhancedAudioManager.shared
+    audioManager.restoreLastEpisode()  // idempotent; ContentView may not have run it yet
+    guard let current = audioManager.currentEpisode else { return }
+    let key = Self.makeEpisodeKey(podcastTitle: current.podcastTitle, episodeTitle: current.title)
+    let model = try? context.fetch(
+      FetchDescriptor<EpisodeDownloadModel>(predicate: #Predicate { $0.id == key })
+    ).first
+    guard model?.isCompleted != true else { return }
+    let episode = Self.makeLibraryEpisode(from: current, model: model)
+    upNextEpisodes = [episode]
+    scoredUpNextEpisodes = [ScoredEpisode(
+      episode: episode, downloadModel: model,
+      score: .infinity, reason: .none, progressRatio: model?.progress ?? 0)]
   }
 
   /// Restart notification-observer tasks that are cancelled by cleanup() on tab switch.
@@ -569,6 +593,7 @@ extension HomeViewModel {
     }
 
     upNextEpisodes = result
+    hasLoadedUpNext = true
     scoredUpNextEpisodes = result.compactMap { episode in
       if let existing = scoredByKey[episode.id] { return existing }
       return ScoredEpisode(episode: episode, downloadModel: modelsByKey[episode.id],

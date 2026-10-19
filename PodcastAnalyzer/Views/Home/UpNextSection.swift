@@ -21,10 +21,10 @@ struct UpNextSection: View {
       header
         .padding(.horizontal)
 
-      if viewModel.upNextEpisodes.isEmpty {
-        emptyState
-      } else {
+      if !viewModel.upNextEpisodes.isEmpty {
         carousel
+      } else if viewModel.hasLoadedUpNext {
+        emptyState
       }
     }
   }
