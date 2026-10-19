@@ -3187,18 +3187,18 @@
         }
       }
     },
-    "Can't Play Offline" : {
+    "Can't Play Episode" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法离线播放"
+            "value" : "无法播放单集"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法離線播放"
+            "value" : "無法播放單集"
           }
         }
       }

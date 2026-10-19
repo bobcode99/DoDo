@@ -129,14 +129,14 @@ struct iOSContentView: View { // "iOS" keeps Apple's casing
       }
     }
     .task {
-      // Surface "no network + no local copy" refusals from EnhancedAudioManager
-      // as an in-app alert so users don't see the system "Cellular Data Is
-      // Turned Off" prompt that AVPlayer would otherwise trigger.
+      // Surface playback failures from EnhancedAudioManager (offline with no
+      // local copy, dead URL, corrupt audio) as an in-app alert, so users don't
+      // see the system "Cellular Data Is Turned Off" prompt AVPlayer would show.
       for await notification in NotificationCenter.default.notifications(
         named: .audioPlaybackUnavailable)
       {
         if let message = notification.userInfo?["message"] as? String {
-          playbackAlert = (title: "Can't Play Offline", message: message)
+          playbackAlert = (title: "Can't Play Episode", message: message)
         }
       }
     }

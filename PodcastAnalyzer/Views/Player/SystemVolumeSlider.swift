@@ -1,7 +1,6 @@
 #if os(iOS)
 import MediaPlayer
 import SwiftUI
-import UIKit
 
 /// Wraps MPVolumeView for system volume control in SwiftUI, styled to match
 /// ThumblessSlider in SmoothScrubber: 4pt capsule track with a solid filled

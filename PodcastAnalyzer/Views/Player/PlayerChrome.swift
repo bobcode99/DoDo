@@ -29,7 +29,7 @@ struct PlayerVolumeRow: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
             SystemVolumeSlider()
-                .frame(height: 32)
+                .frame(height: 44)
             Image(systemName: "speaker.wave.3.fill")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)

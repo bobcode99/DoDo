@@ -13,7 +13,6 @@ import SwiftUI
 
 enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
   case home = "Home"
-  case library = "Library"
   case analysis = "Analysis"
   case search = "Search"
   // Library sub-items with unique identifiers
@@ -24,21 +23,6 @@ enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
   case libraryTranscribing = "Library.Transcribing"
 
   var id: String { rawValue }
-
-  var iconName: String {
-    switch self {
-    case .home: return "house"
-    case .library: return "books.vertical"
-    case .analysis: return "sparkles"
-    case .search: return "magnifyingglass"
-    case .libraryPodcasts: return "square.stack"
-    case .librarySaved: return "star.fill"
-    case .libraryDownloaded: return "arrow.down.circle.fill"
-    case .libraryLatest: return "clock.fill"
-    case .libraryTranscribing: return "waveform.badge.plus"
-    }
-  }
-
 }
 
 // MARK: - Main Content View
@@ -69,8 +53,23 @@ struct MacContentView: View {
     @Bindable var importManager = importManager
 
     NavigationSplitView(columnVisibility: $columnVisibility) {
-      sidebarContent
+      MacSidebar(selection: $selectedSidebarItem)
+        .navigationTitle("Podcasts")
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+        .onChange(of: selectedSidebarItem) {
+          // Reset the navigation path so any pushed view (e.g. EpisodeDetail) is
+          // dismissed — this ensures onDisappear fires and ViewModels are cleaned up.
+          navigationPath = NavigationPath()
+        }
+        .toolbar {
+          ToolbarItem(placement: .primaryAction) {
+            SettingsLink {
+              Label("Settings", systemImage: "gearshape")
+            }
+            .labelStyle(.iconOnly)
+            .help("Settings")
+          }
+        }
     } detail: {
       mainContent
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -111,32 +110,9 @@ struct MacContentView: View {
         }
       }
     }
-    .alert("Can't Play Offline", item: $playbackAlertMessage) { _ in
-      Button("OK", role: .cancel) {}
+    .alert("Can't Play Episode", item: $playbackAlertMessage) { _ in
     } message: { message in
       Text(message)
-    }
-  }
-
-  // MARK: - Sidebar Content
-
-  @ViewBuilder
-  private var sidebarContent: some View {
-    MacSidebar(selection: $selectedSidebarItem)
-    .navigationTitle("Podcasts")
-    .onChange(of: selectedSidebarItem) { _, _ in
-      // Reset the navigation path so any pushed view (e.g. EpisodeDetail) is
-      // dismissed — this ensures onDisappear fires and ViewModels are cleaned up.
-      navigationPath = NavigationPath()
-    }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        SettingsLink {
-          Label("Settings", systemImage: "gearshape")
-        }
-        .labelStyle(.iconOnly)
-        .help("Settings")
-      }
     }
   }
 
@@ -160,9 +136,6 @@ struct MacContentView: View {
           MacLibraryLatestView()
         case .libraryTranscribing:
           TranscriptGenerationProgressOverallView(embedNavigationStack: false)
-        case .library:
-          // Fallback to podcasts if somehow .library is selected
-          MacLibraryPodcastsView()
 
         case .search:
           MacSearchView()
@@ -327,33 +300,21 @@ struct MacSidebar: View {
 
 // Sidebar label for the Transcribing destination. Observes TranscriptManager
 // in isolation so progress ticks don't invalidate the entire sidebar List.
-// The label is always present (so the row is consistently selectable) but
-// its trailing badge only appears when there are jobs to surface.
+// The row is always present (so it's consistently selectable); the system
+// badge hides itself at 0.
 private struct TranscribingSidebarLabel: View {
   @State private var manager = TranscriptManager.shared
 
   var body: some View {
     let count = manager.activeJobCount
     Label {
-      HStack {
-        Text("Transcribing")
-        Spacer()
-        if count > 0 {
-          Text("\(count)")
-            .font(.caption2.monospacedDigit())
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            // Not `.background(.tint) + .foregroundStyle(.white)`: the
-            // shipped accent is white in dark mode, so the count was white
-            // on white.
-            .accentFilled(in: .capsule)
-        }
-      }
+      Text("Transcribing")
     } icon: {
       Image(systemName: "waveform.badge.plus")
         .foregroundStyle(count > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
         .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: count > 0)
     }
+    .badge(count)
   }
 }
 
