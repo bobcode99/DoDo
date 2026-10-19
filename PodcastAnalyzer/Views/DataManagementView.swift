@@ -275,13 +275,10 @@ struct DataManagementView: View {
     ) { result in
       handleBackupImport(result)
     }
-    .alert("Backup Error", isPresented: Binding(
-      get: { backupErrorAlert != nil },
-      set: { if !$0 { backupErrorAlert = nil } }
-    )) {
-      Button("OK", role: .cancel) { backupErrorAlert = nil }
-    } message: {
-      Text(backupErrorAlert ?? "")
+    .alert("Backup Error", item: $backupErrorAlert) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { error in
+      Text(error)
     }
     .navigationTitle("Data Management")
     #if os(iOS)
@@ -451,12 +448,10 @@ struct DataManagementView: View {
       // Clear SwiftData records
       let descriptor = FetchDescriptor<EpisodeDownloadModel>()
       if let episodes = try? modelContext.fetch(descriptor) {
-        for episode in episodes {
-          if episode.localAudioPath != nil {
-            episode.localAudioPath = nil
-            episode.downloadedDate = nil
-            episode.fileSize = 0
-          }
+        for episode in episodes where episode.localAudioPath != nil {
+          episode.localAudioPath = nil
+          episode.downloadedDate = nil
+          episode.fileSize = 0
         }
         modelContext.saveOrLog()
       }
@@ -496,6 +491,11 @@ struct DataManagementView: View {
     }
   }
 
+}
+
+// Export/import actions, split from the struct body to keep it readable; same
+// file, so they still reach the view's private state.
+extension DataManagementView {
   // MARK: - Diagnostic Export
 
   private func exportDiagnosticReport() {
@@ -654,27 +654,27 @@ struct BackupProgressSheet: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
   }
 
-  private func summaryContent(_ s: BackupService.ImportSummary) -> some View {
+  private func summaryContent(_ summary: BackupService.ImportSummary) -> some View {
     List {
       Section("Podcasts") {
-        statRow("Subscribed", value: "\(s.podcastsAdded) added · \(s.podcastsMerged) already in library")
-        if s.podcastsFailed > 0 {
-          statRow("Failed", value: "\(s.podcastsFailed)").foregroundStyle(.red)
+        statRow("Subscribed", value: "\(summary.podcastsAdded) added · \(summary.podcastsMerged) already in library")
+        if summary.podcastsFailed > 0 {
+          statRow("Failed", value: "\(summary.podcastsFailed)").foregroundStyle(.red)
         }
       }
       Section("Episode History") {
-        statRow("New episodes", value: "\(s.episodesInserted)")
-        statRow("Merged", value: "\(s.episodesUpdated)")
+        statRow("New episodes", value: "\(summary.episodesInserted)")
+        statRow("Merged", value: "\(summary.episodesUpdated)")
       }
       Section("Other") {
-        statRow("Queue items", value: "\(s.queueReplaced)")
-        statRow("AI analyses", value: "\(s.analysesUpserted)")
-        statRow("Settings", value: "\(s.settingsApplied)")
+        statRow("Queue items", value: "\(summary.queueReplaced)")
+        statRow("AI analyses", value: "\(summary.analysesUpserted)")
+        statRow("Settings", value: "\(summary.settingsApplied)")
       }
-      if !s.warnings.isEmpty {
+      if !summary.warnings.isEmpty {
         Section("Warnings") {
-          ForEach(s.warnings.indices, id: \.self) { idx in
-            Text(s.warnings[idx])
+          ForEach(summary.warnings.indices, id: \.self) { idx in
+            Text(summary.warnings[idx])
               .font(.caption)
               .foregroundStyle(.secondary)
           }

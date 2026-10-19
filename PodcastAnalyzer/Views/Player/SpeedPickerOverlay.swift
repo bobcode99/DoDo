@@ -18,7 +18,9 @@ struct SpeedPickerOverlay: View {
 
   @State private var showAllSpeeds = false
   @State private var sliderValue: Float
-  @State private var lastHapticSpeed: Float = 0
+  // No inline default — set once in init. With SDK 27's @State macro an inline
+  // value plus an init assignment is unsupported (the body may see the inline 0).
+  @State private var lastHapticSpeed: Float
   @State private var hapticTrigger = false
 
   private let speedStops: [Float] = Formatters.playbackSpeeds

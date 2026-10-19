@@ -13,12 +13,13 @@ import Nuke
 
 /// Call once at app launch to configure Nuke's image pipeline with a persistent data cache.
 func configureImagePipeline() {
-  var config = ImagePipeline.Configuration()
-
-  if let dataCache = try? DataCache(name: "com.podcast.analyzer.images") {
-    dataCache.sizeLimit = 200 * 1024 * 1024
-    config.dataCache = dataCache
-  }
+  // `withDataCache` also turns off the loader's URLCache. The plain
+  // `Configuration()` kept Nuke's 150 MB HTTP cache *and* this DataCache, so
+  // every image was written to disk twice. Same cache name keeps what's stored.
+  var config = ImagePipeline.Configuration.withDataCache(
+    name: "com.podcast.analyzer.images",
+    sizeLimit: 200 * 1024 * 1024
+  )
 
   // `.storeAll` persists both the original bytes *and* the encoded resized
   // variant (CachedArtworkImage adds a Resize processor). With the default
@@ -88,29 +89,21 @@ extension CachedAsyncImage where Content == Image, Placeholder == ProgressView<E
 
 // MARK: - Apple Artwork URL Upgrade
 
-/// Rewrites Apple iTunes/mzstatic artwork URLs to a higher resolution.
+/// Normalizes Apple iTunes/mzstatic artwork URLs to one source size.
 ///
-/// Apple serves podcast artwork at `https://.../{N}x{N}bb.{ext}`; the source
-/// image is the same regardless of the requested size, so requesting a larger
-/// path gives back a sharper image. For non-Apple URLs the string is returned
-/// unchanged.
+/// Apple serves podcast artwork at `https://.../{N}x{N}bb.{ext}` and renders
+/// any `N` from the same master. Every artwork request goes through
+/// `canonical(_:)` so a cover has exactly one URL — and one disk-cache entry —
+/// app-wide. Views downsample locally (Nuke `Resize`). Asking for `size * 3`
+/// per view gave each screen its own URL, so art cached by the list was a miss
+/// on the detail sheet: blank artwork offline. Non-Apple URLs pass through.
 nonisolated enum AppleArtworkURL {
-  /// Cap on the rewritten dimension. Apple's CDN typically serves up to ~3000px.
-  static let maxDimension = 1200
+  /// Largest tile is 200pt @3x. ponytail: one size for all; add a second
+  /// bucket only if a bigger view looks soft (it will miss offline until seen).
+  static let pixels = 600
 
-  /// Returns the URL string rewritten to `targetPixels x targetPixels` if the
-  /// URL matches the Apple `{N}x{N}bb` pattern. Caps the result at `maxDimension`.
-  static func upgrade(_ urlString: String, targetPixels: Int) -> String {
-    let clamped = min(max(targetPixels, 100), maxDimension)
-    guard let regex = try? NSRegularExpression(pattern: "[0-9]{2,4}x[0-9]{2,4}bb") else {
-      return urlString
-    }
-    let range = NSRange(urlString.startIndex..., in: urlString)
-    return regex.stringByReplacingMatches(
-      in: urlString,
-      range: range,
-      withTemplate: "\(clamped)x\(clamped)bb"
-    )
+  static func canonical(_ urlString: String) -> String {
+    urlString.replacing(#/[0-9]{2,4}x[0-9]{2,4}bb/#, with: "\(pixels)x\(pixels)bb")
   }
 }
 
@@ -127,13 +120,9 @@ nonisolated struct CachedArtworkImage: View {
     self.cornerRadius = cornerRadius
   }
 
-  /// Target pixel dimension for the source image — aim for @3x quality so
-  /// retina displays get a sharp result after Nuke downsamples.
-  private var targetPixels: Int { Int(size * 3) }
-
   private var url: URL? {
     guard let urlString else { return nil }
-    return URL(string: AppleArtworkURL.upgrade(urlString, targetPixels: targetPixels))
+    return URL(string: AppleArtworkURL.canonical(urlString))
   }
 
   private var request: ImageRequest? {
@@ -156,8 +145,10 @@ nonisolated struct CachedArtworkImage: View {
       if let image = state.image {
         image.resizable().aspectRatio(contentMode: .fill)
       } else {
+        // Spinner only while a load is in flight — offline, a failed load
+        // used to spin forever.
         Color.gray.opacity(0.2)
-          .overlay(ProgressView().scaleEffect(0.5))
+          .overlay { if state.isLoading { ProgressView().scaleEffect(0.5) } }
       }
     }
     .frame(width: size, height: size)

@@ -53,6 +53,8 @@ class ShortcutsAIService {
     // prompt (shortcut never wrote back). Cleared on every result/error.
     private var pendingClipboardInput: String?
 
+    @ObservationIgnored private var analysisCompletedObserver: NSObjectProtocol?
+
     // Default shortcut name
     static let defaultShortcutName = "PA-WithAIViaGPT" // CHANGE THIS TO THE NAME OF YOUR SHORTCUT
 
@@ -107,7 +109,7 @@ class ShortcutsAIService {
     // MARK: - Setup
 
     private func setupNotificationObserver() {
-        NotificationCenter.default.addObserver(
+        analysisCompletedObserver = NotificationCenter.default.addObserver(
             forName: .shortcutsAnalysisCompleted,
             object: nil,
             queue: .main

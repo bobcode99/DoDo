@@ -90,24 +90,24 @@ enum BackupSettingValue: Codable, Sendable, Equatable {
     case string(String)
 
     init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if let v = try? c.decode(Bool.self) { self = .bool(v); return }
-        if let v = try? c.decode(Int.self) { self = .int(v); return }
-        if let v = try? c.decode(Double.self) { self = .double(v); return }
-        if let v = try? c.decode(String.self) { self = .string(v); return }
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(Bool.self) { self = .bool(value); return }
+        if let value = try? container.decode(Int.self) { self = .int(value); return }
+        if let value = try? container.decode(Double.self) { self = .double(value); return }
+        if let value = try? container.decode(String.self) { self = .string(value); return }
         throw DecodingError.dataCorruptedError(
-            in: c,
+            in: container,
             debugDescription: "Unsupported BackupSettingValue payload"
         )
     }
 
     func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
+        var container = encoder.singleValueContainer()
         switch self {
-        case .bool(let v):   try c.encode(v)
-        case .int(let v):    try c.encode(v)
-        case .double(let v): try c.encode(v)
-        case .string(let v): try c.encode(v)
+        case .bool(let value):   try container.encode(value)
+        case .int(let value):    try container.encode(value)
+        case .double(let value): try container.encode(value)
+        case .string(let value): try container.encode(value)
         }
     }
 
@@ -116,21 +116,21 @@ enum BackupSettingValue: Codable, Sendable, Equatable {
     static func from(_ raw: Any) -> BackupSettingValue? {
         // CFBoolean comes back as NSNumber, but ObjC bridges it to Bool first
         // when checked against Bool — order matters here.
-        if let b = raw as? Bool, (raw as? NSNumber)?.isBool == true { return .bool(b) }
+        if let bool = raw as? Bool, (raw as? NSNumber)?.isBool == true { return .bool(bool) }
         if let i = raw as? Int { return .int(i) }
-        if let d = raw as? Double { return .double(d) }
-        if let f = raw as? Float { return .double(Double(f)) }
-        if let s = raw as? String { return .string(s) }
+        if let double = raw as? Double { return .double(double) }
+        if let float = raw as? Float { return .double(Double(float)) }
+        if let string = raw as? String { return .string(string) }
         return nil
     }
 
     /// Write this value back into UserDefaults under `key`.
     func write(to defaults: UserDefaults, key: String) {
         switch self {
-        case .bool(let v):   defaults.set(v, forKey: key)
-        case .int(let v):    defaults.set(v, forKey: key)
-        case .double(let v): defaults.set(v, forKey: key)
-        case .string(let v): defaults.set(v, forKey: key)
+        case .bool(let value):   defaults.set(value, forKey: key)
+        case .int(let value):    defaults.set(value, forKey: key)
+        case .double(let value): defaults.set(value, forKey: key)
+        case .string(let value): defaults.set(value, forKey: key)
         }
     }
 }

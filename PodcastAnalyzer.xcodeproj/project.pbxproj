@@ -626,7 +626,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if ! command -v swiftlint >/dev/null 2>&1; then\n  echo \"warning: SwiftLint not installed — brew install swiftlint\"\n  exit 0\nfi\n# Reported as warnings only: the repo still carries error-level violations\n# that predate this phase, and a red build on every compile helps nobody.\n# Drop the sed once `swiftlint lint --quiet` exits clean.\nswiftlint lint --quiet --config \"$SRCROOT/.swiftlint.yml\" | sed 's/error:/warning:/'\n";
+			shellScript = "# Xcode scripts don't inherit the shell PATH; add Homebrew (Apple Silicon + Intel).\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nif ! command -v swiftlint >/dev/null 2>&1; then\n  echo \"warning: SwiftLint not installed — brew install swiftlint\"\n  exit 0\nfi\n# Reported as warnings only: the repo still carries error-level violations\n# that predate this phase, and a red build on every compile helps nobody.\n# Drop the sed once `swiftlint lint --quiet` exits clean.\nswiftlint lint --quiet --config \"$SRCROOT/.swiftlint.yml\" | sed 's/error:/warning:/'\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -943,12 +943,16 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzer/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe podcast episodes locally on your device.";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Used only when you configure a local Whisper or Ollama server in Settings. The app does not connect to anything on your network unless you opt in.";
+				INFOPLIST_KEY_NSSiriUsageDescription = "DoDo uses Siri to voice-control podcast playback — “Hey Siri, play podcast using DoDo”.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to generate on-device transcripts of podcast episodes you choose to transcribe. Audio never leaves your device.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -957,6 +961,7 @@
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -1002,12 +1007,16 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PodcastAnalyzer/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DoDo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe podcast episodes locally on your device.";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Used only when you configure a local Whisper or Ollama server in Settings. The app does not connect to anything on your network unless you opt in.";
+				INFOPLIST_KEY_NSSiriUsageDescription = "DoDo uses Siri to voice-control podcast playback — “Hey Siri, play podcast using DoDo”.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to generate on-device transcripts of podcast episodes you choose to transcribe. Audio never leaves your device.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -1016,6 +1025,7 @@
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -1204,7 +1214,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = dodo;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = DoDoWatch/DoDoWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -1242,7 +1251,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = dodo;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = DoDoWatch/DoDoWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;

@@ -153,6 +153,36 @@ struct PlaybackProgressSyncTests {
     }
 
     @MainActor
+    @Test("This device's own push is not merged back as an incoming change")
+    func ownPushIsNotEchoed() throws {
+        let container = try makeContainer()
+        let coordinator = PlaybackProgressSyncCoordinator()
+        coordinator.setModelContainer(container)
+
+        let episode = EpisodeDownloadModel(
+            episodeTitle: "Episode 1", podcastTitle: "Show", audioURL: "https://example.com/1.mp3",
+            lastPlaybackPosition: 42, duration: 100
+        )
+        episode.progressUpdatedAt = Date()
+        container.mainContext.insert(episode)
+        try container.mainContext.save()
+
+        coordinator.push(from: episode, force: true)
+
+        let id = episode.id
+        let record = try #require(try container.mainContext.fetch(
+            FetchDescriptor<PlaybackProgressModel>(predicate: #Predicate { $0.id == id })
+        ).first)
+        #expect(record.updatedAt == episode.progressUpdatedAt, "record carries the local write's stamp")
+
+        // The remote-change notification for that save fires right after it.
+        // A tick that moved on locally in the meantime must not be rewound.
+        episode.lastPlaybackPosition = 47
+        coordinator.mergeIncomingChanges()
+        #expect(episode.lastPlaybackPosition == 47)
+    }
+
+    @MainActor
     @Test("push() without force is throttled on the second call")
     func pushThrottledOnSecondCall() throws {
         let container = try makeContainer()

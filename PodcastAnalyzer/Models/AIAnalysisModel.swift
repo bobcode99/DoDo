@@ -33,8 +33,8 @@ final class EpisodeAIAnalysis {
     var qaHistoryJSON: String?
 
     // Timestamps
-    var createdAt: Date = Date()
-    var updatedAt: Date = Date()
+    var createdAt = Date()
+    var updatedAt = Date()
 
     init(
         episodeAudioURL: String,
@@ -350,15 +350,18 @@ nonisolated struct ParsedEpisodeAnalysisResponse: Codable {
         lines.append("\(podcastTitle)")
         lines.append(String(repeating: "─", count: 30))
 
+        func bulletBlock(_ title: String, _ items: [String]) {
+            guard !items.isEmpty else { return }
+            lines.append("")
+            lines.append(title)
+            for item in items { lines.append("  - \(item)") }
+        }
+
         lines.append("")
         lines.append("Overview")
         lines.append(overview)
 
-        if !keyTakeaways.isEmpty {
-            lines.append("")
-            lines.append("Key Takeaways")
-            for item in keyTakeaways { lines.append("  - \(item)") }
-        }
+        bulletBlock("Key Takeaways", keyTakeaways)
 
         if !mainTopics.isEmpty {
             lines.append("")
@@ -370,11 +373,7 @@ nonisolated struct ParsedEpisodeAnalysisResponse: Codable {
             }
         }
 
-        if !keyInsights.isEmpty {
-            lines.append("")
-            lines.append("Key Insights")
-            for item in keyInsights { lines.append("  - \(item)") }
-        }
+        bulletBlock("Key Insights", keyInsights)
 
         func entityBlock(_ title: String, _ items: [String]) {
             guard !items.isEmpty else { return }
@@ -388,11 +387,7 @@ nonisolated struct ParsedEpisodeAnalysisResponse: Codable {
         entityBlock("Locations", locations)
         entityBlock("Resources", resources)
 
-        if !highlights.isEmpty {
-            lines.append("")
-            lines.append("Highlights")
-            for item in highlights { lines.append("  - \(item)") }
-        }
+        bulletBlock("Highlights", highlights)
 
         if !notableQuotes.isEmpty {
             lines.append("")
@@ -403,23 +398,11 @@ nonisolated struct ParsedEpisodeAnalysisResponse: Codable {
             }
         }
 
-        if !actionItems.isEmpty {
-            lines.append("")
-            lines.append("Action Items")
-            for item in actionItems { lines.append("  - \(item)") }
-        }
+        bulletBlock("Action Items", actionItems)
 
-        if let controversial = controversialPoints, !controversial.isEmpty {
-            lines.append("")
-            lines.append("Controversial Points")
-            for item in controversial { lines.append("  - \(item)") }
-        }
+        bulletBlock("Controversial Points", controversialPoints ?? [])
 
-        if let entertaining = entertainingMoments, !entertaining.isEmpty {
-            lines.append("")
-            lines.append("Entertaining Moments")
-            for item in entertaining { lines.append("  - \(item)") }
-        }
+        bulletBlock("Entertaining Moments", entertainingMoments ?? [])
 
         if let qa = qaHighlights, !qa.isEmpty {
             lines.append("")

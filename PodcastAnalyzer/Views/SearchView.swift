@@ -102,10 +102,10 @@ struct PodcastSearchView: View {
             debounceTask?.cancel()
             dismissKeyboard()
         }
-        .alert("Subscription Failed", isPresented: Binding(get: { subscribeError != nil }, set: { if !$0 { subscribeError = nil } })) {
-            Button("OK", role: .cancel) { subscribeError = nil }
-        } message: {
-            Text(subscribeError ?? "")
+        .alert("Subscription Failed", item: $subscribeError) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { error in
+            Text(error)
         }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .applePodcasts && !searchText.isEmpty {

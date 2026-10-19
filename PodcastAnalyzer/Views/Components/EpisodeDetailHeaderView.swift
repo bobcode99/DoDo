@@ -1,4 +1,3 @@
-
 import SwiftData
 import SwiftUI
 
@@ -27,7 +26,7 @@ struct EpisodeDetailHeaderView: View {
     private let artworkCornerRadius: CGFloat = 10
     private let topSpacing: CGFloat = 12
     private let titleFont: Font = .subheadline
-    private let podcastTitleFont: Font = .caption
+    private let podcastTitleFont: Font = .footnote
     private let metadataFont: Font = .caption
     private let statusIconSize: CGFloat = 12
     #endif
@@ -171,7 +170,7 @@ struct EpisodeDetailHeaderView: View {
                         .foregroundStyle(.blue)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 8))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.blue)
             }
         }
@@ -284,11 +283,11 @@ struct EpisodeDetailHeaderView: View {
         // refreshed — surfacing the old episode list when the header link
         // pushes a new EpisodeListView. Prefer the subscribed, freshest row.
         if let results = try? modelContext.fetch(descriptor), !results.isEmpty {
-            let best = results.max { a, b in
-                if a.isSubscribed != b.isSubscribed {
-                    return !a.isSubscribed && b.isSubscribed
+            let best = results.max { lhs, rhs in
+                if lhs.isSubscribed != rhs.isSubscribed {
+                    return !lhs.isSubscribed && rhs.isSubscribed
                 }
-                return a.lastUpdated < b.lastUpdated
+                return lhs.lastUpdated < rhs.lastUpdated
             }
             if let best {
                 cachedPodcastModel = best

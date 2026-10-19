@@ -126,8 +126,8 @@ extension Color {
     var relativeLuminance: Double {
         let resolved = resolve(in: .init())
         func linear(_ channel: Float) -> Double {
-            let c = Double(channel)
-            return c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+            let value = Double(channel)
+            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
         }
         return 0.2126 * linear(resolved.red)
              + 0.7152 * linear(resolved.green)

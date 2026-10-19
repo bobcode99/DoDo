@@ -57,7 +57,7 @@ struct YapRemoteURLTests {
     func malformedInputSurvives() {
         // Better to submit something the server can reject with a clear error
         // than to silently hand it an empty URL.
-        #expect(strip("") == "")
+        #expect(strip("").isEmpty)
         #expect(strip("not a url") == "not a url")
     }
 }

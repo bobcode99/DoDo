@@ -59,17 +59,12 @@ struct MiniPlayerBar: View {
           HStack(spacing: 12) {
             // Artwork or Placeholder
             Group {
-              if let urlString = audioManager.currentEpisode?.imageURL, let url = URL(string: urlString) {
-
-                CachedAsyncImage(url: url) { image in
-                  image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                  Color.gray
-                }
+              if let urlString = audioManager.currentEpisode?.imageURL {
+                CachedArtworkImage(urlString: urlString, size: 48)
               } else {
                 RoundedRectangle(cornerRadius: 8)
                   .fill(Color.gray.opacity(0.3))
-                  .overlay(Image(systemName: "music.note").foregroundStyle(.secondary))
+                  .overlay { Image(systemName: "music.note").foregroundStyle(.secondary) }
               }
             }
             .frame(width: 48, height: 48)

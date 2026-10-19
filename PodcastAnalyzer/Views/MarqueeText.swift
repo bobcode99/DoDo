@@ -12,7 +12,7 @@ import SwiftUI
 struct MarqueeText: View {
     let text: String
     var font: Font = .body
-    var fontWeight: Font.Weight? = nil
+    var fontWeight: Font.Weight?
     var spacing: CGFloat = 40
     var velocity: CGFloat = 40 // points per second
     var pauseDuration: Double = 3 // seconds held at the start of each cycle

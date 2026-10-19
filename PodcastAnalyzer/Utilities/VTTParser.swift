@@ -55,13 +55,7 @@ struct VTTParser: Sendable {
       }
 
       // Find the timestamp line
-      var timestampLineIndex: Int?
-      for (index, line) in lines.enumerated() {
-        if line.contains("-->") {
-          timestampLineIndex = index
-          break
-        }
-      }
+      let timestampLineIndex = lines.firstIndex { $0.contains("-->") }
 
       guard let tsIndex = timestampLineIndex else { continue }
 
@@ -261,14 +255,12 @@ struct VTTParser: Sendable {
       let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
 
       // Process matches in reverse to avoid index shifting
-      for match in matches.reversed() {
-        if match.numberOfRanges >= 2 {
-          let codeRange = match.range(at: 1)
-          if let code = Int(nsString.substring(with: codeRange)),
-             let scalar = Unicode.Scalar(code) {
-            let replacement = String(Character(scalar))
-            result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
-          }
+      for match in matches.reversed() where match.numberOfRanges >= 2 {
+        let codeRange = match.range(at: 1)
+        if let code = Int(nsString.substring(with: codeRange)),
+           let scalar = Unicode.Scalar(code) {
+          let replacement = String(Character(scalar))
+          result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
         }
       }
     }

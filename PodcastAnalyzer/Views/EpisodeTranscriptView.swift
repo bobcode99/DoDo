@@ -188,16 +188,10 @@ struct EpisodeTranscriptView: View {
                 srtImportError = error.localizedDescription
             }
         }
-        .alert(
-            "Import Failed",
-            isPresented: Binding(
-                get: { srtImportError != nil },
-                set: { if !$0 { srtImportError = nil } }
-            )
-        ) {
+        .alert("Import Failed", item: $srtImportError) { _ in
             Button("OK", role: .cancel) {}
-        } message: {
-            Text(srtImportError ?? "")
+        } message: { error in
+            Text(error)
         }
         .onChange(of: showRegenerateConfirmation) { _, isShowing in
             if isShowing {

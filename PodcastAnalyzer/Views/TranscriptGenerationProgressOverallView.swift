@@ -239,16 +239,16 @@ private struct TranscriptJobRow: View {
     switch job.status {
     case .queued:
       Text("Waiting")
-    case .downloadingModel(let p):
-      ProgressView(value: p) {
-        Text("Downloading model… \(Int(p * 100))%")
+    case .downloadingModel(let progress):
+      ProgressView(value: progress) {
+        Text("Downloading model… \(Int(progress * 100))%")
       }
-    case .transcribing(let p):
-      ProgressView(value: p) {
+    case .transcribing(let progress):
+      ProgressView(value: progress) {
         if let parts = job.partProgress {
-          Text("Transcribing… \(Int(p * 100))% · part \(min(parts.completed + 1, parts.total))/\(parts.total)")
+          Text("Transcribing… \(Int(progress * 100))% · part \(min(parts.completed + 1, parts.total))/\(parts.total)")
         } else {
-          Text("Transcribing… \(Int(p * 100))%")
+          Text("Transcribing… \(Int(progress * 100))%")
         }
       }
     case .completed:

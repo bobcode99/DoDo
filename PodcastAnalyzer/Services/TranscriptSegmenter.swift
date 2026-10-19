@@ -56,8 +56,8 @@ nonisolated struct TranscriptSegmenter {
     let tokenizer = NLTokenizer(unit: .sentence)
     tokenizer.string = string
 
-    let sentenceRanges = tokenizer.tokens(for: string.startIndex..<string.endIndex).compactMap {
-      stringRange -> (Range<String.Index>, Range<AttributedString.Index>)? in
+    let fullRange = string.startIndex..<string.endIndex
+    let sentenceRanges = tokenizer.tokens(for: fullRange).compactMap { stringRange -> (Range<String.Index>, Range<AttributedString.Index>)? in
       guard
         let attrLower = AttributedString.Index(stringRange.lowerBound, within: transcript),
         let attrUpper = AttributedString.Index(stringRange.upperBound, within: transcript)
@@ -65,8 +65,7 @@ nonisolated struct TranscriptSegmenter {
       return (stringRange, attrLower..<attrUpper)
     }
 
-    return sentenceRanges.flatMap {
-      sentenceStringRange, sentenceAttrRange -> [Range<AttributedString.Index>] in
+    return sentenceRanges.flatMap { sentenceStringRange, sentenceAttrRange -> [Range<AttributedString.Index>] in
       let sentence = transcript[sentenceAttrRange]
 
       guard sentence.characters.count > maxLength else {

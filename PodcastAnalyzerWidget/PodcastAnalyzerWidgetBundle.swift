@@ -10,5 +10,8 @@ import WidgetKit
 struct PodcastAnalyzerWidgetBundle: WidgetBundle {
   var body: some Widget {
     NowPlayingWidget()
+    #if os(iOS)
+    OpenPlayerControl()
+    #endif
   }
 }

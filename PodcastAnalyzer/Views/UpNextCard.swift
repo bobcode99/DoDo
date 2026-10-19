@@ -8,27 +8,27 @@
 import SwiftData
 import SwiftUI
 
-#if os(iOS)
-import UIKit
-#endif
-
 struct UpNextCard: View {
   let episode: LibraryEpisode
   let onPlay: () -> Void
   var reason: SuggestionReason = .none
+  /// Card and artwork width — see UpNextCardSize.
+  var width: CGFloat = UpNextCardSize.standard.width
 
   private var isQueued: Bool {
     if case .inQueue = reason { return true }
     return false
   }
   @Environment(\.modelContext) private var modelContext
+  /// Badge row height, scaled with Dynamic Type so the caption2 text never clips.
+  @ScaledMetric(relativeTo: .caption2) private var badgeRowHeight: CGFloat = 14
   @State private var statusObserver: EpisodeStatusObserver?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       // Episode artwork
       ZStack(alignment: .bottomTrailing) {
-        CachedArtworkImage(urlString: episode.imageURL, size: 140, cornerRadius: 12)
+        CachedArtworkImage(urlString: episode.imageURL, size: width, cornerRadius: 12)
 
         // Status icons overlay (reactive)
         if let observer = statusObserver {
@@ -66,14 +66,15 @@ struct UpNextCard: View {
       // reserving 2 lines unconditionally.
       Group {
         switch reason {
-        case .inQueue, .inProgress, .starred, .downloaded:
+        // No `.inProgress` badge: the play button below already shows time left.
+        case .inQueue, .starred, .downloaded:
           HStack(spacing: 3) {
             Image(systemName: reason.systemImage)
-              .font(.system(size: 9))
+              .imageScale(.small)
             Text(reason.label)
-              .font(.system(size: 10))
               .lineLimit(1)
           }
+          .font(.caption2)
           // Queued rows are there because the user put them there — tint the
           // badge so explicit intent reads differently from an inferred reason.
           .foregroundStyle(isQueued ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
@@ -81,7 +82,7 @@ struct UpNextCard: View {
           Color.clear
         }
       }
-      .frame(height: 14, alignment: .leading)
+      .frame(height: badgeRowHeight, alignment: .leading)
       .padding(.top, 1)
 
       // Play button with progress - uses live audio manager state
@@ -91,7 +92,7 @@ struct UpNextCard: View {
         action: onPlay
       )
     }
-    .frame(width: 140, alignment: .top)
+    .frame(width: width, alignment: .top)
     .task(id: episode.id) {
       let observer = EpisodeStatusObserver(episode: episode)
       observer.setModelContext(modelContext)
@@ -145,7 +146,7 @@ private func mockUpNextEpisode(
   UpNextCard(
     episode: mockUpNextEpisode(title: "The Daily", lastPlaybackPosition: 594),
     onPlay: {},
-    reason: .inProgress(percentComplete: 33)
+    reason: .inProgress
   )
   .padding()
   .modelContainer(for: PodcastInfoModel.self, inMemory: true)
@@ -181,7 +182,7 @@ private func mockUpNextEpisode(
       UpNextCard(
         episode: mockUpNextEpisode(title: "The Daily", lastPlaybackPosition: 594),
         onPlay: {},
-        reason: .inProgress(percentComplete: 33)
+        reason: .inProgress
       )
       UpNextCard(
         episode: mockUpNextEpisode(title: "Think Baseball Is Boring? The Sabermetrics Revolution"),

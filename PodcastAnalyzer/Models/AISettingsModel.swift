@@ -60,12 +60,12 @@ nonisolated enum TranscriptFormatForAI: String, CaseIterable, Codable {
         let segments = SRTParser.parseSegments(from: srtContent)
         return segments.map { segment in
             let totalSeconds = Int(segment.startTime)
-            let h = totalSeconds / 3600
-            let m = (totalSeconds % 3600) / 60
-            let s = totalSeconds % 60
-            let timestamp = h > 0
-                ? String(format: "[%d:%02d:%02d]", h, m, s)
-                : String(format: "[%02d:%02d]", m, s)
+            let hours = totalSeconds / 3600
+            let minutes = (totalSeconds % 3600) / 60
+            let secs = totalSeconds % 60
+            let timestamp = hours > 0
+                ? String(format: "[%d:%02d:%02d]", hours, minutes, secs)
+                : String(format: "[%02d:%02d]", minutes, secs)
             return "\(timestamp) \(segment.text)"
         }.joined(separator: "\n")
     }
@@ -188,6 +188,13 @@ nonisolated enum AnalysisLanguage: String, CaseIterable, Codable {
         }
     }
 
+    /// English name of a language identifier for the prompt, script and region
+    /// included: "zh-Hant-TW" → "Chinese, Traditional (Taiwan)". The language
+    /// code alone ("中文") let models answer Taiwanese users in Simplified.
+    static func promptLanguageName(for identifier: String) -> String {
+        Locale(identifier: "en").localizedString(forIdentifier: identifier) ?? identifier
+    }
+
     /// Returns the language instruction to include in AI prompts.
     /// `customLanguageName` is only consulted when `self == .custom`.
     func getLanguageInstruction(
@@ -196,12 +203,11 @@ nonisolated enum AnalysisLanguage: String, CaseIterable, Codable {
     ) -> String {
         switch self {
         case .deviceLanguage:
-            let preferredLanguage = Locale.preferredLanguages.first ?? "en"
-            let languageName = Locale.current.localizedString(forLanguageCode: preferredLanguage) ?? "English"
+            let languageName = Self.promptLanguageName(for: Locale.preferredLanguages.first ?? "en")
             return "IMPORTANT: Respond in \(languageName)."
         case .matchPodcast:
             if let podcastLang = podcastLanguage, !podcastLang.isEmpty {
-                let languageName = Locale.current.localizedString(forLanguageCode: podcastLang) ?? podcastLang
+                let languageName = Self.promptLanguageName(for: podcastLang)
                 return "IMPORTANT: Respond in \(languageName) (the podcast's language)."
             }
             return "" // No instruction if podcast language unknown

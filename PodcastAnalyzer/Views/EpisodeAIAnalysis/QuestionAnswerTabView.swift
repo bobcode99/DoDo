@@ -171,6 +171,92 @@ struct QuestionAnswerTabView: View {
     }
   }
 
+  private func answerText(_ result: CloudQAResult) -> some View {
+    Text(result.answer)
+      .font(.body)
+      .textSelection(.enabled)
+      .contextMenu {
+        Button {
+          PlatformClipboard.string = result.answer
+        } label: {
+          Label("Copy Answer", systemImage: "doc.on.doc")
+        }
+
+        Button {
+          if let query = result.answer.prefix(100).addingPercentEncoding(
+            withAllowedCharacters: .urlQueryAllowed),
+            let url = URL(string: "https://www.google.com/search?q=\(query)")
+          {
+            #if os(iOS)
+            UIApplication.shared.open(url)
+            #else
+            NSWorkspace.shared.open(url)
+            #endif
+          }
+        } label: {
+          Label("Search Web", systemImage: "safari")
+        }
+
+        ShareLink(item: result.answer) {
+          Label("Share", systemImage: "square.and.arrow.up")
+        }
+      }
+  }
+
+  private func confidenceBadge(_ confidence: String) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: confidenceIcon(confidence))
+        .foregroundStyle(confidenceColor(confidence))
+      Text("Confidence: \(confidence.capitalized)")
+        .font(.caption)
+        .fontWeight(.medium)
+        .foregroundStyle(confidenceColor(confidence))
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(confidenceColor(confidence).opacity(0.1))
+    .clipShape(.rect(cornerRadius: 16))
+  }
+
+  private func relatedTopicsView(_ topics: [String]) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text("Related Topics")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      FlowLayout(spacing: 6) {
+        ForEach(topics, id: \.self) { topic in
+          Text(topic)
+            .font(.caption2)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.purple.opacity(0.1))
+            .foregroundStyle(.purple)
+            .clipShape(.rect(cornerRadius: 12))
+        }
+      }
+    }
+  }
+
+  private func sourcesView(_ sources: [String]) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Label("Sources from Transcript", systemImage: "quote.bubble")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
+        Text("\"\(source)\"")
+          .font(.caption)
+          .italic()
+          .foregroundStyle(.secondary)
+          .padding(8)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(Color.platformSystemGray5)
+          .clipShape(.rect(cornerRadius: 6))
+      }
+    }
+  }
+
   /// Left-aligned AI answer bubble with confidence, topics, sources, and footer.
   private func aiAnswerBubble(_ result: CloudQAResult) -> some View {
     HStack(alignment: .top, spacing: 8) {
@@ -197,88 +283,18 @@ struct QuestionAnswerTabView: View {
           .clipShape(.rect(cornerRadius: 6))
         }
 
-        Text(result.answer)
-          .font(.body)
-          .textSelection(.enabled)
-          .contextMenu {
-            Button {
-              PlatformClipboard.string = result.answer
-            } label: {
-              Label("Copy Answer", systemImage: "doc.on.doc")
-            }
-
-            Button {
-              if let query = result.answer.prefix(100).addingPercentEncoding(
-                withAllowedCharacters: .urlQueryAllowed),
-                let url = URL(string: "https://www.google.com/search?q=\(query)")
-              {
-                #if os(iOS)
-                UIApplication.shared.open(url)
-                #else
-                NSWorkspace.shared.open(url)
-                #endif
-              }
-            } label: {
-              Label("Search Web", systemImage: "safari")
-            }
-
-            ShareLink(item: result.answer) {
-              Label("Share", systemImage: "square.and.arrow.up")
-            }
-          }
+        answerText(result)
 
         if result.confidence != "unknown" {
-          HStack(spacing: 6) {
-            Image(systemName: confidenceIcon(result.confidence))
-              .foregroundStyle(confidenceColor(result.confidence))
-            Text("Confidence: \(result.confidence.capitalized)")
-              .font(.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(confidenceColor(result.confidence))
-          }
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(confidenceColor(result.confidence).opacity(0.1))
-          .clipShape(.rect(cornerRadius: 16))
+          confidenceBadge(result.confidence)
         }
 
         if let topics = result.relatedTopics, !topics.isEmpty {
-          VStack(alignment: .leading, spacing: 6) {
-            Text("Related Topics")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-
-            FlowLayout(spacing: 6) {
-              ForEach(topics, id: \.self) { topic in
-                Text(topic)
-                  .font(.caption2)
-                  .padding(.horizontal, 8)
-                  .padding(.vertical, 4)
-                  .background(Color.purple.opacity(0.1))
-                  .foregroundStyle(.purple)
-                  .clipShape(.rect(cornerRadius: 12))
-              }
-            }
-          }
+          relatedTopicsView(topics)
         }
 
         if let sources = result.sources, !sources.isEmpty {
-          VStack(alignment: .leading, spacing: 6) {
-            Label("Sources from Transcript", systemImage: "quote.bubble")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-
-            ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-              Text("\"\(source)\"")
-                .font(.caption)
-                .italic()
-                .foregroundStyle(.secondary)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.platformSystemGray5)
-                .clipShape(.rect(cornerRadius: 6))
-            }
-          }
+          sourcesView(sources)
         }
 
         Divider()

@@ -83,18 +83,18 @@ class RSSParser: NSObject, XMLParserDelegate {
     ) {
         if elementName == "item" {
             // Parse duration to millis (like string parsing in Java)
-            var millis: Int? = nil
+            var millis: Int?
             if !currentDuration.isEmpty {
                 if let sec = Int(currentDuration) {
                     millis = sec * 1000
                 } else {
                     let parts = currentDuration.split(separator: ":")
-                    if parts.count == 3, let h = Int(parts[0]), let m = Int(parts[1]),
-                        let s = Int(parts[2])
+                    if parts.count == 3, let hours = Int(parts[0]), let minutes = Int(parts[1]),
+                        let secs = Int(parts[2])
                     {
-                        millis = (h * 3600 + m * 60 + s) * 1000
-                    } else if parts.count == 2, let m = Int(parts[0]), let s = Int(parts[1]) {
-                        millis = (m * 60 + s) * 1000
+                        millis = (hours * 3600 + minutes * 60 + secs) * 1000
+                    } else if parts.count == 2, let minutes = Int(parts[0]), let secs = Int(parts[1]) {
+                        millis = (minutes * 60 + secs) * 1000
                     }
                 }
             }

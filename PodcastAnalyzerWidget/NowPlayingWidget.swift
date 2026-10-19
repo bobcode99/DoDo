@@ -130,7 +130,7 @@ struct NowPlayingProvider: AppIntentTimelineProvider {
           !WidgetDataManager.isDataStale(data) else {
       return .empty
     }
-    let artworkData = WidgetDataManager.readArtworkData()
+    let artworkData = WidgetDataManager.readArtworkData(for: data.imageURL)
     return NowPlayingEntry(date: Date(), playbackData: data, artworkData: artworkData)
   }
 }
@@ -162,78 +162,74 @@ struct SmallWidgetView: View {
 
   var body: some View {
     if let data = entry.playbackData {
-      ZStack {
-        // Layer 1: full-bleed artwork (no padding — contentMarginsDisabled on config)
-        artworkBackground
-
-        // Layer 2: gradient scrim over bottom half
-        LinearGradient(
-          colors: [.clear, .black.opacity(0.72)],
-          startPoint: .center,
-          endPoint: .bottom
-        )
-
-        // Layer 3: overlay content using widgetContentMargins
-        VStack(spacing: 0) {
-          // Play/pause button — top-right
-          HStack {
-            Spacer()
-            if data.isPlaying {
-              Button(intent: TogglePlaybackIntent()) {
-                ZStack {
-                  Circle()
-                    .fill(.black.opacity(0.38))
-                    .frame(width: 34, height: 34)
-                  Image(systemName: "pause.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                }
-                .frame(width: 44, height: 44)
-              }
-              .buttonStyle(.plain)
-              .accessibilityLabel("Pause")
-            } else {
-              Button(intent: ResumePlaybackIntent()) {
-                ZStack {
-                  Circle()
-                    .fill(.black.opacity(0.38))
-                    .frame(width: 34, height: 34)
-                  Image(systemName: "play.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .offset(x: 1)
-                }
-                .frame(width: 44, height: 44)
-              }
-              .buttonStyle(.plain)
-              .accessibilityLabel("Play")
-            }
-          }
-
+      VStack(spacing: 0) {
+        // Play/pause button — top-right
+        HStack {
           Spacer()
-
-          // Episode info — bottom-left
-          HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(data.episodeTitle)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .lineLimit(2)
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1)
-
-              Text(data.podcastTitle)
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.8))
-                .lineLimit(1)
-                .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1)
+          if data.isPlaying {
+            Button(intent: PausePlaybackIntent()) {
+              ZStack {
+                Circle()
+                  .fill(.black.opacity(0.38))
+                  .frame(width: 34, height: 34)
+                Image(systemName: "pause.fill")
+                  .font(.system(size: 13, weight: .bold))
+                  .foregroundStyle(.white)
+              }
+              .frame(width: 44, height: 44)
             }
-            Spacer()
+            .buttonStyle(.plain)
+            .accessibilityLabel("Pause")
+          } else {
+            Button(intent: ResumePlaybackIntent()) {
+              ZStack {
+                Circle()
+                  .fill(.black.opacity(0.38))
+                  .frame(width: 34, height: 34)
+                Image(systemName: "play.fill")
+                  .font(.system(size: 13, weight: .bold))
+                  .foregroundStyle(.white)
+                  .offset(x: 1)
+              }
+              .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Play")
           }
         }
-        .padding(margins)
+
+        Spacer()
+
+        // Episode info — bottom-left
+        HStack(alignment: .bottom) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(data.episodeTitle)
+              .font(.caption)
+              .fontWeight(.semibold)
+              .lineLimit(2)
+              .foregroundStyle(.white)
+              .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1)
+
+            Text(data.podcastTitle)
+              .font(.caption2)
+              .foregroundStyle(.white.opacity(0.8))
+              .lineLimit(1)
+              .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1)
+          }
+          Spacer()
+        }
       }
+      .padding(margins)
       .widgetURL(data.episodeDetailURL)
+      // Artwork is the container background, not content: tinted / clear Home
+      // Screen modes replace the background with glass but draw content images
+      // as flat tint — the cover turned into a solid block behind the text.
+      .containerBackground(for: .widget) {
+        ZStack {
+          artworkBackground
+          LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
+        }
+      }
     } else {
       EmptyWidgetView()
     }
@@ -312,7 +308,7 @@ struct MediumWidgetView: View {
             HStack {
               Spacer()
               if data.isPlaying {
-                Button(intent: TogglePlaybackIntent()) {
+                Button(intent: PausePlaybackIntent()) {
                   Image(systemName: "pause.circle.fill")
                     .font(.system(size: 36))
                     .foregroundStyle(.blue)
@@ -340,6 +336,7 @@ struct MediumWidgetView: View {
         }
       }
       .widgetURL(data.episodeDetailURL)
+      .containerBackground(.fill.tertiary, for: .widget)
     } else {
       EmptyWidgetView()
     }
@@ -350,6 +347,8 @@ struct MediumWidgetView: View {
     if let artworkData = entry.artworkData, let image = Image(artworkData: artworkData) {
       image
         .resizable()
+        // Tinted Home Screen: keep the cover legible instead of a flat tint block.
+        .widgetAccentedRenderingMode(.accentedDesaturated)
         .aspectRatio(contentMode: .fill)
     } else {
       LinearGradient(
@@ -385,6 +384,7 @@ struct EmptyWidgetView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .widgetURL(URL(string: "podcastanalyzer://library"))
+    .containerBackground(.fill.tertiary, for: .widget)
   }
 }
 
@@ -396,7 +396,6 @@ struct NowPlayingWidget: Widget {
   var body: some WidgetConfiguration {
     AppIntentConfiguration(kind: kind, intent: NowPlayingConfiguration.self, provider: NowPlayingProvider()) { entry in
       NowPlayingWidgetEntryView(entry: entry)
-        .containerBackground(.fill.tertiary, for: .widget)
     }
     .configurationDisplayName("Now Playing")
     .description("Shows the currently playing podcast episode with progress.")

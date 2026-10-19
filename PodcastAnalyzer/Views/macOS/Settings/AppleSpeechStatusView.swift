@@ -52,5 +52,4 @@ struct AppleSpeechStatusView: View {
   }
 }
 
-
 #endif

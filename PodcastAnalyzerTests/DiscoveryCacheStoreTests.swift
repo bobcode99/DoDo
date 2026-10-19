@@ -29,16 +29,23 @@ struct DiscoveryCacheStoreTests {
 
     /// Mirrors the store's own path derivation so tests can clean up and can
     /// plant a deliberately corrupt file.
-    private func cacheFile(region: String) -> URL {
+    private func cacheFile(_ kind: String = "top", region: String) -> URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         let safe = region.lowercased().filter { $0.isLetter || $0.isNumber }
         return caches
             .appendingPathComponent("DiscoveryCache", isDirectory: true)
-            .appendingPathComponent("top-\(safe).json")
+            .appendingPathComponent("\(kind)-\(safe).json")
     }
 
     private func remove(region: String) {
         try? FileManager.default.removeItem(at: cacheFile(region: region))
+        try? FileManager.default.removeItem(at: cacheFile("trending", region: region))
+    }
+
+    private func trending(_ id: Int) throws -> ApplePodcastService.TrendingEpisode {
+        let episode = try JSONDecoder().decode(
+            Episode.self, from: Data(#"{"trackId":\#(id),"trackName":"Episode \#(id)"}"#.utf8))
+        return .init(id: "\(id)", podcastName: "Show", podcastArtworkUrl: nil, podcastId: "p", episode: episode)
     }
 
     private func podcast(_ id: String) -> AppleRSSPodcast {
@@ -165,5 +172,30 @@ struct DiscoveryCacheStoreTests {
         let cached = try #require(DiscoveryCacheStore.loadTopPodcasts(region: region))
         #expect(cached.podcasts[0].artworkUrl100 == nil)
         #expect(cached.podcasts[0].safeArtworkUrl.isEmpty)
+    }
+
+    // MARK: - Top Episodes
+
+    @Test("Top Episodes survive a relaunch, so an offline cold start still shows them")
+    func trendingRoundTrip() throws {
+        let region = scratchRegion()
+        defer { remove(region: region) }
+
+        DiscoveryCacheStore.saveTrendingEpisodes([try trending(1), try trending(2)], region: region)
+
+        let cached = try #require(DiscoveryCacheStore.loadTrendingEpisodes(region: region))
+        #expect(cached.map(\.id) == ["1", "2"])
+        #expect(cached[0].episode.trackName == "Episode 1")
+    }
+
+    @Test("An empty fetch (what offline returns) never overwrites saved Top Episodes")
+    func emptyTrendingIsNotSaved() throws {
+        let region = scratchRegion()
+        defer { remove(region: region) }
+
+        DiscoveryCacheStore.saveTrendingEpisodes([try trending(1)], region: region)
+        DiscoveryCacheStore.saveTrendingEpisodes([], region: region)
+
+        #expect(try #require(DiscoveryCacheStore.loadTrendingEpisodes(region: region)).map(\.id) == ["1"])
     }
 }

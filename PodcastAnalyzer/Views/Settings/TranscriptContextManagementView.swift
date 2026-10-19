@@ -108,21 +108,15 @@ struct TranscriptContextManagementView: View {
     ) { result in
       handleImport(result)
     }
-    .alert(
-      "Import Complete",
-      isPresented: Binding(get: { importSummary != nil }, set: { if !$0 { importSummary = nil } })
-    ) {
-      Button("OK", role: .cancel) { importSummary = nil }
-    } message: {
-      if let summary = importSummary { Text(summary.message) }
+    .alert("Import Complete", item: $importSummary) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { summary in
+      Text(summary.message)
     }
-    .alert(
-      "Import Failed",
-      isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })
-    ) {
-      Button("OK", role: .cancel) { importError = nil }
-    } message: {
-      if let error = importError { Text(error) }
+    .alert("Import Failed", item: $importError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { error in
+      Text(error)
     }
   }
 

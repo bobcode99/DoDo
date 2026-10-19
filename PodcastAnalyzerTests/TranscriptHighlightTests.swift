@@ -118,8 +118,8 @@ struct TranscriptHighlightTests {
             0, 1.2, 2.5, 4.0, 5.3, 6.8, 8.2, 10.0, 12.1, 14.4,
             16.7, 19.0, 22.5, 25.0, 28.3, 31.7, 40.0, 55.5, 78.0, 100.0,
         ]
-        let sentences = starts.enumerated().map { i, s in
-            TranscriptSentence(id: i, segments: [seg(i, start: s, end: s + 1)])
+        let sentences = starts.enumerated().map { i, start in
+            TranscriptSentence(id: i, segments: [seg(i, start: start, end: start + 1)])
         }
         // The oracle models the same past-end grace the binary search applies:
         // the last sentence ends at 101, so anything past 106 clears.

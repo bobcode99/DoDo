@@ -106,7 +106,7 @@ struct AutoTranscribeManagementView: View {
     .searchable(text: $searchText, prompt: "Search podcasts")
     .navigationTitle("Automatic Transcription")
     .toolbar {
-      if !subscribedPodcasts.filter({ $0.autoTranscribeNewEpisodes }).isEmpty {
+      if subscribedPodcasts.contains(where: { $0.autoTranscribeNewEpisodes }) {
         ToolbarItem(placement: .primaryAction) {
           Button("Stop All", role: .destructive) {
             showDisableAllConfirmation = true

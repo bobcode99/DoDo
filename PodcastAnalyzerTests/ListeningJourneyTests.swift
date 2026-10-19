@@ -110,7 +110,7 @@ struct ListeningJourneyTests {
     @Test("Progress on one episode never leaks into another episode of the same show")
     func progressIsPerEpisode() throws {
         let container = try makeContainer()
-        try withCoordinator(container) { coordinator, context in
+        withCoordinator(container) { coordinator, context in
             coordinator.savePlaybackPosition(update: update(position: 100, duration: 1800, episode: "Episode 1"))
             coordinator.savePlaybackPosition(update: update(position: 700, duration: 1800, episode: "Episode 2"))
 
@@ -124,7 +124,7 @@ struct ListeningJourneyTests {
     @Test("Resuming an episode starts from the saved position")
     func resumeReturnsSavedPosition() throws {
         let container = try makeContainer()
-        try withCoordinator(container) { coordinator, _ in
+        withCoordinator(container) { coordinator, _ in
             coordinator.savePlaybackPosition(update: update(position: 655, duration: 1800))
 
             let resume = PlaybackStateCoordinator.savedPlaybackPosition(
@@ -137,7 +137,7 @@ struct ListeningJourneyTests {
     @Test("An unknown episode resumes from zero")
     func unknownEpisodeResumesFromZero() throws {
         let container = try makeContainer()
-        try withCoordinator(container) { _, _ in
+        withCoordinator(container) { _, _ in
             let resume = PlaybackStateCoordinator.savedPlaybackPosition(
                 podcastTitle: "Daily Tech", episodeTitle: "Never Opened"
             )
@@ -148,7 +148,7 @@ struct ListeningJourneyTests {
     @Test("A finished episode restarts from the beginning rather than the end")
     func completedEpisodeResumesFromZero() throws {
         let container = try makeContainer()
-        try withCoordinator(container) { coordinator, context in
+        withCoordinator(container) { coordinator, context in
             // 5 seconds from the end — inside the completion window.
             coordinator.savePlaybackPosition(update: update(position: 1795, duration: 1800))
             #expect(fetchEpisode(context)?.isCompleted == true)
@@ -182,7 +182,7 @@ struct ListeningJourneyTests {
     @Test("Stopping just outside the completion window leaves the episode unplayed")
     func nearTheEndButNotCompleted() throws {
         let container = try makeContainer()
-        try withCoordinator(container) { coordinator, context in
+        withCoordinator(container) { coordinator, context in
             coordinator.savePlaybackPosition(update: update(position: 1769, duration: 1800))
             #expect(fetchEpisode(context)?.isCompleted == false, "31s left is still in progress")
         }
@@ -209,7 +209,7 @@ struct ListeningJourneyTests {
     @Test("Scrubbing back inside the last 10% keeps the episode marked played")
     func lateScrubKeepsCompletion() throws {
         let container = try makeContainer()
-        try withCoordinator(container) { coordinator, context in
+        withCoordinator(container) { coordinator, context in
             coordinator.savePlaybackPosition(update: update(position: 1790, duration: 1800))
             // 95% — still past the replay threshold, so it stays played.
             coordinator.savePlaybackPosition(update: update(position: 1710, duration: 1800))
@@ -332,9 +332,8 @@ struct ListeningJourneyTests {
         let ranked = UpNextSuggestionEngine().score(inputs: [untouched, started], now: .now)
 
         #expect(ranked.first?.episode.episodeInfo.title == "Started", "resume-where-you-left-off outranks a cold episode")
-        #expect(ranked.first?.reason == .inProgress(percentComplete: 16))
-        #expect(ranked.first?.reason.label == "16% done")
-        #expect(ranked.last?.reason != .inProgress(percentComplete: 0))
+        #expect(ranked.first?.reason == .inProgress)
+        #expect(ranked.last?.reason != .inProgress)
     }
 
     private func isInProgress(_ reason: SuggestionReason?) -> Bool {
@@ -449,17 +448,17 @@ struct ListeningJourneyTests {
 
     @Test("An empty queue leaves the scored order untouched")
     func upNextWithEmptyQueueIsUnchanged() {
-        let a = libraryEpisode(title: "A", position: 300, duration: 1800)
-        let b = libraryEpisode(title: "B", position: 0, duration: 1800)
+        let episodeA = libraryEpisode(title: "A", position: 300, duration: 1800)
+        let episodeB = libraryEpisode(title: "B", position: 0, duration: 1800)
 
-        let ordered = UpNextSuggestionEngine.merge(queued: [], scored: [a, b])
+        let ordered = UpNextSuggestionEngine.merge(queued: [], scored: [episodeA, episodeB])
 
         #expect(ordered.map(\.episodeInfo.title) == ["A", "B"])
     }
 
     @Test("The In Queue badge reads as explicit intent")
     func inQueueReasonLabel() {
-        #expect(SuggestionReason.inQueue(position: 1).label == "In Queue")
+        #expect(String(localized: SuggestionReason.inQueue(position: 1).label) == "In Queue")
     }
 
     // MARK: - Marking played from the Library

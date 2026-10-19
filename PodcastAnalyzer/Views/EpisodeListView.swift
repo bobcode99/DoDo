@@ -26,6 +26,21 @@ enum EpisodeFilter: String, CaseIterable {
   /// everything" semantics when no filter fields are set.
   case custom = "Custom"
 
+  /// Display name. Not `rawValue`: a String reaches `Text` through its
+  /// StringProtocol overload and is never localized — the chips stayed English
+  /// in a Chinese UI.
+  var title: LocalizedStringResource {
+    switch self {
+    case .all: "All"
+    case .unplayed: "Unplayed"
+    case .played: "Played"
+    case .starred: "Starred"
+    case .downloaded: "Downloaded"
+    case .transcript: "Transcript"
+    case .custom: "Custom"
+    }
+  }
+
   var icon: String {
     switch self {
     case .all: return "list.bullet"
@@ -247,14 +262,7 @@ struct EpisodeListView: View {
   private var loadingView: some View {
     VStack(spacing: 20) {
       if case .browse(_, let name, _, let artwork, _) = source {
-        // Use CachedAsyncImage for browse mode artwork
-        CachedAsyncImage(url: URL(string: artwork.replacingOccurrences(of: "100x100", with: "300x300"))) { image in
-             image.resizable().scaledToFit()
-        } placeholder: {
-            Color.gray
-        }
-        .frame(width: 150, height: 150)
-        .clipShape(.rect(cornerRadius: 12))
+        CachedArtworkImage(urlString: artwork, size: 150, cornerRadius: 12)
 
         Text(name)
           .font(.headline)
@@ -421,40 +429,7 @@ struct EpisodeListView: View {
 
       // MARK: - Episodes List
       Section {
-        if let viewModel {
-          ForEach(viewModel.filteredEpisodes) { episode in
-            let key = viewModel.makeEpisodeKey(episode)
-            EpisodeRowView(
-              episode: episode,
-              podcastTitle: viewModel.podcastInfo.title,
-              fallbackImageURL: viewModel.podcastInfo.imageURL,
-              podcastLanguage: viewModel.podcastInfo.language,
-              downloadManager: downloadManager,
-              episodeModel: viewModel.episodeModels[key],
-              precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
-              precomputedHasTranscript: viewModel.transcriptKeys.contains(key),
-              precomputedHasAIAnalysis: episode.audioURL.map {
-                viewModel.aiAnalysisAudioURLs.contains($0)
-              } ?? false,
-              showArtwork: showEpisodeArtwork,
-              onToggleStar: {
-                viewModel.toggleStar(for: episode)
-              },
-              onDownload: { viewModel.downloadEpisode(episode) },
-              onDeleteRequested: { episodeToDelete = episode },
-              onTogglePlayed: {
-                viewModel.togglePlayed(for: episode)
-              }
-            )
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-          }
-        } else {
-          ProgressView("Loading episodes\u{2026}")
-            .frame(maxWidth: .infinity)
-            .padding(.vertical)
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-        }
+        episodeRows(viewModel: viewModel)
       }
     }
     .listStyle(.plain)
@@ -465,35 +440,29 @@ struct EpisodeListView: View {
     .toolbarBackground(.hidden, for: .navigationBar)
     #endif
     .toolbar {
-      ToolbarItem(placement: toolbarPlacement) {
-        // Label, not a bare Image: a toolbar Menu renders icon-only anyway, and
-        // this is the only thing VoiceOver has to announce it with.
-        Menu("More", systemImage: "ellipsis.circle") {
-          showActionsMenu
-        }
+      #if os(iOS)
+      if #available(iOS 27, *) {
+        // The system's own overflow (•••) button — same glyph, placement and
+        // accessibility label as every other app, no hand-rolled Menu.
+        ToolbarOverflowMenu { showActionsMenu }
+      } else {
+        moreMenuItem
       }
+      #else
+      moreMenuItem
+      #endif
     }
     .refreshable {
       // An explicit pull always makes the round trip; the staleness window is
       // there to throttle the automatic refresh, not the user's gesture.
       await viewModel?.refreshPodcast(force: true)
     }
-    .confirmationDialog(
-      "Delete Download",
-      isPresented: Binding(
-        get: { episodeToDelete != nil },
-        set: { if !$0 { episodeToDelete = nil } }
-      ),
-      titleVisibility: .visible
-    ) {
+    .confirmationDialog("Delete Download", item: $episodeToDelete, titleVisibility: .visible) { episode in
       Button("Delete", role: .destructive) {
-        if let episode = episodeToDelete {
-          viewModel?.deleteDownload(episode)
-        }
-        episodeToDelete = nil
+        viewModel?.deleteDownload(episode)
       }
-      Button("Cancel", role: .cancel) { episodeToDelete = nil }
-    } message: {
+      Button("Cancel", role: .cancel) {}
+    } message: { _ in
       Text(
         "Are you sure you want to delete this downloaded episode? You can download it again later."
       )
@@ -513,25 +482,73 @@ struct EpisodeListView: View {
       )
     }
     .sheet(item: $activeSheet) { sheet in
-      switch sheet {
-      case .episodeFilter(let model):
-        PodcastEpisodeFilterView(podcast: model, modelContext: modelContext) {
-          // Promote the user's freshly-saved filter into a visible result —
-          // switch the chip row to .custom so the list updates immediately.
-          // Always assigning (even when already .custom) is intentional:
-          // didSet fires unconditionally, so the filter re-evaluates against
-          // the new include/exclude/min-duration values.
-          withAnimation(.easeInOut(duration: 0.2)) {
-            viewModel?.selectedFilter = .custom
+      sheetContent(sheet)
+    }
+  }
+
+}
+
+// Split from the struct body to keep it a readable size; same file, so these
+// still reach the view's private state.
+extension EpisodeListView {
+  @ViewBuilder
+  private func episodeRows(viewModel: EpisodeListViewModel?) -> some View {
+    if let viewModel {
+      ForEach(viewModel.filteredEpisodes) { episode in
+        let key = viewModel.makeEpisodeKey(episode)
+        EpisodeRowView(
+          episode: episode,
+          podcastTitle: viewModel.podcastInfo.title,
+          fallbackImageURL: viewModel.podcastInfo.imageURL,
+          podcastLanguage: viewModel.podcastInfo.language,
+          downloadManager: downloadManager,
+          episodeModel: viewModel.episodeModels[key],
+          precomputedDownloadState: viewModel.downloadStatesSnapshot[key],
+          precomputedHasTranscript: viewModel.transcriptKeys.contains(key),
+          precomputedHasAIAnalysis: episode.audioURL.map {
+            viewModel.aiAnalysisAudioURLs.contains($0)
+          } ?? false,
+          showArtwork: showEpisodeArtwork,
+          onToggleStar: {
+            viewModel.toggleStar(for: episode)
+          },
+          onDownload: { viewModel.downloadEpisode(episode) },
+          onDeleteRequested: { episodeToDelete = episode },
+          onTogglePlayed: {
+            viewModel.togglePlayed(for: episode)
           }
-        }
-      case .transcribeBackfill(let model):
-        TranscribeBackfillSheet(
-          podcastTitle: model.podcastInfo.title,
-          podcastLanguage: model.podcastInfo.language,
-          episodes: model.podcastInfo.episodes
         )
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
       }
+    } else {
+      ProgressView("Loading episodes\u{2026}")
+        .frame(maxWidth: .infinity)
+        .padding(.vertical)
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+  }
+
+  @ViewBuilder
+  private func sheetContent(_ sheet: EpisodeListSheet) -> some View {
+    switch sheet {
+    case .episodeFilter(let model):
+      PodcastEpisodeFilterView(podcast: model, modelContext: modelContext) {
+        // Promote the user's freshly-saved filter into a visible result —
+        // switch the chip row to .custom so the list updates immediately.
+        // Always assigning (even when already .custom) is intentional:
+        // didSet fires unconditionally, so the filter re-evaluates against
+        // the new include/exclude/min-duration values.
+        withAnimation(.easeInOut(duration: 0.2)) {
+          viewModel?.selectedFilter = .custom
+        }
+      }
+    case .transcribeBackfill(let model):
+      TranscribeBackfillSheet(
+        podcastTitle: model.podcastInfo.title,
+        podcastLanguage: model.podcastInfo.language,
+        episodes: model.podcastInfo.episodes
+      )
     }
   }
 
@@ -743,6 +760,17 @@ struct EpisodeListView: View {
     return code.uppercased()
   }
 
+  /// Pre-iOS 27 (and macOS) stand-in for `ToolbarOverflowMenu`.
+  private var moreMenuItem: some ToolbarContent {
+    ToolbarItem(placement: toolbarPlacement) {
+      // Label, not a bare Image: a toolbar Menu renders icon-only anyway, and
+      // this is the only thing VoiceOver has to announce it with.
+      Menu("More", systemImage: "ellipsis.circle") {
+        showActionsMenu
+      }
+    }
+  }
+
   /// Contents of the ••• menu.
   @ViewBuilder
   private var showActionsMenu: some View {
@@ -828,7 +856,7 @@ struct EpisodeListView: View {
         HStack(spacing: 7) {
           ForEach(EpisodeFilter.allCases, id: \.self) { filter in
             FilterChip(
-              title: filter.rawValue,
+              title: filter.title,
               icon: filter.icon,
               isSelected: viewModel.selectedFilter == filter
             ) {
@@ -872,46 +900,6 @@ struct EpisodeListView: View {
     .padding(.top, 8)
     .padding(.bottom, 8)
     .background(.bar)
-  }
-}
-
-// MARK: - Filter Chip Component
-
-struct FilterChip: View {
-  let title: String
-  let icon: String
-  let isSelected: Bool
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      chipLabel
-    }
-    .buttonStyle(.plain)
-  }
-
-  @ViewBuilder
-  private var chipLabel: some View {
-    let content = HStack(spacing: 4) {
-      Image(systemName: icon)
-        .font(.caption)
-      Text(title)
-        .font(.caption)
-        .fontWeight(isSelected ? .semibold : .regular)
-    }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 6)
-
-    if isSelected {
-      content
-        .background(Color.blue)
-        .foregroundStyle(.white)
-        .clipShape(.rect(cornerRadius: 16))
-    } else {
-      content
-        .foregroundStyle(.primary)
-        .background(.regularMaterial, in: .rect(cornerRadius: 16))
-    }
   }
 }
 
@@ -1010,7 +998,7 @@ struct FilterChip: View {
     ScrollView(.horizontal) {
       HStack(spacing: 7) {
         ForEach(EpisodeFilter.allCases, id: \.self) { filter in
-          FilterChip(title: filter.rawValue, icon: filter.icon, isSelected: filter == .unplayed) {}
+          FilterChip(title: filter.title, icon: filter.icon, isSelected: filter == .unplayed) {}
         }
       }
       .padding()

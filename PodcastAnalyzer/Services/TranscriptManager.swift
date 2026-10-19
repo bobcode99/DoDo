@@ -349,15 +349,6 @@ class TranscriptManager {
     }
   }
 
-  /// Yap-server timeout scaled to episode length: ≤1h → 3 min, 2h → 5 min,
-  /// capped at 10 min. Unknown duration → 5 min.
-  /// ponytail: linear duration/24 hits both requested anchors; tune the
-  /// divisor if server throughput changes.
-  nonisolated static func yapTimeout(forDuration duration: TimeInterval?) -> TimeInterval {
-    guard let duration, duration.isFinite, duration > 0 else { return 300 }
-    return min(max(duration / 24, 180), 600)
-  }
-
   /// Local engines (Apple Speech / Whisper) can be slower than real time on
   /// old hardware, so a wall-clock cap would kill legitimate runs. Instead,
   /// treat "no progress event for this long" as a hang.
@@ -403,7 +394,9 @@ class TranscriptManager {
     }
   }
 
-  private func processJob(_ job: TranscriptJob) async {
+  // One job through whichever engine applies (Apple Speech, Whisper, Yap) plus
+  // the shared completion; every path mutates the same job state. TODO: split per engine.
+  private func processJob(_ job: TranscriptJob) async { // swiftlint:disable:this function_body_length
     var updatedJob = job
     updatedJob.status = .downloadingModel(progress: 0)
     activeJobs[job.id] = updatedJob
@@ -643,6 +636,7 @@ class TranscriptManager {
 
         let yapService = YapTranscriptService()
         let jobID = job.id
+        try await yapService.ensureReachable(baseURL: base, apiKey: key)
 
         // Submit first, then store the server job ID synchronously on the @MainActor
         // before polling begins — this eliminates the race where cancel() fires
@@ -746,8 +740,21 @@ class TranscriptManager {
     }
     return error.localizedDescription
   }
+}
 
+// Split from the class body to keep it a readable size; same file, so these
+// still reach its private state.
+extension TranscriptManager {
   // MARK: - Yap auto-transcript helpers
+
+  /// Yap-server timeout scaled to episode length: ≤1h → 3 min, 2h → 5 min,
+  /// capped at 10 min. Unknown duration → 5 min.
+  /// ponytail: linear duration/24 hits both requested anchors; tune the
+  /// divisor if server throughput changes.
+  nonisolated static func yapTimeout(forDuration duration: TimeInterval?) -> TimeInterval {
+    guard let duration, duration.isFinite, duration > 0 else { return 300 }
+    return min(max(duration / 24, 180), 600)
+  }
 
   /// Returns `true` when the podcast has not hit the consecutive-failure cap for
   /// automatic yap transcript queuing. Manual queuing is always allowed.

@@ -124,11 +124,13 @@ struct MacLibraryEpisodeListRow: View {
             duration: episode.episodeInfo.duration,
             guid: episode.episodeInfo.guid
           )
-          // Completed episodes always restart from 0 — see EpisodeRowView.playAction().
+          // Live store, not the LibraryEpisode snapshot (can be stale); returns 0
+          // for completed episodes — see EpisodeRowView.playAction().
           audioManager.play(
             episode: playbackEpisode,
             audioURL: playbackURL,
-            startTime: episode.isCompleted ? 0 : episode.lastPlaybackPosition,
+            startTime: PlaybackStateCoordinator.savedPlaybackPosition(
+              podcastTitle: episode.podcastTitle, episodeTitle: episode.episodeInfo.title),
             imageURL: episode.imageURL ?? "",
             useDefaultSpeed: true
           )

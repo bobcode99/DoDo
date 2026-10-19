@@ -59,13 +59,13 @@ nonisolated struct TimestampUtils {
   /// Formats seconds into a display string like "05:32" or "1:23:45".
   static func formatSeconds(_ seconds: TimeInterval) -> String {
     let total = Int(seconds)
-    let h = total / 3600
-    let m = (total % 3600) / 60
-    let s = total % 60
-    if h > 0 {
-      return String(format: "%d:%02d:%02d", h, m, s)
+    let hours = total / 3600
+    let minutes = (total % 3600) / 60
+    let secs = total % 60
+    if hours > 0 {
+      return String(format: "%d:%02d:%02d", hours, minutes, secs)
     } else {
-      return String(format: "%02d:%02d", m, s)
+      return String(format: "%02d:%02d", minutes, secs)
     }
   }
 

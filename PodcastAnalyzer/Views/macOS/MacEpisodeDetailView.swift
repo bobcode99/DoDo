@@ -80,14 +80,12 @@ struct MacEpisodeDetailView: View {
         .navigationTitle(viewModel.title)
         .navigationSubtitle(viewModel.podcastTitle)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                EpisodeDetailToolbarItems(
-                    viewModel: viewModel,
-                    selectedTab: 0, // Summary — translate button is shown (acts on description)
-                    showTranslationLanguagePicker: $showTranslationLanguagePicker,
-                    showDeleteConfirmation: $showDeleteConfirmation
-                )
-            }
+            EpisodeDetailToolbarItems(
+                viewModel: viewModel,
+                selectedTab: 0, // Summary — translate button is shown (acts on description)
+                showTranslationLanguagePicker: $showTranslationLanguagePicker,
+                showDeleteConfirmation: $showDeleteConfirmation
+            )
         }
         .episodeDetailSheetsAndAlerts(
             viewModel: viewModel,

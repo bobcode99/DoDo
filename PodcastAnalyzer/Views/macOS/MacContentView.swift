@@ -13,7 +13,6 @@ import SwiftUI
 
 enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
   case home = "Home"
-  case library = "Library"
   case analysis = "Analysis"
   case search = "Search"
   // Library sub-items with unique identifiers
@@ -24,21 +23,6 @@ enum MacSidebarItem: String, CaseIterable, Identifiable, Hashable {
   case libraryTranscribing = "Library.Transcribing"
 
   var id: String { rawValue }
-
-  var iconName: String {
-    switch self {
-    case .home: return "house"
-    case .library: return "books.vertical"
-    case .analysis: return "sparkles"
-    case .search: return "magnifyingglass"
-    case .libraryPodcasts: return "square.stack"
-    case .librarySaved: return "star.fill"
-    case .libraryDownloaded: return "arrow.down.circle.fill"
-    case .libraryLatest: return "clock.fill"
-    case .libraryTranscribing: return "waveform.badge.plus"
-    }
-  }
-
 }
 
 // MARK: - Main Content View
@@ -69,8 +53,23 @@ struct MacContentView: View {
     @Bindable var importManager = importManager
 
     NavigationSplitView(columnVisibility: $columnVisibility) {
-      sidebarContent
+      MacSidebar(selection: $selectedSidebarItem)
+        .navigationTitle("Podcasts")
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+        .onChange(of: selectedSidebarItem) {
+          // Reset the navigation path so any pushed view (e.g. EpisodeDetail) is
+          // dismissed — this ensures onDisappear fires and ViewModels are cleaned up.
+          navigationPath = NavigationPath()
+        }
+        .toolbar {
+          ToolbarItem(placement: .primaryAction) {
+            SettingsLink {
+              Label("Settings", systemImage: "gearshape")
+            }
+            .labelStyle(.iconOnly)
+            .help("Settings")
+          }
+        }
     } detail: {
       mainContent
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -111,96 +110,9 @@ struct MacContentView: View {
         }
       }
     }
-    .alert(
-      "Can't Play Offline",
-      isPresented: Binding(
-        get: { playbackAlertMessage != nil },
-        set: { if !$0 { playbackAlertMessage = nil } }
-      )
-    ) {
-      Button("OK", role: .cancel) { playbackAlertMessage = nil }
-    } message: {
-      Text(playbackAlertMessage ?? "")
-    }
-  }
-
-  // MARK: - Sidebar Content
-
-  @ViewBuilder
-  private var sidebarContent: some View {
-    List(selection: $selectedSidebarItem) {
-      Section("Browse") {
-        Label("Home", systemImage: "house")
-          .tag(MacSidebarItem.home)
-
-        Label {
-          Text("Analysis")
-        } icon: {
-          Image(systemName: "sparkles")
-            .foregroundStyle(.purple)
-        }
-        .tag(MacSidebarItem.analysis)
-      }
-
-      Section("Library") {
-        Label {
-          Text("Your Podcasts")
-        } icon: {
-          Image(systemName: "square.stack")
-            .foregroundStyle(.blue)
-        }
-        .tag(MacSidebarItem.libraryPodcasts)
-
-        Label {
-          Text("Saved")
-        } icon: {
-          Image(systemName: "star.fill")
-            .foregroundStyle(.yellow)
-        }
-        .tag(MacSidebarItem.librarySaved)
-
-        Label {
-          Text("Downloaded")
-        } icon: {
-          Image(systemName: "arrow.down.circle.fill")
-            .foregroundStyle(.green)
-        }
-        .tag(MacSidebarItem.libraryDownloaded)
-
-        Label {
-          Text("Latest Episodes")
-        } icon: {
-          Image(systemName: "clock.fill")
-            .foregroundStyle(.blue)
-        }
-        .tag(MacSidebarItem.libraryLatest)
-
-        // Shows live counts from TranscriptManager.shared.activeJobs.
-        // Isolated subview so progress ticks don't invalidate the whole sidebar.
-        TranscribingSidebarLabel()
-          .tag(MacSidebarItem.libraryTranscribing)
-      }
-
-      Section("Discover") {
-        Label("Search", systemImage: "magnifyingglass")
-          .tag(MacSidebarItem.search)
-      }
-    }
-    .listStyle(.sidebar)
-    .navigationTitle("Podcasts")
-    .onChange(of: selectedSidebarItem) { _, _ in
-      // Reset the navigation path so any pushed view (e.g. EpisodeDetail) is
-      // dismissed — this ensures onDisappear fires and ViewModels are cleaned up.
-      navigationPath = NavigationPath()
-    }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        SettingsLink {
-          Label("Settings", systemImage: "gearshape")
-        }
-        .labelStyle(.iconOnly)
-        .help("Settings")
-      }
+    .alert("Can't Play Episode", item: $playbackAlertMessage) { _ in
+    } message: { message in
+      Text(message)
     }
   }
 
@@ -224,9 +136,6 @@ struct MacContentView: View {
           MacLibraryLatestView()
         case .libraryTranscribing:
           TranscriptGenerationProgressOverallView(embedNavigationStack: false)
-        case .library:
-          // Fallback to podcasts if somehow .library is selected
-          MacLibraryPodcastsView()
 
         case .search:
           MacSearchView()
@@ -301,38 +210,6 @@ struct MacContentView: View {
 
   // MARK: - Notification Navigation
 
-  // Sidebar label for the Transcribing destination. Observes TranscriptManager
-  // in isolation so progress ticks don't invalidate the entire sidebar List.
-  // The label is always present (so the row is consistently selectable) but
-  // its trailing badge only appears when there are jobs to surface.
-  private struct TranscribingSidebarLabel: View {
-    @State private var manager = TranscriptManager.shared
-
-    var body: some View {
-      let count = manager.activeJobCount
-      Label {
-        HStack {
-          Text("Transcribing")
-          Spacer()
-          if count > 0 {
-            Text("\(count)")
-              .font(.caption2.monospacedDigit())
-              .padding(.horizontal, 6)
-              .padding(.vertical, 1)
-              // Not `.background(.tint) + .foregroundStyle(.white)`: the
-              // shipped accent is white in dark mode, so the count was white
-              // on white.
-              .accentFilled(in: .capsule)
-          }
-        }
-      } icon: {
-        Image(systemName: "waveform.badge.plus")
-          .foregroundStyle(count > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
-          .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: count > 0)
-      }
-    }
-  }
-
   private func handleNotificationNavigation(target: NotificationNavigationTarget) {
     defer { notificationManager.clearNavigation() }
     guard let result = notificationManager.findEpisode(
@@ -346,6 +223,124 @@ struct MacContentView: View {
       podcastLanguage: result.language
     ))
   }
+}
+
+// MARK: - Sidebar
+
+/// The sidebar list. Separate from `MacContentView` so it previews on its own,
+/// without the detail column loading live data.
+struct MacSidebar: View {
+  @Binding var selection: MacSidebarItem?
+
+  var body: some View {
+    List(selection: $selection) {
+      Section("Browse") {
+        Label("Home", systemImage: "house")
+          .tag(MacSidebarItem.home)
+
+        Label {
+          Text("Analysis")
+        } icon: {
+          Image(systemName: "sparkles")
+            .foregroundStyle(.purple)
+        }
+        .tag(MacSidebarItem.analysis)
+      }
+
+      Section("Library") {
+        Label {
+          Text("Your Podcasts")
+        } icon: {
+          Image(systemName: "square.stack")
+            .foregroundStyle(.blue)
+        }
+        .tag(MacSidebarItem.libraryPodcasts)
+
+        Label {
+          Text("Saved")
+        } icon: {
+          Image(systemName: "star.fill")
+            .foregroundStyle(.yellow)
+        }
+        .tag(MacSidebarItem.librarySaved)
+
+        Label {
+          Text("Downloaded")
+        } icon: {
+          Image(systemName: "arrow.down.circle.fill")
+            .foregroundStyle(.green)
+        }
+        .tag(MacSidebarItem.libraryDownloaded)
+
+        Label {
+          Text("Latest Episodes")
+        } icon: {
+          Image(systemName: "clock.fill")
+            .foregroundStyle(.blue)
+        }
+        .tag(MacSidebarItem.libraryLatest)
+
+        // Shows live counts from TranscriptManager.shared.activeJobs.
+        // Isolated subview so progress ticks don't invalidate the whole sidebar.
+        TranscribingSidebarLabel()
+          .tag(MacSidebarItem.libraryTranscribing)
+      }
+
+      Section("Discover") {
+        Label("Search", systemImage: "magnifyingglass")
+          .tag(MacSidebarItem.search)
+      }
+    }
+    // Selection highlight comes from the app accent (AccentColor asset), not
+    // `.tint` — the asset carries a Mac-only grey for dark mode so the
+    // selected row isn't a white bar behind white text.
+    .listStyle(.sidebar)
+  }
+}
+
+// Sidebar label for the Transcribing destination. Observes TranscriptManager
+// in isolation so progress ticks don't invalidate the entire sidebar List.
+// The row is always present (so it's consistently selectable); the system
+// badge hides itself at 0.
+private struct TranscribingSidebarLabel: View {
+  @State private var manager = TranscriptManager.shared
+
+  var body: some View {
+    let count = manager.activeJobCount
+    Label {
+      Text("Transcribing")
+    } icon: {
+      Image(systemName: "waveform.badge.plus")
+        .foregroundStyle(count > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+        .symbolEffect(.variableColor.iterative, options: .repeat(.continuous), isActive: count > 0)
+    }
+    .badge(count)
+  }
+}
+
+#Preview("Sidebar") {
+  @Previewable @State var selection: MacSidebarItem? = .home
+  NavigationSplitView {
+    MacSidebar(selection: $selection)
+      .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+      .navigationTitle("Podcasts")
+  } detail: {
+    Text(selection?.rawValue ?? "")
+  }
+  .frame(width: 720, height: 480)
+}
+
+#Preview("Sidebar – Dark") {
+  @Previewable @State var selection: MacSidebarItem? = .home
+  NavigationSplitView {
+    MacSidebar(selection: $selection)
+      .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+      .navigationTitle("Podcasts")
+  } detail: {
+    Text(selection?.rawValue ?? "")
+  }
+  .frame(width: 720, height: 480)
+  .preferredColorScheme(.dark)
 }
 
 #endif

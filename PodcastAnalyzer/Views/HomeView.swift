@@ -45,15 +45,15 @@ struct TrendingEpisodeDetailDestination: Hashable, Identifiable {
   }
 
   private static let isoFormatter: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
   }()
 
   private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter
   }()
 
   /// Convert to PodcastEpisodeInfo for EpisodeDetailView
@@ -194,7 +194,12 @@ struct HomeView: View {
       .presentationDetents([.medium])
     }
     .refreshable {
-      await viewModel.refresh()
+      // Don't hold the spinner for the network (Apple's chart API can hang
+      // ~30s): while it shows, iOS 27 draws the content ~60pt lower than it
+      // hit-tests, so a tap on a row opens the one below. Each section shows its
+      // own loading indicator instead. Unstructured, so a re-render mid-refresh
+      // can't cancel it either.
+      Task { await viewModel.refresh() }
     }
     .onAppear {
       // This is the key: set the context once
@@ -309,7 +314,7 @@ private func mockTrendingEpisode(title: String, podcast: String, podcastId: Stri
 
 private let mockUpNext: [ScoredEpisode] = [
   mockScoredEpisode(title: "The 45-Minute Rule", podcast: "The Daily", reason: .inQueue(position: 1)),
-  mockScoredEpisode(title: "Think Baseball Is Boring? The Sabermetrics Revolution", podcast: "Freakonomics Radio", reason: .inProgress(percentComplete: 32), progressRatio: 0.32),
+  mockScoredEpisode(title: "Think Baseball Is Boring? The Sabermetrics Revolution", podcast: "Freakonomics Radio", reason: .inProgress, progressRatio: 0.32),
   mockScoredEpisode(title: "Understanding Swift Concurrency in Practice", podcast: "The Swift Podcast", reason: .newEpisode),
   mockScoredEpisode(title: "A Deep Dive Into Ambient Sound Design", podcast: "20,000 Hertz", reason: .downloaded),
 ]

@@ -137,7 +137,9 @@ struct TranscriptSearchSheet: View {
     }
 
     private var resultsHeader: some View {
-        Text("Showing \(viewModel.transcript.searchMatchIds.count) result\(viewModel.transcript.searchMatchIds.count == 1 ? "" : "s")")
+        // Inflected, not a hand-rolled "s": the suffix was passed to every language
+        // as an argument, so zh-Hant read "顯示 64 個結果s".
+        Text("Showing ^[\(viewModel.transcript.searchMatchIds.count) result](inflect: true)")
             .font(.subheadline)
             .foregroundStyle(.tint)
             .frame(maxWidth: .infinity)

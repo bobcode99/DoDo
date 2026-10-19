@@ -26,7 +26,18 @@ final class PersistentLogService {
       .appendingPathComponent("Logs", isDirectory: true)
   }
 
-  @ObservationIgnored private var exportTask: Task<Void, Never>?
+  private var exportTask: Task<Void, Never>?
+
+  /// One file per app process. Each export rewrites it: the store already holds
+  /// everything this process logged, so a new file per export would repeat the
+  /// whole session every time the app is backgrounded — and push earlier
+  /// sessions out of the `keeping` window within a single session.
+  private nonisolated static let sessionFileName: String = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd_HHmmss"
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    return "PodcastAnalyzer_\(formatter.string(from: Date())).log"
+  }()
 
   private init() {}
 
@@ -71,7 +82,7 @@ final class PersistentLogService {
 
   // MARK: - Export
 
-  /// Reads OSLogStore entries from the last 24 hours and writes them to a date-stamped .log file.
+  /// Reads this process's OSLogStore entries (last 24 hours) into its session .log file.
   private nonisolated static func exportLogs(
     subsystems: [String],
     logsDirectory: URL,
@@ -119,11 +130,7 @@ final class PersistentLogService {
       try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
     }
 
-    // Write to file
-    let fileFormatter = DateFormatter()
-    fileFormatter.dateFormat = "yyyy-MM-dd_HHmmss"
-    fileFormatter.locale = Locale(identifier: "en_US_POSIX")
-    let fileName = "PodcastAnalyzer_\(fileFormatter.string(from: Date())).log"
+    let fileName = sessionFileName
     let fileURL = logsDirectory.appendingPathComponent(fileName)
 
     try content.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -132,7 +139,7 @@ final class PersistentLogService {
 
   // MARK: - Cleanup
 
-  /// Removes log files older than the most recent `keeping` files.
+  /// Removes log files older than the most recent `keeping` sessions.
   private nonisolated static func cleanupOldLogs(
     logsDirectory: URL,
     keeping: Int,
@@ -149,9 +156,9 @@ final class PersistentLogService {
 
       let logFiles = contents
         .filter { $0.pathExtension == "log" }
-        .sorted { a, b in
-          let dateA = (try? a.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
-          let dateB = (try? b.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+        .sorted { lhs, rhs in
+          let dateA = (try? lhs.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+          let dateB = (try? rhs.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
           return dateA > dateB  // newest first
         }
 

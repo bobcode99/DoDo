@@ -17,7 +17,7 @@ struct PodcastEpisodeFilterView: View {
   /// this, the list reverts to whichever chip was selected before the sheet
   /// opened (almost always `.all`) and the configured terms appear to do
   /// nothing.
-  var onSave: (() -> Void)? = nil
+  var onSave: (() -> Void)?
   @Environment(\.dismiss) private var dismiss
 
   @State private var includeTerms: String = ""

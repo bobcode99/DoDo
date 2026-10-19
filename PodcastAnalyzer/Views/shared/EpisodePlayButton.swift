@@ -57,8 +57,8 @@ struct LiveEpisodePlayButton: View {
     if isCurrentEpisode, audioManager.duration > 0 {
       return audioManager.currentTime / audioManager.duration
     }
-    guard let d = duration, d > 0 else { return 0 }
-    return min(lastPlaybackPosition / Double(d), 1.0)
+    guard let totalDuration = duration, totalDuration > 0 else { return 0 }
+    return min(lastPlaybackPosition / Double(totalDuration), 1.0)
   }
 
   /// Whether playback is complete (always uses SwiftData value since audio manager doesn't track this)
@@ -206,18 +206,18 @@ struct EpisodePlayButton: View {
 
   private func formatTimeUnits(_ totalSeconds: Int) -> String {
       let seconds = max(0, totalSeconds)
-      let h = seconds / 3600
-      let m = (seconds % 3600) / 60
-      let s = seconds % 60
+      let hours = seconds / 3600
+      let minutes = (seconds % 3600) / 60
+      let secs = seconds % 60
       let hourUnit = usesChineseUnits ? "時" : "h"
       let minuteUnit = usesChineseUnits ? "分" : "m"
 
-      if h > 0 {
-          return "\(h)\(hourUnit) \(m)\(minuteUnit)"
-      } else if m > 0 {
-          return "\(m)\(minuteUnit)"
+      if hours > 0 {
+          return "\(hours)\(hourUnit) \(minutes)\(minuteUnit)"
+      } else if minutes > 0 {
+          return "\(minutes)\(minuteUnit)"
       } else {
-          return String(format: "0:%02d", s)
+          return String(format: "0:%02d", secs)
       }
   }
 

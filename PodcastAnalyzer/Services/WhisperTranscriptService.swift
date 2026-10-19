@@ -49,6 +49,20 @@ actor WhisperTranscriptService {
 
     // MARK: - Transcription
 
+    /// Transcription settings; a known language also enables the prefill prompt.
+    private static func decodingOptions(language: String?) -> DecodingOptions {
+        DecodingOptions(
+            verbose: false,
+            task: .transcribe,
+            language: language,
+            usePrefillPrompt: language != nil,
+            wordTimestamps: true,
+            compressionRatioThreshold: 2.4,
+            logProbThreshold: -1.0,
+            noSpeechThreshold: 0.6
+        )
+    }
+
     /// Transcribes an audio file to SRT format, streaming progress updates.
     ///
     /// - Parameters:
@@ -89,7 +103,7 @@ actor WhisperTranscriptService {
                         code.lowercased().split(separator: "-").first.map(String.init)
                     }
 
-                    var detectedLanguage: String? = nil
+                    var detectedLanguage: String?
                     if resolvedWhisperLanguage == nil {
                         if let detected = try? await whisper.detectLanguage(audioPath: inputFile.path) {
                             resolvedWhisperLanguage = detected.language
@@ -105,16 +119,7 @@ actor WhisperTranscriptService {
                         return
                     }
 
-                    let options = DecodingOptions(
-                        verbose: false,
-                        task: .transcribe,
-                        language: resolvedWhisperLanguage,
-                        usePrefillPrompt: resolvedWhisperLanguage != nil,
-                        wordTimestamps: true,
-                        compressionRatioThreshold: 2.4,
-                        logProbThreshold: -1.0,
-                        noSpeechThreshold: 0.6
-                    )
+                    let options = Self.decodingOptions(language: resolvedWhisperLanguage)
 
                     // WhisperKit streams segment-level results via a callback.
                     var allSegments: [TranscriptionSegment] = []
@@ -212,10 +217,10 @@ actor WhisperTranscriptService {
         guard seconds.isFinite && !seconds.isNaN else { return "00:00:00,000" }
         let totalMs = Int(max(0, seconds) * 1000)
         let ms = totalMs % 1000
-        let s = (totalMs / 1000) % 60
-        let m = (totalMs / 60_000) % 60
-        let h = totalMs / 3_600_000
-        return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
+        let secs = (totalMs / 1000) % 60
+        let minutes = (totalMs / 60_000) % 60
+        let hours = totalMs / 3_600_000
+        return String(format: "%02d:%02d:%02d,%03d", hours, minutes, secs, ms)
     }
 
     // MARK: - Duration Estimation

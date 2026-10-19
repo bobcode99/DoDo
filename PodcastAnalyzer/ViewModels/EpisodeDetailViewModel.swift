@@ -690,7 +690,6 @@ final class EpisodeDetailViewModel {
     PlatformShareSheet.share(url: url)
   }
 
-
   func toggleStar() {
     // Create model if it doesn't exist
     if episodeModel == nil, let context = modelContext {
@@ -761,7 +760,6 @@ final class EpisodeDetailViewModel {
   // SwiftData persistence — lives on `aiAnalysis`. Views access it as
   // `viewModel.aiAnalysis.X`.
 
-
   // MARK: - Cleanup
 
   /// Cancel all active subscriptions to prevent memory leaks.
@@ -798,4 +796,3 @@ extension EpisodeDetailViewModel: TranscriptHost {
     await translation.loadTranslationsAfterParsing()
   }
 }
-

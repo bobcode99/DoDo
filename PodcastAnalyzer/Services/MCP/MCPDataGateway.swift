@@ -109,14 +109,14 @@ nonisolated enum MCPGatewayError: Error, CustomStringConvertible {
 
   var description: String {
     switch self {
-    case .podcastNotFound(let t): return "Podcast not found: \(t)"
-    case .episodeNotFound(let p, let e): return "Episode not found: \(p) — \(e)"
-    case .transcriptNotFound(let p, let e):
-      return "No transcript for \(p) — \(e). Call generate_transcript first."
-    case .aiAnalysisNotFound(let p, let e):
-      return "No AI analysis for \(p) — \(e)."
-    case .audioUnavailable(let p, let e, let reason):
-      return "Cannot transcribe \(p) — \(e): \(reason)"
+    case .podcastNotFound(let title): return "Podcast not found: \(title)"
+    case .episodeNotFound(let podcast, let episode): return "Episode not found: \(podcast) — \(episode)"
+    case .transcriptNotFound(let podcast, let episode):
+      return "No transcript for \(podcast) — \(episode). Call generate_transcript first."
+    case .aiAnalysisNotFound(let podcast, let episode):
+      return "No AI analysis for \(podcast) — \(episode)."
+    case .audioUnavailable(let podcast, let episode, let reason):
+      return "Cannot transcribe \(podcast) — \(episode): \(reason)"
     case .invalidArgument(let msg): return "Invalid argument: \(msg)"
     }
   }

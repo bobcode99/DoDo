@@ -121,7 +121,7 @@ struct LibraryEpisodeContextMenu: View {
 
   @ViewBuilder
   private var shareSection: some View {
-    if let audioURL = episode.episodeInfo.audioURL, let _ = URL(string: audioURL) {
+    if let audioURL = episode.episodeInfo.audioURL, URL(string: audioURL) != nil {
       Button(action: onShare) {
         Label("Share", systemImage: "square.and.arrow.up")
       }

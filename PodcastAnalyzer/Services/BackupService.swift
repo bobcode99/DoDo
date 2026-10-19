@@ -39,7 +39,7 @@ final class BackupService {
         var errorDescription: String? {
             switch self {
             case .noContext: "Backup service is not connected to the database."
-            case .unsupportedVersion(let v): "This backup was made by a newer app version (v\(v))."
+            case .unsupportedVersion(let version): "This backup was made by a newer app version (v\(version))."
             case .readFailed: "Could not read the selected file."
             case .decodeFailed: "The selected file is not a valid PodcastAnalyzer backup."
             }
@@ -109,6 +109,40 @@ final class BackupService {
         var warnings: [String] = []
     }
 
+    /// Decodes the archive at `url`; sets `lastError` and returns nil on failure.
+    private func decodeArchive(at url: URL) -> BackupArchive? {
+        do {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(BackupArchive.self, from: data)
+        } catch {
+            logger.error("Backup decode failed: \(error.localizedDescription, privacy: .public)")
+            lastError = BackupError.decodeFailed.errorDescription
+            return nil
+        }
+    }
+
+    /// Step 1 of a restore: subscribe via PodcastImportManager (de-dupes by
+    /// rssUrl/title, fetches RSS only when the podcast is unknown).
+    private func importSubscriptions(_ rssURLs: [String], in ctx: ModelContext, summary: inout ImportSummary) async {
+        status = "Importing podcasts…"
+        progress = 0.05
+        PodcastImportManager.shared.setModelContext(ctx)
+        await PodcastImportManager.shared.importPodcasts(from: rssURLs)
+        if let results = PodcastImportManager.shared.importResults {
+            summary.podcastsAdded = results.successful
+            summary.podcastsMerged = results.skipped
+            summary.podcastsFailed = results.failed
+            if !results.failedPodcasts.isEmpty {
+                summary.warnings.append("Could not subscribe to: \(results.failedPodcasts.joined(separator: ", "))")
+            }
+        }
+        // Tell the import sheet PodcastImportManager owns to dismiss itself,
+        // since this restore flow drives its own progress sheet.
+        PodcastImportManager.shared.dismissImportSheet()
+    }
+
     func importBackup(from url: URL) async {
         guard let ctx = modelContext else {
             lastError = BackupError.noContext.errorDescription
@@ -126,17 +160,7 @@ final class BackupService {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
 
-        let archive: BackupArchive
-        do {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            archive = try decoder.decode(BackupArchive.self, from: data)
-        } catch {
-            logger.error("Backup decode failed: \(error.localizedDescription, privacy: .public)")
-            lastError = BackupError.decodeFailed.errorDescription
-            return
-        }
+        guard let archive = decodeArchive(at: url) else { return }
 
         guard archive.version <= BackupArchive.currentVersion else {
             lastError = BackupError.unsupportedVersion(archive.version).errorDescription
@@ -150,21 +174,7 @@ final class BackupService {
         let subscribedPodcasts = archive.podcasts.filter(\.isSubscribed)
         let rssURLs = subscribedPodcasts.map(\.rssUrl)
         if !rssURLs.isEmpty {
-            status = "Importing podcasts…"
-            progress = 0.05
-            PodcastImportManager.shared.setModelContext(ctx)
-            await PodcastImportManager.shared.importPodcasts(from: rssURLs)
-            if let r = PodcastImportManager.shared.importResults {
-                summary.podcastsAdded = r.successful
-                summary.podcastsMerged = r.skipped
-                summary.podcastsFailed = r.failed
-                if !r.failedPodcasts.isEmpty {
-                    summary.warnings.append("Could not subscribe to: \(r.failedPodcasts.joined(separator: ", "))")
-                }
-            }
-            // Tell the import sheet PodcastImportManager owns to dismiss itself,
-            // since this restore flow drives its own progress sheet.
-            PodcastImportManager.shared.dismissImportSheet()
+            await importSubscriptions(rssURLs, in: ctx, summary: &summary)
         }
 
         // 2. Per-podcast settings — apply to the rows that now exist.
@@ -245,23 +255,23 @@ final class BackupService {
             }
         }
 
-        guard let m = model else {
+        guard let podcastModel = model else {
             warnings.append("Skipping settings for \"\(bp.title)\" — podcast not in library.")
             return
         }
 
-        m.autoTranscribeNewEpisodes = bp.autoTranscribeNewEpisodes
-        m.autoDownloadSetting = bp.autoDownloadSetting
-        m.episodeFilterInclude = bp.episodeFilterInclude
-        m.episodeFilterExclude = bp.episodeFilterExclude
-        m.episodeFilterMinDuration = bp.episodeFilterMinDuration
-        if let cadence = bp.detectedCadence, m.detectedCadence == nil {
-            m.detectedCadence = cadence
+        podcastModel.autoTranscribeNewEpisodes = bp.autoTranscribeNewEpisodes
+        podcastModel.autoDownloadSetting = bp.autoDownloadSetting
+        podcastModel.episodeFilterInclude = bp.episodeFilterInclude
+        podcastModel.episodeFilterExclude = bp.episodeFilterExclude
+        podcastModel.episodeFilterMinDuration = bp.episodeFilterMinDuration
+        if let cadence = bp.detectedCadence, podcastModel.detectedCadence == nil {
+            podcastModel.detectedCadence = cadence
         }
         // Preserve the user's original subscribe date when older than the
         // freshly-created model's `dateAdded` (which defaults to Date()).
-        if bp.dateAdded < m.dateAdded {
-            m.dateAdded = bp.dateAdded
+        if bp.dateAdded < podcastModel.dateAdded {
+            podcastModel.dateAdded = bp.dateAdded
         }
     }
 
@@ -275,8 +285,8 @@ final class BackupService {
             FetchDescriptor<EpisodeDownloadModel>(predicate: #Predicate { $0.id == key })
         ).first
 
-        guard let e = existing else {
-            let m = EpisodeDownloadModel(
+        guard let episode = existing else {
+            let newEpisode = EpisodeDownloadModel(
                 episodeTitle: be.episodeTitle,
                 podcastTitle: be.podcastTitle,
                 audioURL: be.audioURL,
@@ -292,31 +302,31 @@ final class BackupService {
                 autoDownloadEnabled: be.autoDownloadEnabled,
                 upNextDismissedAt: be.upNextDismissedAt
             )
-            ctx.insert(m)
+            ctx.insert(newEpisode)
             summary.episodesInserted += 1
             return
         }
 
         // Last-played-wins on playback fields.
         let incomingPlayed = be.lastPlayedDate ?? .distantPast
-        let existingPlayed = e.lastPlayedDate ?? .distantPast
+        let existingPlayed = episode.lastPlayedDate ?? .distantPast
         if incomingPlayed >= existingPlayed {
-            e.lastPlaybackPosition = be.lastPlaybackPosition
-            if be.duration > 0 { e.duration = be.duration }
-            e.isCompleted = be.isCompleted
-            e.lastPlayedDate = be.lastPlayedDate
+            episode.lastPlaybackPosition = be.lastPlaybackPosition
+            if be.duration > 0 { episode.duration = be.duration }
+            episode.isCompleted = be.isCompleted
+            episode.lastPlayedDate = be.lastPlayedDate
         }
-        e.playCount = max(e.playCount, be.playCount)
-        e.isStarred = e.isStarred || be.isStarred
-        if e.notes == nil, let n = be.notes, !n.isEmpty { e.notes = n }
+        episode.playCount = max(episode.playCount, be.playCount)
+        episode.isStarred = episode.isStarred || be.isStarred
+        if episode.notes == nil, let notes = be.notes, !notes.isEmpty { episode.notes = notes }
         if let dismissed = be.upNextDismissedAt {
-            e.upNextDismissedAt = dismissed
+            episode.upNextDismissedAt = dismissed
         }
         // AntennaPod-style: once auto-download is off, stays off.
-        e.autoDownloadEnabled = e.autoDownloadEnabled && be.autoDownloadEnabled
-        if e.imageURL == nil, be.imageURL != nil { e.imageURL = be.imageURL }
-        if e.pubDate == nil, be.pubDate != nil { e.pubDate = be.pubDate }
-        if e.audioURL.isEmpty, !be.audioURL.isEmpty { e.audioURL = be.audioURL }
+        episode.autoDownloadEnabled = episode.autoDownloadEnabled && be.autoDownloadEnabled
+        if episode.imageURL == nil, be.imageURL != nil { episode.imageURL = be.imageURL }
+        if episode.pubDate == nil, be.pubDate != nil { episode.pubDate = be.pubDate }
+        if episode.audioURL.isEmpty, !be.audioURL.isEmpty { episode.audioURL = be.audioURL }
         summary.episodesUpdated += 1
     }
 
@@ -326,7 +336,7 @@ final class BackupService {
         summary: inout ImportSummary
     ) {
         let existing = (try? ctx.fetch(FetchDescriptor<QueueItemModel>())) ?? []
-        for q in existing { ctx.delete(q) }
+        for staleItem in existing { ctx.delete(staleItem) }
 
         for bq in items.sorted(by: { $0.position < $1.position }) {
             let episode = PlaybackEpisode(
@@ -356,35 +366,34 @@ final class BackupService {
             predicate: #Predicate { $0.episodeTitle == title && $0.podcastTitle == podcast }
         )).first
 
-        guard let e = existing else {
-            let m = EpisodeAIAnalysis(
+        guard let analysis = existing else {
+            let newAnalysis = EpisodeAIAnalysis(
                 episodeAudioURL: ba.episodeAudioURL,
                 episodeTitle: ba.episodeTitle,
                 podcastTitle: ba.podcastTitle
             )
-            m.analysisJSON = ba.analysisJSON
-            m.qaHistoryJSON = ba.qaHistoryJSON
-            m.provider = ba.provider
-            m.model = ba.model
-            m.generatedAt = ba.generatedAt
-            m.createdAt = ba.createdAt
-            m.updatedAt = ba.updatedAt
-            ctx.insert(m)
+            newAnalysis.analysisJSON = ba.analysisJSON
+            newAnalysis.qaHistoryJSON = ba.qaHistoryJSON
+            newAnalysis.provider = ba.provider
+            newAnalysis.model = ba.model
+            newAnalysis.generatedAt = ba.generatedAt
+            newAnalysis.createdAt = ba.createdAt
+            newAnalysis.updatedAt = ba.updatedAt
+            ctx.insert(newAnalysis)
             summary.analysesUpserted += 1
             return
         }
 
-        if ba.updatedAt > e.updatedAt {
-            e.analysisJSON = ba.analysisJSON
-            e.qaHistoryJSON = ba.qaHistoryJSON
-            e.provider = ba.provider
-            e.model = ba.model
-            e.generatedAt = ba.generatedAt
-            e.updatedAt = ba.updatedAt
+        if ba.updatedAt > analysis.updatedAt {
+            analysis.analysisJSON = ba.analysisJSON
+            analysis.qaHistoryJSON = ba.qaHistoryJSON
+            analysis.provider = ba.provider
+            analysis.model = ba.model
+            analysis.generatedAt = ba.generatedAt
+            analysis.updatedAt = ba.updatedAt
             summary.analysesUpserted += 1
         }
     }
-
 
     func dismissProgressSheet() {
         showProgressSheet = false
@@ -399,72 +408,71 @@ final class BackupService {
 // MARK: - DTO ⇄ Model bridges
 
 extension BackupPodcast {
-    init(from m: PodcastInfoModel) {
-        self.rssUrl = m.rssUrl
-        self.title = m.title
-        self.imageURL = m.podcastInfo.imageURL
-        self.language = m.podcastInfo.language
-        self.podcastDescription = m.podcastInfo.podcastInfoDescription
-        self.dateAdded = m.dateAdded
-        self.isSubscribed = m.isSubscribed
-        self.autoTranscribeNewEpisodes = m.autoTranscribeNewEpisodes
-        self.autoDownloadSetting = m.autoDownloadSetting
-        self.episodeFilterInclude = m.episodeFilterInclude
-        self.episodeFilterExclude = m.episodeFilterExclude
-        self.episodeFilterMinDuration = m.episodeFilterMinDuration
-        self.detectedCadence = m.detectedCadence
+    init(from model: PodcastInfoModel) {
+        self.rssUrl = model.rssUrl
+        self.title = model.title
+        self.imageURL = model.podcastInfo.imageURL
+        self.language = model.podcastInfo.language
+        self.podcastDescription = model.podcastInfo.podcastInfoDescription
+        self.dateAdded = model.dateAdded
+        self.isSubscribed = model.isSubscribed
+        self.autoTranscribeNewEpisodes = model.autoTranscribeNewEpisodes
+        self.autoDownloadSetting = model.autoDownloadSetting
+        self.episodeFilterInclude = model.episodeFilterInclude
+        self.episodeFilterExclude = model.episodeFilterExclude
+        self.episodeFilterMinDuration = model.episodeFilterMinDuration
+        self.detectedCadence = model.detectedCadence
     }
 }
 
 extension BackupEpisode {
-    init(from m: EpisodeDownloadModel) {
-        self.podcastTitle = m.podcastTitle
-        self.episodeTitle = m.episodeTitle
-        self.audioURL = m.audioURL
-        self.imageURL = m.imageURL
-        self.pubDate = m.pubDate
-        self.duration = m.duration
-        self.lastPlaybackPosition = m.lastPlaybackPosition
-        self.isCompleted = m.isCompleted
-        self.lastPlayedDate = m.lastPlayedDate
-        self.playCount = m.playCount
-        self.isStarred = m.isStarred
-        self.notes = m.notes
-        self.upNextDismissedAt = m.upNextDismissedAt
-        self.autoDownloadEnabled = m.autoDownloadEnabled
+    init(from model: EpisodeDownloadModel) {
+        self.podcastTitle = model.podcastTitle
+        self.episodeTitle = model.episodeTitle
+        self.audioURL = model.audioURL
+        self.imageURL = model.imageURL
+        self.pubDate = model.pubDate
+        self.duration = model.duration
+        self.lastPlaybackPosition = model.lastPlaybackPosition
+        self.isCompleted = model.isCompleted
+        self.lastPlayedDate = model.lastPlayedDate
+        self.playCount = model.playCount
+        self.isStarred = model.isStarred
+        self.notes = model.notes
+        self.upNextDismissedAt = model.upNextDismissedAt
+        self.autoDownloadEnabled = model.autoDownloadEnabled
     }
 }
 
 extension BackupQueueItem {
-    init(from m: QueueItemModel) {
-        self.position = m.position
-        self.id = m.id
-        self.episodeTitle = m.episodeTitle
-        self.podcastTitle = m.podcastTitle
-        self.audioURL = m.audioURL
-        self.imageURL = m.imageURL
-        self.episodeDescription = m.episodeDescription
-        self.pubDate = m.pubDate
-        self.duration = m.duration
-        self.guid = m.guid
+    init(from model: QueueItemModel) {
+        self.position = model.position
+        self.id = model.id
+        self.episodeTitle = model.episodeTitle
+        self.podcastTitle = model.podcastTitle
+        self.audioURL = model.audioURL
+        self.imageURL = model.imageURL
+        self.episodeDescription = model.episodeDescription
+        self.pubDate = model.pubDate
+        self.duration = model.duration
+        self.guid = model.guid
     }
 }
 
 extension BackupAIAnalysis {
-    init(from m: EpisodeAIAnalysis) {
-        self.episodeAudioURL = m.episodeAudioURL
-        self.episodeTitle = m.episodeTitle
-        self.podcastTitle = m.podcastTitle
-        self.analysisJSON = m.analysisJSON
-        self.qaHistoryJSON = m.qaHistoryJSON
-        self.provider = m.provider
-        self.model = m.model
-        self.generatedAt = m.generatedAt
-        self.createdAt = m.createdAt
-        self.updatedAt = m.updatedAt
+    init(from model: EpisodeAIAnalysis) {
+        self.episodeAudioURL = model.episodeAudioURL
+        self.episodeTitle = model.episodeTitle
+        self.podcastTitle = model.podcastTitle
+        self.analysisJSON = model.analysisJSON
+        self.qaHistoryJSON = model.qaHistoryJSON
+        self.provider = model.provider
+        self.model = model.model
+        self.generatedAt = model.generatedAt
+        self.createdAt = model.createdAt
+        self.updatedAt = model.updatedAt
     }
 }
-
 
 extension BackupSettings {
     /// Read every safelisted UserDefaults key, drop entries the deny list rejects.

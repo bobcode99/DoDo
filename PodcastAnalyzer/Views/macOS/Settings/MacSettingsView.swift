@@ -70,7 +70,6 @@ struct MacSettingsView: View {
   }
 }
 
-
 #Preview {
   MacSettingsView()
 }

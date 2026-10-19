@@ -22,7 +22,7 @@ struct PodcastGridCell: View {
   /// scroll/cold-load lag. ~200pt @3x ≈ 600px, sharp for a half-screen cell.
   private var request: ImageRequest? {
     guard !item.imageURL.isEmpty,
-          let url = URL(string: AppleArtworkURL.upgrade(item.imageURL, targetPixels: 600))
+          let url = URL(string: AppleArtworkURL.canonical(item.imageURL))
     else { return nil }
     var request = ImageRequest(url: url)
     request.processors = [
@@ -43,8 +43,9 @@ struct PodcastGridCell: View {
         if let image = state.image {
           image.resizable().aspectRatio(contentMode: .fill)
         } else {
+          // Spinner only while loading — offline, a failed load spun forever.
           Color.gray.opacity(0.2)
-            .overlay(ProgressView().scaleEffect(0.5))
+            .overlay { if state.isLoading { ProgressView().scaleEffect(0.5) } }
         }
       }
       .aspectRatio(1, contentMode: .fit)

@@ -153,88 +153,17 @@ struct AnalysisResultCardView: View {
           timestampAwareText(parsed.overview)
         }
 
-        if !parsed.keyTakeaways.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Key Takeaways", systemImage: "lightbulb.fill")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.orange)
-
-            ForEach(Array(parsed.keyTakeaways.enumerated()), id: \.offset) { _, takeaway in
-              HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                  .foregroundStyle(.green)
-                  .font(.caption)
-                selectableText(takeaway)
-              }
-            }
-          }
-        }
+        bulletSection(
+          "Key Takeaways", systemImage: "lightbulb.fill", tint: .orange,
+          items: parsed.keyTakeaways, bullet: "checkmark.circle.fill", bulletTint: .green
+        )
 
         if !parsed.targetAudience.isEmpty || !parsed.engagementLevel.isEmpty {
-          HStack(spacing: 16) {
-            if !parsed.targetAudience.isEmpty {
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Target Audience")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                Text(parsed.targetAudience)
-                  .font(.caption)
-                  .fontWeight(.medium)
-              }
-            }
-
-            if !parsed.engagementLevel.isEmpty {
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Engagement")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                HStack(spacing: 4) {
-                  engagementIcon(parsed.engagementLevel)
-                  Text(parsed.engagementLevel.capitalized)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                }
-              }
-            }
-          }
+          audienceRow(parsed)
         }
 
-        // Main Topics
         if !parsed.mainTopics.isEmpty {
-          VStack(alignment: .leading, spacing: 12) {
-            Label("Main Topics", systemImage: "list.bullet.rectangle")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.purple)
-
-            ForEach(Array(parsed.mainTopics.enumerated()), id: \.offset) { _, topic in
-              VStack(alignment: .leading, spacing: 6) {
-                Text(topic.topic)
-                  .font(.subheadline)
-                  .fontWeight(.medium)
-                  .foregroundStyle(.primary)
-
-                selectableText(topic.summary)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-
-                ForEach(topic.keyPoints, id: \.self) { point in
-                  HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "circle.fill")
-                      .font(.system(size: 4))
-                      .foregroundStyle(.purple)
-                      .padding(.top, 6)
-                    selectableText(point)
-                      .font(.caption)
-                  }
-                }
-              }
-              .padding()
-              .background(Color.purple.opacity(0.05))
-              .clipShape(.rect(cornerRadius: 8))
-            }
-          }
+          mainTopicsSection(parsed.mainTopics)
         }
 
         VStack(alignment: .leading, spacing: 16) {
@@ -245,180 +174,207 @@ struct AnalysisResultCardView: View {
           entitySection(title: "Resources", icon: "book.fill", items: parsed.resources, color: .red)
         }
 
-        if !parsed.highlights.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Highlights", systemImage: "star.fill")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.yellow)
+        bulletSection(
+          "Highlights", systemImage: "star.fill", tint: .yellow,
+          items: parsed.highlights, bullet: "star.fill", bulletTint: .yellow
+        )
+        bulletSection(
+          "Key Insights", systemImage: "lightbulb.fill", tint: .orange,
+          items: parsed.keyInsights, bullet: "lightbulb.fill", bulletTint: .orange
+        )
 
-            ForEach(Array(parsed.highlights.enumerated()), id: \.offset) { _, highlight in
-              HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "star.fill")
-                  .foregroundStyle(.yellow)
-                  .font(.caption)
-                selectableText(highlight)
-              }
-            }
-          }
-        }
-
-        // Key Insights
-        if !parsed.keyInsights.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Key Insights", systemImage: "lightbulb.fill")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.orange)
-
-            ForEach(Array(parsed.keyInsights.enumerated()), id: \.offset) { _, insight in
-              HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "lightbulb.fill")
-                  .foregroundStyle(.orange)
-                  .font(.caption)
-                selectableText(insight)
-              }
-            }
-          }
-        }
-
-        // Notable Quotes
         if !parsed.notableQuotes.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Notable Quotes", systemImage: "quote.opening")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.green)
-
-            ForEach(Array(parsed.notableQuotes.enumerated()), id: \.offset) { _, quote in
-              VStack(alignment: .leading, spacing: 6) {
-                selectableText("\"\(quote.text)\"")
-                  .font(.subheadline)
-                  .italic()
-
-                if let seconds = quote.timeInSeconds {
-                  timestampBadge(quote.timestamp!, seconds: seconds)
-                }
-              }
-              .padding()
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                RoundedRectangle(cornerRadius: 8)
-                  .fill(Color.green.opacity(0.1))
-              )
-              .overlay(
-                Rectangle()
-                  .fill(Color.green)
-                  .frame(width: 4),
-                alignment: .leading
-              )
-            }
-          }
+          notableQuotesSection(parsed.notableQuotes)
         }
 
-        if !parsed.actionItems.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Action Items", systemImage: "checkmark.circle.fill")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.teal)
-
-            ForEach(Array(parsed.actionItems.enumerated()), id: \.offset) { _, item in
-              HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "arrow.right.circle.fill")
-                  .foregroundStyle(.teal)
-                  .font(.caption)
-                selectableText(item)
-              }
-            }
-          }
-        }
-
-        if let controversial = parsed.controversialPoints, !controversial.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Controversial Points", systemImage: "exclamationmark.triangle.fill")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.orange)
-
-            ForEach(Array(controversial.enumerated()), id: \.offset) { _, point in
-              HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                  .foregroundStyle(.orange)
-                  .font(.caption)
-                selectableText(point)
-              }
-            }
-          }
-        }
-
-        if let entertaining = parsed.entertainingMoments, !entertaining.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Entertaining Moments", systemImage: "face.smiling.fill")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.pink)
-
-            ForEach(Array(entertaining.enumerated()), id: \.offset) { _, moment in
-              HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "face.smiling.fill")
-                  .foregroundStyle(.pink)
-                  .font(.caption)
-                selectableText(moment)
-              }
-            }
-          }
-        }
+        bulletSection(
+          "Action Items", systemImage: "checkmark.circle.fill", tint: .teal,
+          items: parsed.actionItems, bullet: "arrow.right.circle.fill", bulletTint: .teal
+        )
+        bulletSection(
+          "Controversial Points", systemImage: "exclamationmark.triangle.fill", tint: .orange,
+          items: parsed.controversialPoints ?? [], bullet: "exclamationmark.triangle.fill", bulletTint: .orange
+        )
+        bulletSection(
+          "Entertaining Moments", systemImage: "face.smiling.fill", tint: .pink,
+          items: parsed.entertainingMoments ?? [], bullet: "face.smiling.fill", bulletTint: .pink
+        )
 
         if let qaItems = parsed.qaHighlights, !qaItems.isEmpty {
-          VStack(alignment: .leading, spacing: 8) {
-            Label("Q&A Highlights", systemImage: "bubble.left.and.bubble.right.fill")
-              .font(.subheadline)
-              .fontWeight(.semibold)
-              .foregroundStyle(.cyan)
-
-            ForEach(Array(qaItems.enumerated()), id: \.offset) { _, item in
-              VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .top, spacing: 8) {
-                  Image(systemName: "questionmark.circle.fill")
-                    .foregroundStyle(.cyan)
-                    .font(.caption)
-                  selectableText(item.question)
-                    .fontWeight(.medium)
-                }
-                HStack(alignment: .top, spacing: 8) {
-                  Image(systemName: "arrow.turn.down.right")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                    .padding(.leading, 2)
-                  selectableText(item.answer)
-                    .foregroundStyle(.secondary)
-                }
-              }
-              .padding()
-              .background(Color.cyan.opacity(0.05))
-              .clipShape(.rect(cornerRadius: 8))
-            }
-          }
+          qaHighlightsSection(qaItems)
         }
 
-        // Conclusion
-        VStack(alignment: .leading, spacing: 8) {
-          Label("Conclusion", systemImage: "checkmark.seal.fill")
-            .font(.subheadline)
-            .fontWeight(.semibold)
-            .foregroundStyle(.indigo)
+    VStack(alignment: .leading, spacing: 8) {
+      Label("Conclusion", systemImage: "checkmark.seal.fill")
+        .font(.subheadline)
+        .fontWeight(.semibold)
+        .foregroundStyle(.indigo)
 
-          VStack(alignment: .leading, spacing: 4) {
-            timestampAwareText(parsed.conclusion)
-          }
-          .padding()
-          .background(Color.indigo.opacity(0.1))
-          .clipShape(.rect(cornerRadius: 8))
-        }
+      VStack(alignment: .leading, spacing: 4) {
+        timestampAwareText(parsed.conclusion)
+      }
+      .padding()
+      .background(Color.indigo.opacity(0.1))
+      .clipShape(.rect(cornerRadius: 8))
+    }
       }
     } else {
       selectableText(result.content)
+    }
+  }
+
+  /// Heading plus one icon-led row per item; renders nothing when `items` is empty.
+  @ViewBuilder
+  private func bulletSection(
+    _ title: LocalizedStringKey, systemImage: String, tint: Color,
+    items: [String], bullet: String, bulletTint: Color
+  ) -> some View {
+    if !items.isEmpty {
+      VStack(alignment: .leading, spacing: 8) {
+        Label(title, systemImage: systemImage)
+          .font(.subheadline)
+          .fontWeight(.semibold)
+          .foregroundStyle(tint)
+
+        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+          HStack(alignment: .top, spacing: 8) {
+            Image(systemName: bullet)
+              .foregroundStyle(bulletTint)
+              .font(.caption)
+            selectableText(item)
+          }
+        }
+      }
+    }
+  }
+
+  private func audienceRow(_ parsed: ParsedEpisodeAnalysisResponse) -> some View {
+    HStack(spacing: 16) {
+      if !parsed.targetAudience.isEmpty {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Target Audience")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          Text(parsed.targetAudience)
+            .font(.caption)
+            .fontWeight(.medium)
+        }
+      }
+
+      if !parsed.engagementLevel.isEmpty {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Engagement")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          HStack(spacing: 4) {
+            engagementIcon(parsed.engagementLevel)
+            Text(parsed.engagementLevel.capitalized)
+              .font(.caption)
+              .fontWeight(.medium)
+          }
+        }
+      }
+    }
+  }
+
+  private func mainTopicsSection(_ topics: [ParsedEpisodeAnalysisResponse.TopicDetail]) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label("Main Topics", systemImage: "list.bullet.rectangle")
+        .font(.subheadline)
+        .fontWeight(.semibold)
+        .foregroundStyle(.purple)
+
+      ForEach(Array(topics.enumerated()), id: \.offset) { _, topic in
+        VStack(alignment: .leading, spacing: 6) {
+          Text(topic.topic)
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .foregroundStyle(.primary)
+
+          selectableText(topic.summary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          ForEach(topic.keyPoints, id: \.self) { point in
+            HStack(alignment: .top, spacing: 8) {
+              Image(systemName: "circle.fill")
+                .font(.system(size: 4))
+                .foregroundStyle(.purple)
+                .padding(.top, 6)
+              selectableText(point)
+                .font(.caption)
+            }
+          }
+        }
+        .padding()
+        .background(Color.purple.opacity(0.05))
+        .clipShape(.rect(cornerRadius: 8))
+      }
+    }
+  }
+
+  private func notableQuotesSection(_ quotes: [TimestampedQuote]) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Label("Notable Quotes", systemImage: "quote.opening")
+        .font(.subheadline)
+        .fontWeight(.semibold)
+        .foregroundStyle(.green)
+
+      ForEach(Array(quotes.enumerated()), id: \.offset) { _, quote in
+        VStack(alignment: .leading, spacing: 6) {
+          selectableText("\"\(quote.text)\"")
+            .font(.subheadline)
+            .italic()
+
+          if let seconds = quote.timeInSeconds {
+            timestampBadge(quote.timestamp!, seconds: seconds)
+          }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: 8)
+            .fill(Color.green.opacity(0.1))
+        )
+        .overlay(
+          Rectangle()
+            .fill(Color.green)
+            .frame(width: 4),
+          alignment: .leading
+        )
+      }
+    }
+  }
+
+  private func qaHighlightsSection(_ qaItems: [QAHighlight]) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Label("Q&A Highlights", systemImage: "bubble.left.and.bubble.right.fill")
+        .font(.subheadline)
+        .fontWeight(.semibold)
+        .foregroundStyle(.cyan)
+
+      ForEach(Array(qaItems.enumerated()), id: \.offset) { _, item in
+        VStack(alignment: .leading, spacing: 6) {
+          HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "questionmark.circle.fill")
+              .foregroundStyle(.cyan)
+              .font(.caption)
+            selectableText(item.question)
+              .fontWeight(.medium)
+          }
+          HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "arrow.turn.down.right")
+              .foregroundStyle(.secondary)
+              .font(.caption)
+              .padding(.leading, 2)
+            selectableText(item.answer)
+              .foregroundStyle(.secondary)
+          }
+        }
+        .padding()
+        .background(Color.cyan.opacity(0.05))
+        .clipShape(.rect(cornerRadius: 8))
+      }
     }
   }
 

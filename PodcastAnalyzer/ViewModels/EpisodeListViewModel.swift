@@ -303,8 +303,8 @@ final class EpisodeListViewModel {
       // Progress updates now go to inFlightProgress (non-observable),
       // so this callback fires only on actual state changes.
       _ = downloadManager.downloadStates
-    } onChange: {
-      Task { @MainActor [weak self] in
+    } onChange: { [weak self] in
+      Task { @MainActor in
         guard let self, !self.isCleaned else { return }
         self.rebuildDownloadStatesSnapshot()
         self.manageProgressTimer()

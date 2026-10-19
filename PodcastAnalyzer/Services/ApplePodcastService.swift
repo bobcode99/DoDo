@@ -24,7 +24,10 @@ class ApplePodcastService: Sendable {
             throw URLError(.badURL)
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        // The RSS gateway intermittently hangs ~30s and then returns 504, for any
+        // limit. Fail fast so the caller's smaller-limit retry gets its turn.
+        let request = URLRequest(url: url, timeoutInterval: 10)
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         // Check HTTP status code
         if let httpResponse = response as? HTTPURLResponse {
@@ -159,7 +162,7 @@ class ApplePodcastService: Sendable {
     // MARK: - Trending Episodes
 
     /// A trending episode with podcast context
-    struct TrendingEpisode: Identifiable, Sendable {
+    struct TrendingEpisode: Codable, Identifiable, Sendable {
         let id: String  // collectionId + episodeTitle
         let podcastName: String
         let podcastArtworkUrl: String?

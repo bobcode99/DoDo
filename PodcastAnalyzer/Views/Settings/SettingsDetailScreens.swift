@@ -205,9 +205,13 @@ struct DownloadSettingsScreen: View {
           Text("Download New Episodes")
         }
         .disabled(!syncManager.isBackgroundSyncEnabled)
+
+        NavigationLink("Per Show") {
+          AutoDownloadShowsView()
+        }
       } footer: {
         if syncManager.isBackgroundSyncEnabled {
-          Text("New episodes from your subscriptions download automatically. Individual podcasts can override this from their ••• menu.")
+          Text("New episodes from your subscriptions download automatically. Set Always or Never for individual shows under Per Show.")
         } else {
           Text("Turn on Background Sync to download new episodes automatically.")
         }
@@ -597,6 +601,9 @@ struct AppearanceSettingsScreen: View {
   @AppStorage(LibraryGridAppearanceDefaults.columnsKey)
   private var libraryGridColumns = LibraryGridColumns.two.rawValue
 
+  @AppStorage(UpNextCardSize.storageKey)
+  private var upNextCardSize = UpNextCardSize.standard.rawValue
+
   /// Empty = System Default. Stored here rather than read through the
   /// environment because this screen is the one place that writes it.
   @AppStorage(AppAccentColorDefaults.key) private var accentRaw = ""
@@ -605,7 +612,6 @@ struct AppearanceSettingsScreen: View {
   private var accentColor: Color {
     AppAccentColorDefaults.decode(accentRaw) ?? .accentColor
   }
-
 
   // MARK: - Theme
 
@@ -708,6 +714,22 @@ struct AppearanceSettingsScreen: View {
         Text("Episode Rows")
       } footer: {
         Text("The ••• menu takes the opposite side. A larger play button is easier to hit while walking.")
+      }
+
+      Section {
+        Picker("Card Size", selection: $upNextCardSize) {
+          ForEach(UpNextCardSize.allCases) { size in
+            Text(size.titleKey).tag(size.rawValue)
+          }
+        }
+        #if os(iOS)
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        #endif
+      } header: {
+        Text("Up Next")
+      } footer: {
+        Text("Larger cards have bigger artwork and play buttons, easier to tap.")
       }
 
       Section {

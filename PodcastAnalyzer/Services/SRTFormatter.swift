@@ -14,10 +14,10 @@ nonisolated enum SRTFormatter {
   /// Formats a TimeInterval into SRT time format (HH:MM:SS,mmm)
   static func formatTime(_ timeInterval: TimeInterval) -> String {
     let ms = Int(timeInterval.truncatingRemainder(dividingBy: 1) * 1000)
-    let s = Int(timeInterval) % 60
-    let m = (Int(timeInterval) / 60) % 60
-    let h = Int(timeInterval) / 60 / 60
-    return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
+    let secs = Int(timeInterval) % 60
+    let minutes = (Int(timeInterval) / 60) % 60
+    let hours = Int(timeInterval) / 60 / 60
+    return String(format: "%02d:%02d:%02d,%03d", hours, minutes, secs, ms)
   }
 
   /// NaN-safe SRT time formatter.

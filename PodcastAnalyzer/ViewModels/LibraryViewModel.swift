@@ -4,6 +4,9 @@
 //
 //  ViewModel for Library tab - manages subscribed podcasts, saved, downloaded, and latest episodes
 //
+// swiftlint:disable file_length
+// TODO: split disk reconciliation and the saved/downloaded/latest loaders into
+// their own files; until then this type and file exceed the size limits.
 
 import SwiftUI
 import Foundation
@@ -18,6 +21,7 @@ private let signpostLog = OSLog(subsystem: "com.podcast.analyzer", category: "Po
 
 @MainActor
 @Observable
+// swiftlint:disable:next type_body_length
 final class LibraryViewModel {
   var podcastInfoModelList: [PodcastInfoModel] = []
   var savedEpisodes: [LibraryEpisode] = []
@@ -66,7 +70,6 @@ final class LibraryViewModel {
     }
   }
 
-
   // Simplified loading state
   // We only track generally if background operations are happening,
   // but we don't block the UI with specific flags for each section anymore.
@@ -76,7 +79,6 @@ final class LibraryViewModel {
   /// True once setModelContext has been called and the initial load has been kicked off.
   /// Views can use this to skip redundant refreshes on re-appearance.
   var isLoaded: Bool { isAlreadyLoaded }
-
 
   // Search state for subpages
   var savedSearchText: String = ""
@@ -371,8 +373,8 @@ final class LibraryViewModel {
       // Only fires on state transitions (start/finish/fail/cancel),
       // not on progress ticks. Progress is polled by progressTimer.
       _ = downloadManager.downloadStates
-    } onChange: {
-      Task { @MainActor [weak self] in
+    } onChange: { [weak self] in
+      Task { @MainActor in
         guard let self else { return }
         self.updateDownloadingEpisodes()
         self.manageProgressTimer()
@@ -770,9 +772,9 @@ final class LibraryViewModel {
   }
 
   // MARK: - Load Podcasts
-  
+
   // Removed loadPodcastFeeds as it's replaced by @Query injection via setPodcasts
-  
+
   // MARK: - Load Saved Episodes
 
   private func loadSavedEpisodes() async {
@@ -888,6 +890,25 @@ final class LibraryViewModel {
     }
   }
 
+  /// Lowercased basename → full path for every file in the audio directory,
+  /// read off the main actor.
+  private nonisolated static func indexAudioDirectory() async -> [String: String] {
+    await Task.detached(priority: .background) { () -> [String: String] in
+      let fm = FileManager.default
+      let audioDir = FileStorageManager.platformAudioDirectory(fileManager: fm)
+
+      var index: [String: String] = [:]  // lowercased basename → full path
+      guard let contents = try? fm.contentsOfDirectory(
+        at: audioDir, includingPropertiesForKeys: nil
+      ) else { return index }
+      for url in contents {
+        let name = url.deletingPathExtension().lastPathComponent.lowercased()
+        index[name] = url.path
+      }
+      return index
+    }.value
+  }
+
   /// Reconciles `EpisodeDownloadModel.localAudioPath` against the audio
   /// directory on disk. `EpisodeDownloadModel` is the single source of truth
   /// for download state — this routine only ensures every row's `localAudioPath`
@@ -940,20 +961,7 @@ final class LibraryViewModel {
     }
 
     // 2. Single off-MainActor scan of the audio directory.
-    let audioFileIndex = await Task.detached(priority: .background) { () -> [String: String] in
-      let fm = FileManager.default
-      let audioDir = FileStorageManager.platformAudioDirectory(fileManager: fm)
-
-      var index: [String: String] = [:]  // lowercased basename → full path
-      guard let contents = try? fm.contentsOfDirectory(
-        at: audioDir, includingPropertiesForKeys: nil
-      ) else { return index }
-      for url in contents {
-        let name = url.deletingPathExtension().lastPathComponent.lowercased()
-        index[name] = url.path
-      }
-      return index
-    }.value
+    let audioFileIndex = await Self.indexAudioDirectory()
 
     let pathsOnDisk = Set(audioFileIndex.values)
 
@@ -1125,7 +1133,7 @@ final class LibraryViewModel {
 
     // 2. Perform heavy processing in background
     let delimiter = Self.episodeKeyDelimiter
-    
+
     let sortedEpisodes = await Task.detached(priority: .userInitiated) { () -> [LibraryEpisode] in
       var allEpisodes: [LibraryEpisode] = []
 
@@ -1172,12 +1180,12 @@ final class LibraryViewModel {
   private func updateAutoPlayCandidates() {
     let unplayedEpisodes = latestEpisodes
       .filter { !$0.isCompleted }
-      .sorted { a, b in
-        let aInProgress = a.lastPlaybackPosition > 60
-        let bInProgress = b.lastPlaybackPosition > 60
+      .sorted { lhs, rhs in
+        let aInProgress = lhs.lastPlaybackPosition > 60
+        let bInProgress = rhs.lastPlaybackPosition > 60
         if aInProgress != bInProgress { return aInProgress }
-        if aInProgress && bInProgress { return a.lastPlaybackPosition > b.lastPlaybackPosition }
-        return (a.episodeInfo.pubDate ?? .distantPast) > (b.episodeInfo.pubDate ?? .distantPast)
+        if aInProgress && bInProgress { return lhs.lastPlaybackPosition > rhs.lastPlaybackPosition }
+        return (lhs.episodeInfo.pubDate ?? .distantPast) > (rhs.episodeInfo.pubDate ?? .distantPast)
       }
     let playbackEpisodes = unplayedEpisodes.compactMap { episode -> PlaybackEpisode? in
       guard let audioURL = episode.episodeInfo.audioURL else { return nil }
@@ -1196,8 +1204,6 @@ final class LibraryViewModel {
     EnhancedAudioManager.shared.updateAutoPlayCandidates(playbackEpisodes)
     logger.info("Updated auto-play candidates with \(playbackEpisodes.count) unplayed episodes")
   }
-
-
 
   // MARK: - Helper Methods
 

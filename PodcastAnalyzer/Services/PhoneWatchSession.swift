@@ -44,7 +44,9 @@ final class PhoneWatchSession: NSObject {
   func push(_ data: WidgetPlaybackData, force: Bool = false) {
     guard WCSession.isSupported() else { return }
     let session = WCSession.default
-    guard session.activationState == .activated else { return }
+    // Paired but the watch app not installed is the common case; pushing then
+    // fails on every playback tick (the snapshot is only recorded on success).
+    guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
 
     // Position moves constantly; the watch redraws its own clock between
     // pushes, so only send when something it cannot infer has changed.
@@ -92,7 +94,7 @@ final class PhoneWatchSession: NSObject {
     let manager = EnhancedAudioManager.shared
     switch command {
     case .togglePlayPause:
-      manager.isPlaying ? manager.pause() : manager.resume()
+      if manager.isPlaying { manager.pause() } else { manager.resume() }
     case .skipForward:
       manager.skipForward()
     case .skipBackward:
@@ -138,6 +140,11 @@ extension PhoneWatchSession: WCSessionDelegate {
   nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
     guard let command = decodeCommand(from: userInfo) else { return }
     Task { @MainActor in self.apply(command) }
+  }
+
+  /// Pairing or watch-app install changed — seed a newly installed watch app.
+  nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+    Task { @MainActor in self.pushCurrentState() }
   }
 
   // Required on iOS: the pairing can change under us.

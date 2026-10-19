@@ -82,7 +82,7 @@ struct AISettingsView: View {
 #Preview {
     #if os(macOS)
     AISettingsView()
-        .frame(width: 600, height: 500).environment(\.locale , Locale(identifier: "zh-Hant"))
+        .frame(width: 600, height: 500).environment(\.locale, Locale(identifier: "zh-Hant"))
     #else
     NavigationStack {
         AISettingsView()

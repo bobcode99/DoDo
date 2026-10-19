@@ -128,8 +128,12 @@ class BackgroundSyncManager {
       forTaskWithIdentifier: backgroundTaskIdentifier,
       using: nil
     ) { task in
+      guard let refreshTask = task as? BGAppRefreshTask else {
+        task.setTaskCompleted(success: false)
+        return
+      }
       Task { @MainActor in
-        await BackgroundSyncManager.shared.handleBackgroundRefresh(task: task as! BGAppRefreshTask)
+        await BackgroundSyncManager.shared.handleBackgroundRefresh(task: refreshTask)
       }
     }
   }
@@ -258,15 +262,7 @@ class BackgroundSyncManager {
 
       syncProgressTotal = podcasts.count
 
-      // Pre-fetch episode keys that have user data so we can preserve orphaned episodes
-      // (episodes that aged off the RSS feed but were downloaded / starred / played).
-      let allEpisodeModels = (try? context.fetch(FetchDescriptor<EpisodeDownloadModel>())) ?? []
-      let episodesWithUserData: Set<String> = Set(
-        allEpisodeModels
-          .filter { $0.localAudioPath != nil || $0.isStarred || $0.isCompleted
-                    || $0.lastPlaybackPosition > 0 || $0.playCount > 0 }
-          .map { $0.id }
-      )
+      let episodesWithUserData = Self.episodeKeysWithUserData(in: context)
 
       var totalNewEpisodes = 0
       var newEpisodeDetails: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)] = []
@@ -306,18 +302,7 @@ class BackgroundSyncManager {
           }
 
           group.addTask {
-            do {
-              let result = try await self.rssService.fetchPodcastConditional(
-                from: rssUrl, cacheHeader: cachedHeader)
-              switch result {
-              case .notModified:
-                return (index, nil, nil, nil)  // no new data, no error
-              case .updated(let podcast, let cacheHeader):
-                return (index, podcast, cacheHeader, nil)
-              }
-            } catch {
-              return (index, nil, nil, error)
-            }
+            await self.fetchFeed(index: index, rssUrl: rssUrl, cachedHeader: cachedHeader)
           }
         }
 
@@ -346,38 +331,7 @@ class BackgroundSyncManager {
       lastSyncDate = Date()
       UserDefaults.standard.set(lastSyncDate, forKey: Keys.lastSyncDate)
 
-      // Delegate auto-download decisions to the serialized coordinator.
-      if totalNewEpisodes > 0 {
-        let autoDownloadCandidates = newEpisodeDetails.map { detail in
-          (podcastTitle: detail.podcastTitle,
-           episodeTitle: detail.episodeTitle,
-           audioURL: detail.audioURL ?? "",
-           language: detail.language)
-        }
-        await AutoDownloadCoordinator.shared.updatePendingEpisodes(autoDownloadCandidates)
-        await AutoDownloadCoordinator.shared.run(reason: .feedRefresh)
-
-        await enqueueAutoAddEpisodes(newEpisodeDetails, podcasts: podcasts)
-      }
-
-      // Send push notification if there are new episodes and enabled
-      if totalNewEpisodes > 0 && isNotificationsEnabled && notificationPermissionStatus == .authorized {
-        await sendNewEpisodesNotification(
-          totalCount: totalNewEpisodes,
-          details: newEpisodeDetails
-        )
-      }
-
-      // Always post internal notification for UI updates (even if no new episodes, to update timestamps)
-      let updatedTitles = Set(newEpisodeDetails.map { $0.podcastTitle })
-      NotificationCenter.default.post(
-        name: .podcastSyncCompleted,
-        object: nil,
-        userInfo: [
-          "newEpisodeCount": totalNewEpisodes,
-          "updatedPodcastTitles": Array(updatedTitles)
-        ]
-      )
+      await publishSyncResults(totalNewEpisodes: totalNewEpisodes, details: newEpisodeDetails, podcasts: podcasts)
 
       logger.info("Sync completed. Found \(totalNewEpisodes) new episodes total.")
       return true
@@ -387,6 +341,77 @@ class BackgroundSyncManager {
       logger.error("Sync failed: \(error.localizedDescription, privacy: .public)")
       return false
     }
+  }
+
+  /// One conditional feed fetch for the sync task group. A nil podcast with no
+  /// error means HTTP 304 Not Modified.
+  private nonisolated func fetchFeed(
+    index: Int, rssUrl: String, cachedHeader: String?
+  ) async -> (Int, PodcastInfo?, String?, Error?) {
+    do {
+      let result = try await rssService.fetchPodcastConditional(from: rssUrl, cacheHeader: cachedHeader)
+      switch result {
+      case .notModified:
+        return (index, nil, nil, nil)  // no new data, no error
+      case .updated(let podcast, let cacheHeader):
+        return (index, podcast, cacheHeader, nil)
+      }
+    } catch {
+      return (index, nil, nil, error)
+    }
+  }
+
+  /// Keys of episodes with user data (downloaded, starred, played), so episodes
+  /// that aged off the RSS feed are preserved rather than dropped.
+  private static func episodeKeysWithUserData(in context: ModelContext) -> Set<String> {
+    let allEpisodeModels = (try? context.fetch(FetchDescriptor<EpisodeDownloadModel>())) ?? []
+    return Set(
+      allEpisodeModels
+        .filter { $0.localAudioPath != nil || $0.isStarred || $0.isCompleted
+                  || $0.lastPlaybackPosition > 0 || $0.playCount > 0 }
+        .map { $0.id }
+    )
+  }
+
+  /// After a successful sync: hand new episodes to auto-download and auto-queue,
+  /// notify the user, and tell the UI (always, so timestamps refresh).
+  private func publishSyncResults(
+    totalNewEpisodes: Int,
+    details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)],
+    podcasts: [PodcastInfoModel]
+  ) async {
+    // Delegate auto-download decisions to the serialized coordinator.
+    if totalNewEpisodes > 0 {
+      let autoDownloadCandidates = details.map { detail in
+        (podcastTitle: detail.podcastTitle,
+         episodeTitle: detail.episodeTitle,
+         audioURL: detail.audioURL ?? "",
+         language: detail.language)
+      }
+      await AutoDownloadCoordinator.shared.updatePendingEpisodes(autoDownloadCandidates)
+      await AutoDownloadCoordinator.shared.run(reason: .feedRefresh)
+
+      await enqueueAutoAddEpisodes(details, podcasts: podcasts)
+    }
+
+    // Send push notification if there are new episodes and enabled
+    if totalNewEpisodes > 0 && isNotificationsEnabled && notificationPermissionStatus == .authorized {
+      await sendNewEpisodesNotification(
+        totalCount: totalNewEpisodes,
+        details: details
+      )
+    }
+
+    // Always post internal notification for UI updates (even if no new episodes, to update timestamps)
+    let updatedTitles = Set(details.map { $0.podcastTitle })
+    NotificationCenter.default.post(
+      name: .podcastSyncCompleted,
+      object: nil,
+      userInfo: [
+        "newEpisodeCount": totalNewEpisodes,
+        "updatedPodcastTitles": Array(updatedTitles)
+      ]
+    )
   }
 
   /// Process a single parallel sync result and merge into accumulated state
@@ -479,6 +504,50 @@ class BackgroundSyncManager {
     }
   }
 
+  // MARK: - Foreground Timer (Optional: for when app is active)
+
+  @ObservationIgnored
+  private var foregroundSyncTask: Task<Void, Never>?
+
+  func startForegroundSync() {
+    guard isBackgroundSyncEnabled else { return }
+
+    stopForegroundSync()
+    foregroundSyncTask = Task { [weak self] in
+      guard let self else { return }
+
+      // Only sync immediately if data is stale (avoids redundant fetch every app-foreground)
+      if let last = lastSyncDate {
+        let age = Date().timeIntervalSince(last)
+        if age >= minimumSyncInterval {
+          logger.info("Foreground sync: lastSync \(Int(age))s ago (>= \(Int(self.minimumSyncInterval))s threshold) — syncing now")
+          await self.syncNow()
+        } else {
+          logger.info("Foreground sync: lastSync \(Int(age))s ago — fresh, skipping immediate sync")
+        }
+      } else {
+        logger.info("Foreground sync: no prior sync recorded — syncing now")
+        await self.syncNow()
+      }
+
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(4 * 60 * 60))
+        if Task.isCancelled { return }
+        await self.syncNow()
+      }
+    }
+    logger.info("Foreground sync timer started (4-hour interval, immediate only if stale)")
+  }
+
+  func stopForegroundSync() {
+    foregroundSyncTask?.cancel()
+    foregroundSyncTask = nil
+  }
+}
+
+// Notification permission, scheduling and content, split from the class body
+// to keep it a readable size; same file, so they still reach its private state.
+extension BackgroundSyncManager {
   // MARK: - Notifications
 
   func requestNotificationPermission() {
@@ -682,9 +751,9 @@ class BackgroundSyncManager {
       return type
     }
     switch Array(data.prefix(4)) {
-    case let b where b.starts(with: [0xFF, 0xD8, 0xFF]): return .jpeg
-    case let b where b.starts(with: [0x89, 0x50, 0x4E, 0x47]): return .png
-    case let b where b.starts(with: [0x47, 0x49, 0x46]): return .gif
+    case let bytes where bytes.starts(with: [0xFF, 0xD8, 0xFF]): return .jpeg
+    case let bytes where bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]): return .png
+    case let bytes where bytes.starts(with: [0x47, 0x49, 0x46]): return .gif
     default: return nil
     }
   }
@@ -708,45 +777,5 @@ class BackgroundSyncManager {
     guard !text.isEmpty else { return nil }
     guard text.count > limit else { return text }
     return String(text.prefix(limit)).trimmingCharacters(in: .whitespaces) + "\u{2026}"
-  }
-
-  // MARK: - Foreground Timer (Optional: for when app is active)
-
-  @ObservationIgnored
-  private var foregroundSyncTask: Task<Void, Never>?
-
-  func startForegroundSync() {
-    guard isBackgroundSyncEnabled else { return }
-
-    stopForegroundSync()
-    foregroundSyncTask = Task { [weak self] in
-      guard let self else { return }
-
-      // Only sync immediately if data is stale (avoids redundant fetch every app-foreground)
-      if let last = lastSyncDate {
-        let age = Date().timeIntervalSince(last)
-        if age >= minimumSyncInterval {
-          logger.info("Foreground sync: lastSync \(Int(age))s ago (>= \(Int(self.minimumSyncInterval))s threshold) — syncing now")
-          await self.syncNow()
-        } else {
-          logger.info("Foreground sync: lastSync \(Int(age))s ago — fresh, skipping immediate sync")
-        }
-      } else {
-        logger.info("Foreground sync: no prior sync recorded — syncing now")
-        await self.syncNow()
-      }
-
-      while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(4 * 60 * 60))
-        if Task.isCancelled { return }
-        await self.syncNow()
-      }
-    }
-    logger.info("Foreground sync timer started (4-hour interval, immediate only if stale)")
-  }
-
-  func stopForegroundSync() {
-    foregroundSyncTask?.cancel()
-    foregroundSyncTask = nil
   }
 }

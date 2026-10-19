@@ -44,14 +44,12 @@ struct EpisodeAIAnalysisPage: View {
             .navigationTitle("AI Analysis")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    EpisodeDetailToolbarItems(
-                        viewModel: viewModel,
-                        selectedTab: 2, // AI — translate button hidden
-                        showTranslationLanguagePicker: $showTranslationLanguagePicker,
-                        showDeleteConfirmation: $showDeleteConfirmation
-                    )
-                }
+                EpisodeDetailToolbarItems(
+                    viewModel: viewModel,
+                    selectedTab: 2, // AI — translate button hidden
+                    showTranslationLanguagePicker: $showTranslationLanguagePicker,
+                    showDeleteConfirmation: $showDeleteConfirmation
+                )
             }
             .episodeDetailSheetsAndAlerts(
                 viewModel: viewModel,

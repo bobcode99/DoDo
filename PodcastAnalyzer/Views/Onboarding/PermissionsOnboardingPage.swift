@@ -14,6 +14,7 @@ struct PermissionsOnboardingPage: View {
   let onNext: () -> Void
 
   private let sync = BackgroundSyncManager.shared
+  @Environment(\.scenePhase) private var scenePhase
   @State private var speechStatus = SFSpeechRecognizer.authorizationStatus()
   // Background App Refresh is a system setting — we can read it but not request it.
   @State private var backgroundRefresh = UIApplication.shared.backgroundRefreshStatus
@@ -86,11 +87,9 @@ struct PermissionsOnboardingPage: View {
       }
     }
     .task { await sync.checkNotificationPermission() }
-    .onReceive(
-      NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
-    ) { _ in
+    .onChange(of: scenePhase) { _, phase in
       // Returning from Settings — pick up any changes the user made there.
-      refreshStatuses()
+      if phase == .active { refreshStatuses() }
     }
   }
 

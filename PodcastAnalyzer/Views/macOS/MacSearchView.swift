@@ -250,7 +250,9 @@ struct MacSearchView: View {
     }
   }
 
-  private func filterLibraryEpisodes() -> [(uniqueId: String, episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String)] {
+  private func filterLibraryEpisodes() -> [(
+    uniqueId: String, episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String
+  )] {
     let query = searchText
     var results: [(uniqueId: String, episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String)] = []
 

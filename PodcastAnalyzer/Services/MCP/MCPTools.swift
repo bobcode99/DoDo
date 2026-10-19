@@ -135,7 +135,8 @@ nonisolated enum MCPTools {
       case "get_podcast":
         let title = try requiredString(args, "podcast_title")
         let (dto, recent) = try await gateway.getPodcast(title: title)
-        struct Wrapper: Codable { let podcast: MCPPodcastDTO; let recent_episodes: [MCPEpisodeStubDTO] }
+        // swiftlint:disable:next identifier_name
+        struct Wrapper: Codable { let podcast: MCPPodcastDTO; let recent_episodes: [MCPEpisodeStubDTO] } // JSON key
         return try jsonResult(Wrapper(podcast: dto, recent_episodes: recent))
 
       case "list_episodes":
@@ -149,24 +150,24 @@ nonisolated enum MCPTools {
         return try jsonResult(list)
 
       case "get_episode":
-        let p = try requiredString(args, "podcast_title")
-        let e = try requiredString(args, "episode_title")
-        let dto = try await gateway.getEpisode(podcastTitle: p, episodeTitle: e)
+        let podcastTitle = try requiredString(args, "podcast_title")
+        let episodeTitle = try requiredString(args, "episode_title")
+        let dto = try await gateway.getEpisode(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
         return try jsonResult(dto)
 
       case "get_transcript":
-        let p = try requiredString(args, "podcast_title")
-        let e = try requiredString(args, "episode_title")
+        let podcastTitle = try requiredString(args, "podcast_title")
+        let episodeTitle = try requiredString(args, "episode_title")
         let format = optionalString(args, "format") ?? "plain"
         let dto = try await gateway.getTranscript(
-          podcastTitle: p, episodeTitle: e, format: format
+          podcastTitle: podcastTitle, episodeTitle: episodeTitle, format: format
         )
         return try jsonResult(dto)
 
       case "get_ai_analysis":
-        let p = try requiredString(args, "podcast_title")
-        let e = try requiredString(args, "episode_title")
-        let dto = try await gateway.getAIAnalysis(podcastTitle: p, episodeTitle: e)
+        let podcastTitle = try requiredString(args, "podcast_title")
+        let episodeTitle = try requiredString(args, "episode_title")
+        let dto = try await gateway.getAIAnalysis(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
         return try jsonResult(dto)
 
       case "search_transcripts":
@@ -176,12 +177,12 @@ nonisolated enum MCPTools {
         return try jsonResult(hits)
 
       case "generate_transcript":
-        let p = try requiredString(args, "podcast_title")
-        let e = try requiredString(args, "episode_title")
+        let podcastTitle = try requiredString(args, "podcast_title")
+        let episodeTitle = try requiredString(args, "episode_title")
         let engine = optionalString(args, "engine")
         let language = optionalString(args, "language")
         let dto = try await gateway.generateTranscript(
-          podcastTitle: p, episodeTitle: e, engineRaw: engine, language: language
+          podcastTitle: podcastTitle, episodeTitle: episodeTitle, engineRaw: engine, language: language
         )
         return try jsonResult(dto)
 
@@ -248,8 +249,8 @@ nonisolated enum MCPTools {
   private static func optionalInt(_ args: [String: Value], _ key: String) -> Int? {
     guard let value = args[key] else { return nil }
     if let i = value.intValue { return i }
-    if let d = value.doubleValue { return Int(d) }
-    if let s = value.stringValue, let i = Int(s) { return i }
+    if let double = value.doubleValue { return Int(double) }
+    if let string = value.stringValue, let i = Int(string) { return i }
     return nil
   }
 
@@ -270,7 +271,7 @@ nonisolated enum MCPTools {
     encoder.dateEncodingStrategy = .iso8601
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     let data = try encoder.encode(value)
-    let text = String(decoding: data, as: UTF8.self)
+    let text = String(bytes: data, encoding: .utf8) ?? ""
     return CallTool.Result(
       content: [.text(text: text, annotations: nil, _meta: nil)],
       isError: false

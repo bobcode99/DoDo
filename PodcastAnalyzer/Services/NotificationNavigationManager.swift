@@ -27,7 +27,7 @@ struct NotificationNavigationTarget: Equatable {
 @MainActor
 class NotificationNavigationManager {
     static let shared = NotificationNavigationManager()
-    
+
     var shouldNavigate = false
     var navigationTarget: NotificationNavigationTarget?
     var shouldExpandPlayer = false
@@ -47,7 +47,7 @@ class NotificationNavigationManager {
         shouldNavigate = false
         navigationTarget = nil
     }
-    
+
     // Improved lookup logic
     func findEpisode(podcastTitle: String, episodeTitle: String) -> (episode: PodcastEpisodeInfo, imageURL: String?, language: String)? {
         guard let context = modelContext else { return nil }

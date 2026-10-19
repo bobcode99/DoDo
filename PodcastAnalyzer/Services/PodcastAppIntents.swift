@@ -27,8 +27,8 @@ struct ImportPodcastsIntent: AppIntent {
         Summary("Import podcasts from \(\.$combinedText)")
     }
 
-    // Opens the app when this intent runs
-    static let openAppWhenRun: Bool = true
+    // Import lands in the app's UI, so switch to it before perform() runs.
+    static var supportedModes: IntentModes { .foreground }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
@@ -90,7 +90,6 @@ struct ImportPodcastsIntent: AppIntent {
 
 /// Intent that allows Shortcuts to analyze podcast transcripts
 /// Users can create a Shortcut with Apple Intelligence actions and connect it here
-@available(iOS 16.0, macOS 13.0, *)
 struct AnalyzeTranscriptIntent: AppIntent {
     static let title: LocalizedStringResource = "Analyze Podcast Transcript"
     static let description = IntentDescription(
@@ -130,16 +129,19 @@ struct AnalyzeTranscriptIntent: AppIntent {
     }
 
     private func buildPrompt(for type: ShortcutAnalysisType, transcript: String, episodeTitle: String, podcastName: String) -> String {
-        switch type {
-        case .summary:
-            return """
-            Please provide a comprehensive summary of this podcast episode.
-
+        let source = """
             Podcast: \(podcastName)
             Episode: \(episodeTitle)
 
             Transcript:
             \(transcript)
+            """
+        switch type {
+        case .summary:
+            return """
+            Please provide a comprehensive summary of this podcast episode.
+
+            \(source)
 
             Provide:
             1. A 2-3 paragraph summary
@@ -152,11 +154,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Please identify the key highlights from this podcast episode.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             Provide:
             1. Top 5 highlights or key moments
@@ -169,11 +167,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Please extract all named entities from this podcast episode.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             List:
             1. People mentioned (names, roles if known)
@@ -187,11 +181,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Please provide a complete analysis of this podcast episode.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             Provide a comprehensive analysis including:
             1. Executive Summary (2-3 paragraphs)
@@ -207,11 +197,7 @@ struct AnalyzeTranscriptIntent: AppIntent {
             return """
             Based on this podcast transcript, please answer questions about the content.
 
-            Podcast: \(podcastName)
-            Episode: \(episodeTitle)
-
-            Transcript:
-            \(transcript)
+            \(source)
 
             (User will ask their question after this prompt)
             """
@@ -222,7 +208,6 @@ struct AnalyzeTranscriptIntent: AppIntent {
 // MARK: - Get Transcript Intent
 
 /// Intent to get the current episode's transcript for use in Shortcuts
-@available(iOS 16.0, macOS 13.0, *)
 struct GetCurrentTranscriptIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Current Transcript"
     static let description = IntentDescription(
@@ -255,7 +240,6 @@ struct GetCurrentTranscriptIntent: AppIntent {
 // MARK: - Save Analysis Result Intent
 
 /// Intent to receive analysis results back from Shortcuts
-@available(iOS 16.0, macOS 13.0, *)
 struct SaveAnalysisResultIntent: AppIntent {
     static let title: LocalizedStringResource = "Save Analysis Result"
     static let description = IntentDescription(
@@ -298,7 +282,6 @@ enum ShortcutAnalysisType: String, Codable, CaseIterable, Sendable {
     case askQuestion = "Ask Question"
 }
 
-@available(iOS 16.0, macOS 13.0, *)
 struct AnalysisTypeEntity: AppEntity, Sendable {
     var id: String { type.rawValue }
     var type: ShortcutAnalysisType
@@ -318,7 +301,6 @@ struct AnalysisTypeEntity: AppEntity, Sendable {
     }
 }
 
-@available(iOS 16.0, macOS 13.0, *)
 struct AnalysisTypeQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [AnalysisTypeEntity] {
         identifiers.compactMap { id in
@@ -338,14 +320,11 @@ struct AnalysisTypeQuery: EntityQuery {
 // MARK: - Siri Playback Intents
 
 /// Intent to play the last episode or resume playback
-@available(iOS 16.0, macOS 13.0, *)
 struct PlayLastEpisodeIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Play My Podcast"
     static let description = IntentDescription(
         "Resume playback of the last podcast episode or start a new one"
     )
-
-    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -355,14 +334,11 @@ struct PlayLastEpisodeIntent: AudioPlaybackIntent {
 }
 
 /// Intent to play or pause the current episode
-@available(iOS 16.0, macOS 13.0, *)
 struct PlayPauseIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Play/Pause Podcast"
     static let description = IntentDescription(
         "Toggle playback of the current podcast episode"
     )
-
-    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -372,14 +348,11 @@ struct PlayPauseIntent: AudioPlaybackIntent {
 }
 
 /// Intent to pause playback
-@available(iOS 16.0, macOS 13.0, *)
 struct PausePodcastIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Pause Podcast"
     static let description = IntentDescription(
         "Pause the currently playing podcast episode"
     )
-
-    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -389,14 +362,11 @@ struct PausePodcastIntent: AudioPlaybackIntent {
 }
 
 /// Intent to skip forward in the current episode
-@available(iOS 16.0, macOS 13.0, *)
 struct SkipForwardIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Skip Forward"
     static let description = IntentDescription(
         "Skip forward 15 seconds in the current episode"
     )
-
-    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -406,14 +376,11 @@ struct SkipForwardIntent: AudioPlaybackIntent {
 }
 
 /// Intent to skip backward in the current episode
-@available(iOS 16.0, macOS 13.0, *)
 struct SkipBackwardIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Skip Backward"
     static let description = IntentDescription(
         "Skip backward 15 seconds in the current episode"
     )
-
-    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -427,7 +394,6 @@ struct SkipBackwardIntent: AudioPlaybackIntent {
 /// Lightweight Sendable snapshot of a subscribed podcast, suitable for
 /// passing across the AppIntents boundary. The id is the RSS URL — stable
 /// across renames and matches `PodcastInfo.id`.
-@available(iOS 16.0, macOS 13.0, *)
 struct PodcastAppEntity: AppEntity, Sendable {
     var id: String
     var title: String
@@ -438,52 +404,50 @@ struct PodcastAppEntity: AppEntity, Sendable {
     }
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(title)")
+        DisplayRepresentation(title: "\(title)", image: URL(string: imageURL).map { .init(url: $0) })
     }
 
     static var defaultQuery: PodcastEntityQuery { PodcastEntityQuery() }
 }
 
-@available(iOS 16.0, macOS 13.0, *)
-struct PodcastEntityQuery: EntityQuery, EntityStringQuery {
+extension PodcastAppEntity {
+    /// Reads the `imageURL` mirror column, not `podcastInfo.imageURL` — the
+    /// latter decodes the whole episode blob per podcast just for one string.
+    @MainActor
+    init(_ model: PodcastInfoModel) {
+        self.init(id: model.rssUrl, title: model.title, imageURL: model.imageURL)
+    }
+}
+
+struct PodcastEntityQuery: EntityStringQuery {
     @MainActor
     func entities(for identifiers: [String]) async throws -> [PodcastAppEntity] {
+        #if DEBUG && os(iOS)
+        NowPlayingLaunchProbe.log("PodcastEntityQuery.entities(for: \(identifiers))")
+        #endif
         let needles = Set(identifiers)
-        return try AppIntentsModelStore.fetchSubscribed { models in
-            models
-                .filter { needles.contains($0.rssUrl) }
-                .map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
-        }
+        return AppIntentsModelStore.subscribedPodcasts { needles.contains($0.rssUrl) }
     }
 
     @MainActor
     func entities(matching string: String) async throws -> [PodcastAppEntity] {
-        let needle = string.lowercased()
-        return try AppIntentsModelStore.fetchSubscribed { models in
-            models
-                .filter { $0.title.lowercased().contains(needle) }
-                .map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
-        }
+        // Case/diacritic-insensitive and locale-aware, unlike lowercased().contains.
+        AppIntentsModelStore.subscribedPodcasts { $0.title.localizedStandardContains(string) }
     }
 
     @MainActor
     func suggestedEntities() async throws -> [PodcastAppEntity] {
-        try AppIntentsModelStore.fetchSubscribed { models in
-            models.map { PodcastAppEntity(id: $0.rssUrl, title: $0.title, imageURL: $0.podcastInfo.imageURL) }
-        }
+        AppIntentsModelStore.subscribedPodcasts()
     }
 }
 
 /// Intent: play the latest episode of a specific subscribed podcast by name.
 /// Resumes from the last saved playback position if any; otherwise starts fresh.
-@available(iOS 16.0, macOS 13.0, *)
 struct PlayPodcastByNameIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Play Podcast"
     static let description = IntentDescription(
         "Play the latest episode of a specific subscribed podcast"
     )
-
-    static let openAppWhenRun: Bool = false
 
     @Parameter(title: "Podcast")
     var podcast: PodcastAppEntity
@@ -555,17 +519,28 @@ struct PlayPodcastByNameIntent: AudioPlaybackIntent {
 enum AppIntentsModelStore {
     static var container: ModelContainer?
 
-    static func fetchSubscribed<T: Sendable>(
-        _ transform: ([PodcastInfoModel]) -> T
-    ) throws -> T {
-        guard let container else { return transform([]) }
-        let context = container.mainContext
+    /// Subscribed podcasts, most recently updated first. Filtered in memory —
+    /// a subscription list is small.
+    static func subscribedPodcasts(
+        where include: (PodcastInfoModel) -> Bool = { _ in true }
+    ) -> [PodcastAppEntity] {
+        guard let context = container?.mainContext else { return [] }
         let descriptor = FetchDescriptor<PodcastInfoModel>(
             predicate: #Predicate<PodcastInfoModel> { $0.isSubscribed },
             sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
         )
-        let models = (try? context.fetch(descriptor)) ?? []
-        return transform(models)
+        return ((try? context.fetch(descriptor)) ?? []).filter(include).map(PodcastAppEntity.init)
+    }
+
+    /// iOS 27: offer subscribed shows to the system's Now Playing suggestions,
+    /// so they can surface before the person has ever played them. Each call
+    /// replaces the previous set, so an unsubscribe drops out next launch.
+    /// ponytail: refreshed once per launch; call after subscribe/unsubscribe
+    /// too if suggestions need to track changes within a session.
+    static func donateRelevantPodcasts() async {
+        guard #available(iOS 27, macOS 27, *) else { return }
+        let podcasts = Array(subscribedPodcasts().prefix(10))
+        try? await RelevantEntities.shared.updateEntities(podcasts, for: .audio(.nowPlaying))
     }
 }
 
@@ -603,7 +578,6 @@ private enum SiriPlaybackController {
 
 // MARK: - App Shortcuts Provider
 
-@available(iOS 16.0, macOS 13.0, *)
 struct PodcastAnalyzerShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

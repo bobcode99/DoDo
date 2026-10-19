@@ -44,7 +44,7 @@ final class EpisodeTranscriptModel {
   /// `#Predicate` full-text search without decoding `segmentsJSON`.
   var plainText: String = ""
 
-  var generatedAt: Date = Date()
+  var generatedAt = Date()
 
   init(episodeId: String) {
     self.episodeId = episodeId

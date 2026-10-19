@@ -18,8 +18,8 @@ final class PodcastSearchViewModel {
   var podcasts: [Podcast] = []
   var isLoading = false
 
-  var selectedPodcastId: Int? = nil
-  var episodesForSelectedPodcast: [Episode]? = nil
+  var selectedPodcastId: Int?
+  var episodesForSelectedPodcast: [Episode]?
   var isLoadingEpisodes = false
 
   @ObservationIgnored

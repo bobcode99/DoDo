@@ -170,7 +170,9 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
 
   // MARK: - URLSessionDownloadDelegate
 
-  func urlSession(
+  // Long because the temp file must be copied synchronously before returning.
+  // TODO: move the post-copy bookkeeping into helpers.
+  func urlSession( // swiftlint:disable:this function_body_length
     _ session: URLSession, downloadTask: URLSessionDownloadTask,
     didFinishDownloadingTo location: URL
   ) {
@@ -211,7 +213,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
     // enclosure 404s commonly returns an HTML error page with 200, which
     // URLSession happily "downloads" — storing it as .downloaded means the row
     // looks fine until playback silently fails much later.
-    let fileSize = (try? FileManager.default.attributesOfItem(atPath: ourTempFile.path)[.size] as? Int64) ?? nil
+    let fileSize = (try? FileManager.default.attributesOfItem(atPath: ourTempFile.path)[.size] as? Int64)
     let contentType = (downloadTask.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
     if let reason = DownloadPayloadValidator.rejectionReason(
       fileSize: fileSize ?? 0, contentType: contentType

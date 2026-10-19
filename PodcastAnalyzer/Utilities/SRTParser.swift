@@ -33,14 +33,12 @@ nonisolated struct SRTParser {
         if let regex = numericEntityRegex {
             let nsString = result as NSString
             let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
-            for match in matches.reversed() {
-                if match.numberOfRanges >= 2 {
-                    let codeRange = match.range(at: 1)
-                    if let code = Int(nsString.substring(with: codeRange)),
-                       let scalar = Unicode.Scalar(code) {
-                        let replacement = String(Character(scalar))
-                        result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
-                    }
+            for match in matches.reversed() where match.numberOfRanges >= 2 {
+                let codeRange = match.range(at: 1)
+                if let code = Int(nsString.substring(with: codeRange)),
+                   let scalar = Unicode.Scalar(code) {
+                    let replacement = String(Character(scalar))
+                    result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
                 }
             }
         }

@@ -6,6 +6,10 @@
 //  Supports OpenAI, Claude, Gemini, Groq, Grok, LMStudio, Ollama, and Shortcuts integration
 //
 
+// swiftlint:disable file_length
+// TODO: split per-provider request building and the Shortcuts path into
+// their own files; until then this file and type exceed the size limits.
+
 import Foundation
 import OSLog
 #if os(iOS)
@@ -14,6 +18,7 @@ import UIKit
 // MARK: - Cloud AI Service
 
 @MainActor
+// swiftlint:disable:next type_body_length
 final class CloudAIService {
     static let shared = CloudAIService()
 
@@ -91,7 +96,8 @@ final class CloudAIService {
         progressCallback?("Starting Shortcuts analysis...", 0.2)
 
         // Log the language setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(
+            podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         logger.info("Shortcuts Analysis Request - Type: \(analysisType.rawValue), Language setting: \(self.settings.analysisLanguage.rawValue), Instruction: \(languageInstruction.isEmpty ? "None" : languageInstruction)")
 
         // Build the prompt with JSON format
@@ -191,7 +197,9 @@ final class CloudAIService {
     ) async throws -> CloudQAResult {
         progressCallback?("Preparing question for Shortcuts...", 0.2)
 
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(
+
+            podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\nLanguage: \(languageInstruction)"
 
         // Log the language setting
@@ -273,7 +281,8 @@ final class CloudAIService {
         formatHint: String? = nil,
         speakerBlock: String = ""
     ) -> String {
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(
+            podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\nLanguage: \(languageInstruction)"
 
         let formatHintLine: String
@@ -330,6 +339,19 @@ final class CloudAIService {
 
     // MARK: - Streaming Transcript Analysis
 
+    /// The selected provider, its API key and model. The model list is fetched
+    /// live, so a provider configured before its catalogue loaded has none
+    /// selected; sending "" produces an opaque provider-side 400, so say what is
+    /// actually missing instead.
+    private func selectedProviderConfig() throws -> (provider: CloudAIProvider, apiKey: String, model: String) {
+        let provider = settings.selectedProvider
+        let model = settings.currentModel
+        guard !model.isEmpty else {
+            throw CloudAIError.noModelSelected(provider: provider.displayName)
+        }
+        return (provider, settings.currentAPIKey, model)
+    }
+
     /// Analyze transcript with streaming response.
     ///
     /// The analyze path always sends a sentence-based (timestamp-free)
@@ -350,15 +372,7 @@ final class CloudAIService {
         onChunk: @escaping @Sendable (String) -> Void,
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
     ) async throws -> CloudAnalysisResult {
-        let provider = settings.selectedProvider
-        let apiKey = settings.currentAPIKey
-        let model = settings.currentModel
-        // The model list is fetched live, so a provider configured before its
-        // catalogue loaded has none selected. Sending "" produces an opaque
-        // provider-side 400; say what is actually missing.
-        guard !model.isEmpty else {
-            throw CloudAIError.noModelSelected(provider: provider.displayName)
-        }
+        let (provider, apiKey, model) = try selectedProviderConfig()
 
         // Always sentence-based for AI analysis to minimise prompt tokens.
         let analyzeFormat: TranscriptFormatForAI = .sentenceBased
@@ -390,7 +404,8 @@ final class CloudAIService {
         progressCallback?("Preparing analysis...", 0.1)
 
         // Log the language setting for streaming analysis
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(
+            podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         logger.info("Streaming Analysis Request - Provider: \(provider.displayName), Type: \(analysisType.rawValue), Language setting: \(self.settings.analysisLanguage.rawValue), Instruction: \(languageInstruction.isEmpty ? "None" : languageInstruction)")
 
         let systemPrompt = buildSystemPrompt(
@@ -513,15 +528,7 @@ final class CloudAIService {
         speakerBlock: String = "",
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
     ) async throws -> CloudAnalysisResult {
-        let provider = settings.selectedProvider
-        let apiKey = settings.currentAPIKey
-        let model = settings.currentModel
-        // The model list is fetched live, so a provider configured before its
-        // catalogue loaded has none selected. Sending "" produces an opaque
-        // provider-side 400; say what is actually missing.
-        guard !model.isEmpty else {
-            throw CloudAIError.noModelSelected(provider: provider.displayName)
-        }
+        let (provider, apiKey, model) = try selectedProviderConfig()
 
         if provider.requiresAPIKey {
             guard !apiKey.isEmpty else {
@@ -659,15 +666,7 @@ final class CloudAIService {
         podcastLanguage: String? = nil,
         progressCallback: (@Sendable (String, Double) -> Void)? = nil
     ) async throws -> CloudQAResult {
-        let provider = settings.selectedProvider
-        let apiKey = settings.currentAPIKey
-        let model = settings.currentModel
-        // The model list is fetched live, so a provider configured before its
-        // catalogue loaded has none selected. Sending "" produces an opaque
-        // provider-side 400; say what is actually missing.
-        guard !model.isEmpty else {
-            throw CloudAIError.noModelSelected(provider: provider.displayName)
-        }
+        let (provider, apiKey, model) = try selectedProviderConfig()
 
         // Format transcript based on user's preference (segment-based vs sentence-based)
         let formattedTranscript = settings.transcriptFormat.formatTranscript(transcript)
@@ -692,7 +691,8 @@ final class CloudAIService {
         progressCallback?("Processing question...", 0.2)
 
         // Get language instruction based on user setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(
+            podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
 
         // Log the language setting
@@ -816,9 +816,17 @@ final class CloudAIService {
 
     // MARK: - Private: Build Prompts
 
-    private func buildSystemPrompt(for type: CloudAnalysisType, podcastLanguage: String? = nil, formatHint: String? = nil, speakerBlock: String = "", transcriptFormatOverride: TranscriptFormatForAI? = nil, plainText: Bool = false) -> String {
+    private func buildSystemPrompt(
+        for type: CloudAnalysisType,
+        podcastLanguage: String? = nil,
+        formatHint: String? = nil,
+        speakerBlock: String = "",
+        transcriptFormatOverride: TranscriptFormatForAI? = nil,
+        plainText: Bool = false
+    ) -> String {
         // Get language instruction based on user setting
-        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
+        let languageInstruction = settings.analysisLanguage.getLanguageInstruction(
+            podcastLanguage: podcastLanguage, customLanguageName: settings.customAnalysisLanguageName)
         let languageLine = languageInstruction.isEmpty ? "" : "\n\n\(languageInstruction)"
 
         let formatHintLine: String

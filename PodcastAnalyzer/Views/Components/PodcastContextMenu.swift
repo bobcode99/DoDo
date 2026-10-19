@@ -25,78 +25,7 @@ struct PodcastContextMenu: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .contextMenu {
-        NavigationLink(value: PodcastBrowseRoute(podcastModel: podcast)) {
-          Label("View Episodes", systemImage: "list.bullet")
-        }
-
-        Divider()
-
-        Button {
-          Task {
-            await refreshPodcast()
-          }
-        } label: {
-          Label("Refresh", systemImage: "arrow.clockwise")
-        }
-
-        Button {
-          PlatformClipboard.string = podcast.rssUrl
-        } label: {
-          Label("Copy RSS URL", systemImage: "doc.on.doc")
-        }
-
-        Divider()
-
-        // Auto-transcribe new episodes — engine resolved at run time (YAP → local).
-        Toggle(isOn: $podcast.autoTranscribeNewEpisodes) {
-          Label("Auto-transcribe new episodes", systemImage: "waveform.badge.plus")
-        }
-
-        // Three-state auto-download setting (AntennaPod pattern)
-        Menu {
-          ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
-            Button {
-              podcast.autoDownloadSetting = setting.rawValue
-              modelContext.saveOrLog()
-            } label: {
-              // Branch rather than passing "" as the systemImage: Label always
-              // builds an Image(systemName:), so the empty string is a real
-              // lookup that SF Symbols logs as a miss on every unselected row.
-              if podcast.autoDownloadSetting == setting.rawValue {
-                Label(setting.displayName, systemImage: "checkmark")
-              } else {
-                Text(setting.displayName)
-              }
-            }
-          }
-        } label: {
-          Label(
-            "Auto Download: \(AutoDownloadSetting(rawValue: podcast.autoDownloadSetting)?.displayName ?? "—")",
-            systemImage: "arrow.down.circle"
-          )
-        }
-
-        Button {
-          showEpisodeFilterSheet = true
-        } label: {
-          Label("Episode Filter…", systemImage: "line.3.horizontal.decrease.circle")
-        }
-
-        Button {
-          showPlaybackSettingsSheet = true
-        } label: {
-          Label("Playback…", systemImage: "speedometer")
-        }
-
-        Divider()
-
-        Button(role: .destructive) {
-          showUnsubscribeConfirmation = true
-        } label: {
-          Label("Unsubscribe", systemImage: "minus.circle")
-        }
-      }
+      .contextMenu { menuItems }
       .onChange(of: podcast.autoTranscribeNewEpisodes) { _, isOn in
         modelContext.saveOrLog()
         // Offer to backfill only when switching on, not when switching off.
@@ -130,6 +59,84 @@ struct PodcastContextMenu: ViewModifier {
         // reading the blob there decodes the whole episode array each time.
         Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? Downloaded episodes will remain available.")
       }
+  }
+
+  @ViewBuilder
+  private var menuItems: some View {
+    NavigationLink(value: PodcastBrowseRoute(podcastModel: podcast)) {
+      Label("View Episodes", systemImage: "list.bullet")
+    }
+
+    Divider()
+
+    Button {
+      Task {
+        await refreshPodcast()
+      }
+    } label: {
+      Label("Refresh", systemImage: "arrow.clockwise")
+    }
+
+    Button {
+      PlatformClipboard.string = podcast.rssUrl
+    } label: {
+      Label("Copy RSS URL", systemImage: "doc.on.doc")
+    }
+
+    Divider()
+
+    // Auto-transcribe new episodes — engine resolved at run time (YAP → local).
+    Toggle(isOn: $podcast.autoTranscribeNewEpisodes) {
+      Label("Auto-transcribe new episodes", systemImage: "waveform.badge.plus")
+    }
+
+    autoDownloadMenu
+
+    Button {
+      showEpisodeFilterSheet = true
+    } label: {
+      Label("Episode Filter…", systemImage: "line.3.horizontal.decrease.circle")
+    }
+
+    Button {
+      showPlaybackSettingsSheet = true
+    } label: {
+      Label("Playback…", systemImage: "speedometer")
+    }
+
+    Divider()
+
+    Button(role: .destructive) {
+      showUnsubscribeConfirmation = true
+    } label: {
+      Label("Unsubscribe", systemImage: "minus.circle")
+    }
+  }
+
+  /// Three-state auto-download setting (AntennaPod pattern).
+  private var autoDownloadMenu: some View {
+    Menu {
+      ForEach(AutoDownloadSetting.allCases, id: \.rawValue) { setting in
+        Button {
+          podcast.autoDownloadSetting = setting.rawValue
+          modelContext.saveOrLog()
+        } label: {
+          // Branch rather than passing "" as the systemImage: Label always
+          // builds an Image(systemName:), so the empty string is a real
+          // lookup that SF Symbols logs as a miss on every unselected row.
+          if podcast.autoDownloadSetting == setting.rawValue {
+            Label(setting.displayName, systemImage: "checkmark")
+          } else {
+            Text(setting.displayName)
+          }
+        }
+      }
+    } label: {
+      Label(
+        "Auto Download: \(AutoDownloadSetting(rawValue: podcast.autoDownloadSetting)?.displayName ?? "—")",
+        systemImage: "arrow.down.circle"
+      )
+    }
   }
 
   private func refreshPodcast() async {

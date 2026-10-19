@@ -32,17 +32,9 @@ struct PodcastAnalyzerApp: App {
   @NSApplicationDelegateAdaptor private var appDelegate: MacAppDelegate
   #endif
 
-  /// Whether to auto-present the expanded player when the user brings the app
-  /// to the foreground while it is still playing. This is how Apple Podcasts
-  /// makes tapping the Dynamic Island / Now Playing controls land on the
-  /// player: iOS gives no "opened from Now Playing" signal, so we approximate
-  /// it by opening the player whenever a playing app is foregrounded.
-  @AppStorage("openPlayerOnReturnToPlayback") private var openPlayerOnReturnToPlayback = true
-
-  /// Captured at backgrounding so we only auto-open the player when the app
-  /// was *actively playing* as it left (and still is on return) — not on cold
-  /// launches or returns from a paused state.
-  @State private var wasPlayingOnBackground = false
+  #if DEBUG && os(iOS)
+  @UIApplicationDelegateAdaptor private var probeDelegate: NowPlayingProbeAppDelegate
+  #endif
 
   /// CloudKit container shared by every device signed into the same Apple ID.
   static let cloudKitContainerIdentifier = "iCloud.com.jn.PodcastAnalyzer"
@@ -181,16 +173,10 @@ struct PodcastAnalyzerApp: App {
     WindowGroup {
       ContentView()
         .environment(\.locale, languageManager.locale)
-        .alert(
-          "Transcript Import",
-          isPresented: Binding(
-            get: { transcriptImportMessage != nil },
-            set: { if !$0 { transcriptImportMessage = nil } }
-          )
-        ) {
+        .alert("Transcript Import", item: $transcriptImportMessage) { _ in
           Button("OK", role: .cancel) {}
-        } message: {
-          Text(transcriptImportMessage ?? "")
+        } message: { message in
+          Text(message)
         }
         .task {
           // Critical: initialize playback state and sync manager first
@@ -223,13 +209,11 @@ struct PodcastAnalyzerApp: App {
           MCPMenubarController.shared.bootstrap()
           #endif
 
-          // Handle any pending widget toggle (pause) flag from cold launch.
-          EnhancedAudioManager.shared.handleWidgetToggleOnActive()
-
           // Force Siri to re-read AppShortcut phrases + suggested entities so
           // phrase mappings stay current after a fresh install or app update.
           // Cheap to call; no-op on Siri's side if nothing changed.
           PodcastAnalyzerShortcuts.updateAppShortcutParameters()
+          Task { await AppIntentsModelStore.donateRelevantPodcasts() }
 
           // Request critical permissions early so they don't interrupt mid-session.
           // Only for users who already finished onboarding — new users grant these
@@ -252,9 +236,11 @@ struct PodcastAnalyzerApp: App {
           }
           #endif
 
-          // Register low-memory warning handler to clear caches
+          // Register low-memory warning handler to clear caches. Lives as long
+          // as the app, so the observer token is intentionally not kept.
           #if os(iOS)
-          NotificationCenter.default.addObserver(
+          // swiftlint:disable:next discarded_notification_center_observer
+          _ = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
             queue: .main
@@ -276,8 +262,6 @@ struct PodcastAnalyzerApp: App {
     .onChange(of: scenePhase) { _, newPhase in
       switch newPhase {
       case .active:
-        // App became active - handle widget toggle (pause) flag if pending
-        EnhancedAudioManager.shared.handleWidgetToggleOnActive()
         // Opt-in cleanup of finished episodes (self-throttled to hourly).
         DownloadManager.shared.sweepPlayedDownloads()
         // Re-anchor the app icon badge to the inbox's unread count. Also clears
@@ -289,23 +273,6 @@ struct PodcastAnalyzerApp: App {
         if BackgroundSyncManager.shared.isBackgroundSyncEnabled {
           BackgroundSyncManager.shared.startForegroundSync()
         }
-        #if os(iOS)
-        // Returned to a still-playing app (e.g. tapped the Dynamic Island /
-        // Now Playing controls) → surface the expanded player, Apple Podcasts
-        // style. handleWidgetToggleOnActive() above already applied any pending
-        // pause, so isPlaying here reflects the real post-activation state.
-        if openPlayerOnReturnToPlayback,
-           wasPlayingOnBackground,
-           EnhancedAudioManager.shared.isPlaying,
-           EnhancedAudioManager.shared.currentEpisode != nil {
-          Task { @MainActor in
-            // Let the foreground transition settle before presenting the sheet.
-            try? await Task.sleep(for: .milliseconds(350))
-            NotificationNavigationManager.shared.requestExpandPlayer()
-          }
-        }
-        wasPlayingOnBackground = false
-        #endif
       case .background:
         // Land any debounced Up Next queue write before the process can be
         // suspended and lose it.
@@ -323,14 +290,12 @@ struct PodcastAnalyzerApp: App {
         // Flush playback progress to iCloud immediately rather than waiting on
         // the throttle window — otherwise another device could see a stale
         // "continue listening" position for up to 30s after backgrounding.
-        if EnhancedAudioManager.shared.currentEpisode != nil {
+        // Only while playing: a paused episode already pushed on pause/seek, and
+        // re-posting its in-memory position here stamps it "newest" — so a device
+        // that merely had the episode loaded overwrote progress made elsewhere.
+        if EnhancedAudioManager.shared.isPlaying {
           EnhancedAudioManager.shared.syncPlaybackProgressNow()
         }
-        #if os(iOS)
-        // Remember whether we left mid-playback so .active can decide whether
-        // to auto-open the player on return.
-        wasPlayingOnBackground = EnhancedAudioManager.shared.isPlaying
-        #endif
       case .inactive:
         break
       @unknown default:
@@ -350,6 +315,9 @@ struct PodcastAnalyzerApp: App {
 
   private func handleIncomingURL(_ url: URL) {
     logger.info("Received URL: \(url.absoluteString)")
+    #if DEBUG && os(iOS)
+    NowPlayingLaunchProbe.log("onOpenURL \(url.absoluteString)")
+    #endif
 
     // ".dodotranscript" file from another DoDo install (AirDrop, WhatsApp…).
     if url.pathExtension == TranscriptStore.shareFileExtension {

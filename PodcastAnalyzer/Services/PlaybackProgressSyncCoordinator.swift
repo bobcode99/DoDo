@@ -107,7 +107,10 @@ final class PlaybackProgressSyncCoordinator {
       record.isCompleted = model.isCompleted
       record.playCount = model.playCount
       record.lastPlayedDate = model.lastPlayedDate
-      record.updatedAt = now
+      // Same stamp as the local write, not a fresh `Date()`: a record even a
+      // microsecond newer than local looks remote, so the remote-change
+      // notification for this very save would merge it straight back in.
+      record.updatedAt = model.progressUpdatedAt ?? now
       record.deviceName = Self.deviceName
 
       try context.save()

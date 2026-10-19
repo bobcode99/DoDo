@@ -27,7 +27,8 @@ struct ContentView: View {
 // MARK: - iOS Content View
 
 #if os(iOS)
-struct iOSContentView: View {
+// swiftlint:disable:next type_name
+struct iOSContentView: View { // "iOS" keeps Apple's casing
   // Access singletons directly without @State to avoid unnecessary observation overhead
   private var audioManager: EnhancedAudioManager { .shared }
   // importManager needs @State because $binding syntax is required for sheet
@@ -41,7 +42,10 @@ struct iOSContentView: View {
   /// Transient playback/queue problem to surface. Carries its own title so one
   /// alert can serve every such notification instead of stacking a modifier per
   /// message kind.
-  @State private var playbackAlert: (title: String, message: String)?
+  ///
+  /// LocalizedStringResource, not String: a String title takes Text's
+  /// StringProtocol path and is never localized.
+  @State private var playbackAlert: (title: LocalizedStringResource, message: String)?
   /// Matches a Library artwork tile to the episode list that zooms out of it.
   /// Declared here because it has to be visible to both the grid and the
   /// `navigationDestinations()` handlers, which live in separate branches.
@@ -125,14 +129,14 @@ struct iOSContentView: View {
       }
     }
     .task {
-      // Surface "no network + no local copy" refusals from EnhancedAudioManager
-      // as an in-app alert so users don't see the system "Cellular Data Is
-      // Turned Off" prompt that AVPlayer would otherwise trigger.
+      // Surface playback failures from EnhancedAudioManager (offline with no
+      // local copy, dead URL, corrupt audio) as an in-app alert, so users don't
+      // see the system "Cellular Data Is Turned Off" prompt AVPlayer would show.
       for await notification in NotificationCenter.default.notifications(
         named: .audioPlaybackUnavailable)
       {
         if let message = notification.userInfo?["message"] as? String {
-          playbackAlert = (title: "Can't Play Offline", message: message)
+          playbackAlert = (title: "Can't Play Episode", message: message)
         }
       }
     }
@@ -147,16 +151,10 @@ struct iOSContentView: View {
         }
       }
     }
-    .alert(
-      playbackAlert?.title ?? "",
-      isPresented: Binding(
-        get: { playbackAlert != nil },
-        set: { if !$0 { playbackAlert = nil } }
-      )
-    ) {
-      Button("OK", role: .cancel) { playbackAlert = nil }
-    } message: {
-      Text(playbackAlert?.message ?? "")
+    .alert(playbackAlert?.title ?? "", item: $playbackAlert) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { alert in
+      Text(alert.message)
     }
   }
 

@@ -7,7 +7,6 @@
 
 import Foundation
 
-
 struct AppleRSSFeedResponse: Decodable {
     let feed: AppleRSSFeed
 }

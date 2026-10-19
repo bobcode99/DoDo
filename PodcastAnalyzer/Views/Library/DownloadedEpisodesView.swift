@@ -11,7 +11,7 @@ import SwiftUI
 struct DownloadedEpisodesView: View {
   @Bindable var viewModel: LibraryViewModel
   let showEpisodeArtwork: Bool
-  var podcastTitleFilter: String? = nil
+  var podcastTitleFilter: String?
   @Environment(\.modelContext) private var modelContext
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
   @State private var refreshTask: Task<Void, Never>?
