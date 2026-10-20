@@ -11,7 +11,7 @@
 
 import Foundation
 
-struct PlaybackEpisode: Identifiable, Codable, Sendable, Equatable {
+nonisolated struct PlaybackEpisode: Identifiable, Codable, Sendable, Equatable {
   let id: String
   let title: String
   let podcastTitle: String

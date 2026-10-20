@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct WatchPlayableEpisode: Identifiable, Hashable, Sendable {
+struct WatchPlayableEpisode: Identifiable, Hashable, Codable, Sendable {
   let id: String
   let title: String
   let podcastTitle: String
@@ -30,13 +30,25 @@ struct WatchPlayableEpisode: Identifiable, Hashable, Sendable {
 }
 
 extension WatchPlayableEpisode {
-  init?(episode: PodcastEpisodeInfo, podcastTitle: String) {
+  /// Most feeds give episodes no art of their own; the show's stands in, as on the phone.
+  init?(episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String) {
     guard let audioURL = episode.audioURL else { return nil }
     self.init(
       id: episode.id,
       title: episode.title,
       podcastTitle: podcastTitle,
       audioURL: audioURL,
+      imageURL: episode.imageURL ?? podcastImageURL
+    )
+  }
+
+  /// A row of the phone's Up Next (see `WatchMessageKey.upNext`).
+  init(playbackEpisode episode: PlaybackEpisode) {
+    self.init(
+      id: episode.id,
+      title: episode.title,
+      podcastTitle: episode.podcastTitle,
+      audioURL: episode.audioURL,
       imageURL: episode.imageURL
     )
   }

@@ -104,6 +104,7 @@ final class WatchDownloadManager {
     // delegate silently dropped every finished download.
     task.taskDescription = [
       episode.progressKey, episode.podcastTitle, episode.title, episode.audioURL,
+      episode.imageURL ?? "",
     ].joined(separator: TaskFields.separator)
 
     // Watch schedulers want a size hint; podcast servers often omit
@@ -144,6 +145,7 @@ final class WatchDownloadManager {
         episodeTitle: result.episodeTitle,
         podcastTitle: result.podcastTitle,
         audioURL: result.audioURL,
+        imageURL: result.imageURL,
         fileName: result.fileName,
         fileSize: result.fileSize
       )
@@ -178,6 +180,7 @@ private struct CompletedDownload: Sendable {
   let podcastTitle: String
   let episodeTitle: String
   let audioURL: String
+  let imageURL: String?
   let fileName: String
   let fileSize: Int64
 }
@@ -195,13 +198,20 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     // URLSession deletes `location` the moment this returns, so the move must
     // happen here rather than after any await.
     guard let fields = downloadTask.taskDescription?.components(
-      separatedBy: TaskFields.separator), fields.count == 4
+      separatedBy: TaskFields.separator), fields.count == 5
     else {
       logger.error("Unparseable taskDescription; download discarded")
       return
     }
 
     let key = fields[0]
+    // A 403/404 still "finishes": the body is an HTML error page, which would
+    // be saved as the episode and then fail to play with no way to tell why.
+    if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+      logger.error("Download got HTTP \(http.statusCode); discarded")
+      Task { @MainActor in self.owner?.fail(key: key) }
+      return
+    }
     let ext = downloadTask.originalRequest?.url?.pathExtension
     let fileName = WatchAudioStorage.fileName(
       for: key, extension: (ext?.isEmpty == false ? ext! : "mp3"))
@@ -225,6 +235,7 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
       podcastTitle: fields[1],
       episodeTitle: fields[2],
       audioURL: fields[3],
+      imageURL: fields[4].isEmpty ? nil : fields[4],
       fileName: fileName,
       fileSize: size
     )

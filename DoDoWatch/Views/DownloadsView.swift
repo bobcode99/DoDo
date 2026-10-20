@@ -24,18 +24,12 @@ struct DownloadsView: View {
       } else {
         ForEach(downloads) { download in
           NavigationLink {
-            NowPlayingView()
+            PlayerScreen()
               .task { await start(download) }
           } label: {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(download.episodeTitle)
-                .font(.body)
-                .lineLimit(2)
-              Text(download.podcastTitle)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            }
+            EpisodeRow(
+              title: download.episodeTitle, subtitle: download.podcastTitle,
+              imageURL: download.imageURL)
           }
           .swipeActions {
             Button(role: .destructive) {
@@ -56,6 +50,7 @@ struct DownloadsView: View {
       title: download.episodeTitle,
       podcastTitle: download.podcastTitle,
       audioURL: download.audioURL,
+      imageURL: download.imageURL,
       localPath: download.localPath
     )
     let resumeAt = WatchProgressStore.shared.position(for: episode.progressKey)

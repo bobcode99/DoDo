@@ -12,6 +12,7 @@ import SwiftUI
 struct ShowEpisodesView: View {
   let rssUrl: String
   let title: String
+  let imageURL: String
 
   @State private var downloads = WatchDownloadManager.shared
   @State private var episodes: [PodcastEpisodeInfo] = []
@@ -38,9 +39,9 @@ struct ShowEpisodesView: View {
           .frame(maxWidth: .infinity)
       } else {
         ForEach(episodes) { episode in
-          if let playable = WatchPlayableEpisode(episode: episode, podcastTitle: title) {
+          if let playable = WatchPlayableEpisode(episode: episode, podcastTitle: title, podcastImageURL: imageURL) {
             NavigationLink {
-              NowPlayingView()
+              PlayerScreen()
                 .task { await start(playable) }
             } label: {
               episodeRow(episode)

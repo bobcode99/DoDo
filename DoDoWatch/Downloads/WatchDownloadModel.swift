@@ -20,6 +20,7 @@ final class WatchDownloadModel {
   var episodeTitle: String = ""
   var podcastTitle: String = ""
   var audioURL: String = ""
+  var imageURL: String?
 
   /// Filename inside the audio directory — not an absolute path. The
   /// container's UUID changes between installs, so a stored absolute path goes
@@ -34,6 +35,7 @@ final class WatchDownloadModel {
     episodeTitle: String,
     podcastTitle: String,
     audioURL: String,
+    imageURL: String? = nil,
     fileName: String,
     downloadedDate: Date = Date(),
     fileSize: Int64 = 0
@@ -42,6 +44,7 @@ final class WatchDownloadModel {
     self.episodeTitle = episodeTitle
     self.podcastTitle = podcastTitle
     self.audioURL = audioURL
+    self.imageURL = imageURL
     self.fileName = fileName
     self.downloadedDate = downloadedDate
     self.fileSize = fileSize

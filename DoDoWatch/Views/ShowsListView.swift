@@ -34,7 +34,7 @@ struct ShowsListView: View {
       } else {
         ForEach(subscriptions) { podcast in
           NavigationLink {
-            ShowEpisodesView(rssUrl: podcast.rssUrl, title: podcast.title)
+            ShowEpisodesView(rssUrl: podcast.rssUrl, title: podcast.title, imageURL: podcast.imageURL)
           } label: {
             ShowRow(podcast: podcast)
           }

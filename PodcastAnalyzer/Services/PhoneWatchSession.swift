@@ -28,6 +28,15 @@ final class PhoneWatchSession: NSObject {
   /// still wakes the watch.
   private var lastSentSnapshot: WidgetPlaybackData?
 
+  /// Encoded Up Next, re-sent with every context: `updateApplicationContext`
+  /// replaces the whole dictionary, so a now-playing push without it would
+  /// wipe the watch's list.
+  private var upNextPayload: Data?
+
+  /// How many Up Next rows the watch gets. Contexts are capped at ~64 KB and a
+  /// wrist list past this is never scrolled.
+  nonisolated static let upNextLimit = 20
+
   private override init() {
     super.init()
   }
@@ -59,11 +68,32 @@ final class PhoneWatchSession: NSObject {
     }
 
     guard let encoded = try? JSONEncoder().encode(data) else { return }
+    var context: [String: Any] = [WatchMessageKey.nowPlaying: encoded]
+    if let upNextPayload { context[WatchMessageKey.upNext] = upNextPayload }
     do {
-      try session.updateApplicationContext([WatchMessageKey.nowPlaying: encoded])
+      try session.updateApplicationContext(context)
       lastSentSnapshot = data
     } catch {
       logger.error("Context push failed: \(error.localizedDescription, privacy: .public)")
+    }
+  }
+
+  /// Sends Up Next when it differs from what the watch already has.
+  func pushUpNext(_ episodes: [PlaybackEpisode]) {
+    guard let encoded = try? JSONEncoder().encode(Self.watchUpNext(episodes)),
+      encoded != upNextPayload
+    else { return }
+    upNextPayload = encoded
+    pushCurrentState()
+  }
+
+  /// What goes over the wire: the first `upNextLimit`, minus show notes, which
+  /// are most of each episode's bytes and never shown on the wrist.
+  nonisolated static func watchUpNext(_ episodes: [PlaybackEpisode]) -> [PlaybackEpisode] {
+    episodes.prefix(upNextLimit).map {
+      var episode = $0
+      episode.episodeDescription = nil
+      return episode
     }
   }
 
@@ -103,6 +133,17 @@ final class PhoneWatchSession: NSObject {
       manager.seek(to: time)
     case .setRate(let rate):
       manager.setPlaybackRate(rate)
+    case .play(let episode, let time):
+      // Matched by titles, the composite key both sides share; `play` on the
+      // loaded episode would toggle it rather than move it to the watch's spot.
+      if manager.currentEpisode?.title == episode.title,
+        manager.currentEpisode?.podcastTitle == episode.podcastTitle
+      {
+        manager.seek(to: time)
+        if !manager.isPlaying { manager.resume() }
+      } else {
+        manager.play(episode: episode, audioURL: episode.audioURL, startTime: time, imageURL: episode.imageURL)
+      }
     case .requestNowPlaying:
       pushCurrentState()
     }

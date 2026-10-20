@@ -121,7 +121,9 @@ class EnhancedAudioManager: NSObject {
   var captionSegments: [CaptionSegment] = []
 
   // Queue management
-  var queue: [PlaybackEpisode] = []
+  var queue: [PlaybackEpisode] = [] {
+    didSet { pushUpNextToWatch() }
+  }
   var hasRestoredLastEpisode: Bool = false
   private let maxQueueSize = 50
 
@@ -132,7 +134,19 @@ class EnhancedAudioManager: NSObject {
   var queueHasRoom: Bool { queue.count < maxQueueSize }
 
   // Auto-play candidates (unplayed episodes that can be randomly selected)
-  var autoPlayCandidates: [PlaybackEpisode] = []
+  var autoPlayCandidates: [PlaybackEpisode] = [] {
+    didSet { pushUpNextToWatch() }
+  }
+
+  /// The watch shows the same Up Next as Home: Play Next queue, then the
+  /// scored suggestions. PhoneWatchSession drops repeats, so every mutation
+  /// can call this.
+  private func pushUpNextToWatch() {
+    #if os(iOS)
+    let queuedIds = Set(queue.map(\.id))
+    PhoneWatchSession.shared.pushUpNext(queue + autoPlayCandidates.filter { !queuedIds.contains($0.id) })
+    #endif
+  }
 
   // Sleep timer
   var sleepTimerOption: SleepTimerOption = .off

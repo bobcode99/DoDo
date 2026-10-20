@@ -17,6 +17,9 @@ nonisolated enum WatchCommand: Codable, Sendable, Equatable {
   case skipBackward
   case seek(to: TimeInterval)
   case setRate(Float)
+  /// Hand playback over from the watch: play this episode on the phone from
+  /// where the watch was, so the two never disagree about the position.
+  case play(PlaybackEpisode, at: TimeInterval)
 
   /// "Send me the current state." The phone only pushes from its playback
   /// funnel, so a watch installed before anything played has never received a
@@ -34,4 +37,9 @@ nonisolated enum WatchMessageKey {
   static let command = "command"
   /// A JSON-encoded `WidgetPlaybackData`, phone → watch.
   static let nowPlaying = "nowPlaying"
+  /// A JSON-encoded `[PlaybackEpisode]`, phone → watch: the phone's Up Next in
+  /// order (Play Next queue, then suggestions). CloudKit only carries the
+  /// explicit queue, which is usually empty, so without this the watch's Up
+  /// Next looked bare next to the phone's.
+  static let upNext = "upNext"
 }

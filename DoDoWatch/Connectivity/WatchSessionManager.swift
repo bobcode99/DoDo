@@ -25,6 +25,8 @@ final class WatchSessionManager: NSObject {
 
   /// Last state the phone pushed. Nil until the first context arrives.
   private(set) var nowPlaying: WidgetPlaybackData?
+  /// The phone's Up Next, in its order. Empty until the phone sends one.
+  private(set) var upNext: [PlaybackEpisode] = []
   private(set) var isReachable = false
 
   private override init() {
@@ -76,12 +78,15 @@ final class WatchSessionManager: NSObject {
 
   // MARK: - Receiving
 
-  private func apply(_ snapshot: WidgetPlaybackData) {
+  private func apply(_ context: PhoneContext) {
+    if let upNext = context.upNext { self.upNext = upNext }
+    guard let snapshot = context.nowPlaying,
+      Self.isNewer(snapshot, than: nowPlaying)
+    else { return }
     nowPlaying = snapshot
-    // The watch face should follow the phone too when that is the chosen
-    // source; otherwise it would go blank the moment the user stops playing
-    // on the watch itself.
-    guard SourceManager.shared.selected == .phone else { return }
+    // The watch face follows the phone unless the watch is playing its own
+    // episode, which publishes its own state (WatchAudioPlayer).
+    guard !WatchAudioPlayer.shared.isPlaying else { return }
     let next = WatchComplicationState(
       episodeTitle: snapshot.episodeTitle,
       podcastTitle: snapshot.podcastTitle,
@@ -96,11 +101,31 @@ final class WatchSessionManager: NSObject {
   }
 }
 
-/// Decoded off the main actor so only the `Sendable` result crosses the hop —
-/// a `[String: Any]` cannot cross one at all.
-private nonisolated func decodeSnapshot(from context: [String: Any]) -> WidgetPlaybackData? {
-  guard let data = context[WatchMessageKey.nowPlaying] as? Data else { return nil }
-  return try? JSONDecoder().decode(WidgetPlaybackData.self, from: data)
+extension WatchSessionManager {
+  /// Contexts queue while the watch sleeps and can land late; applying an
+  /// older one would jump the clock backwards, so the newer stamp wins.
+  nonisolated static func isNewer(_ snapshot: WidgetPlaybackData, than current: WidgetPlaybackData?) -> Bool {
+    guard let current else { return true }
+    return snapshot.lastUpdated >= current.lastUpdated
+  }
+}
+
+/// What one phone context carries, decoded. Either part can be missing.
+nonisolated struct PhoneContext: Sendable {
+  var nowPlaying: WidgetPlaybackData?
+  var upNext: [PlaybackEpisode]?
+
+  /// Decoded off the main actor so only the `Sendable` result crosses the hop —
+  /// a `[String: Any]` cannot cross one at all.
+  init(_ context: [String: Any]) {
+    let decoder = JSONDecoder()
+    if let data = context[WatchMessageKey.nowPlaying] as? Data {
+      nowPlaying = try? decoder.decode(WidgetPlaybackData.self, from: data)
+    }
+    if let data = context[WatchMessageKey.upNext] as? Data {
+      upNext = try? decoder.decode([PlaybackEpisode].self, from: data)
+    }
+  }
 }
 
 extension WatchSessionManager: WCSessionDelegate {
@@ -118,13 +143,13 @@ extension WatchSessionManager: WCSessionDelegate {
     // Only now is the session usable. A context delivered while the app was
     // not running is waiting in `receivedApplicationContext`; decoded here,
     // off the main actor, because the raw [String: Any] cannot cross the hop.
-    let snapshot = decodeSnapshot(from: session.receivedApplicationContext)
+    let context = PhoneContext(session.receivedApplicationContext)
     let reachable = session.isReachable
 
     Task { @MainActor in
       self.isReachable = reachable
-      if let snapshot {
-        self.apply(snapshot)
+      if context.nowPlaying != nil {
+        self.apply(context)
       } else {
         // Never received one. The phone only pushes from its playback funnel,
         // so if nothing has played since this watch app was installed there is
@@ -135,8 +160,8 @@ extension WatchSessionManager: WCSessionDelegate {
   }
 
   nonisolated func session(_ session: WCSession, didReceiveApplicationContext context: [String: Any]) {
-    guard let snapshot = decodeSnapshot(from: context) else { return }
-    Task { @MainActor in self.apply(snapshot) }
+    let decoded = PhoneContext(context)
+    Task { @MainActor in self.apply(decoded) }
   }
 
   nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
