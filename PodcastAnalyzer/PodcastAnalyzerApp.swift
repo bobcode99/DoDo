@@ -168,16 +168,25 @@ struct PodcastAnalyzerApp: App {
 
   /// Set after a ".dodotranscript" file import attempt; drives the result alert.
   @State private var transcriptImportMessage: String?
+  /// Why a link from the "Open in DoDo" share extension could not be opened.
+  /// Without it the app came forward and silently did nothing.
+  @State private var sharedLinkError: String?
 
   var body: some Scene {
     WindowGroup {
       ContentView()
-        .environment(\.locale, languageManager.locale)
         .alert("Transcript Import", item: $transcriptImportMessage) { _ in
           Button("OK", role: .cancel) {}
         } message: { message in
           Text(message)
         }
+        .alert("Can't Open Link", item: $sharedLinkError) { _ in
+          Button("OK", role: .cancel) {}
+        } message: { message in
+          Text(message)
+        }
+        // After the alerts, so their titles follow the in-app language too.
+        .environment(\.locale, languageManager.locale)
         .task {
           // Critical: initialize playback state and sync manager first
           if PlaybackStateCoordinator.shared == nil {
@@ -380,7 +389,7 @@ struct PodcastAnalyzerApp: App {
           // "Open in DoDo" share extension: podcastanalyzer://open-shared-link?url=<shared link>
           if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
              let shared = components.queryItems?.first(where: { $0.name == "url" })?.value {
-            await openSharedApplePodcastsLink(shared)
+            sharedLinkError = await openSharedApplePodcastsLink(shared)
           }
         case "expandplayer":
           // Widget tap: open expanded player directly
@@ -406,36 +415,33 @@ struct PodcastAnalyzerApp: App {
 
   /// Resolve an Apple Podcasts episode link (…/podcast/name/id<podcastID>?i=<episodeID>)
   /// via the iTunes Lookup API and navigate straight to the episode detail page.
-  private func openSharedApplePodcastsLink(_ link: String) async {
-    guard let url = URL(string: link),
-          let idComponent = url.pathComponents.last(where: { $0.hasPrefix("id") }),
-          let podcastId = Int(idComponent.dropFirst(2))
-    else {
-      logger.warning("Shared link is not an Apple Podcasts link: \(link)")
-      return
-    }
-
-    // ponytail: podcast-only links (no ?i=) just open the app; add podcast
-    // navigation when someone actually shares one.
-    guard let episodeIdString = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == "i" })?.value,
-          let episodeId = Int(episodeIdString)
-    else { return }
-
-    do {
-      let episodes = try await ApplePodcastService().fetchEpisodes(for: podcastId)
-      guard let episode = episodes.first(where: { $0.trackId == episodeId }) else {
-        logger.warning("Episode \(episodeId) not found in lookup for podcast \(podcastId)")
-        return
+  /// Returns why it couldn't, for the alert.
+  private func openSharedApplePodcastsLink(_ link: String) async -> String? {
+    switch SharedPodcastLink(link) {
+    case .unsupported:
+      return .appLocalized("DoDo can only open Apple Podcasts episode links.")
+    case .show:
+      // ponytail: no show page to navigate to by Apple ID yet; add one when
+      // show links turn out to be common.
+      return .appLocalized("This is a show link. Share a single episode to open it in DoDo.")
+    case .episode(let podcastID, let episodeID):
+      do {
+        let episodes = try await ApplePodcastService().fetchEpisodes(for: podcastID)
+        guard let episode = episodes.first(where: { $0.trackId == episodeID }) else {
+          logger.warning("Episode \(episodeID) not found in lookup for podcast \(podcastID)")
+          return .appLocalized("Couldn't find this episode. It may be too old to look up.")
+        }
+        NotificationNavigationManager.shared.navigateToEpisodeDetail(
+          title: episode.trackName,
+          podcastTitle: episode.collectionName ?? "",
+          audioURL: episode.episodeUrl ?? episode.previewUrl ?? "",
+          imageURL: episode.artworkUrl600 ?? episode.artworkUrl160 ?? ""
+        )
+        return nil
+      } catch {
+        logger.error("Failed to resolve shared episode link: \(error.localizedDescription)")
+        return .appLocalized("Couldn't open this link. Check your connection and try again.")
       }
-      NotificationNavigationManager.shared.navigateToEpisodeDetail(
-        title: episode.trackName,
-        podcastTitle: episode.collectionName ?? "",
-        audioURL: episode.episodeUrl ?? episode.previewUrl ?? "",
-        imageURL: episode.artworkUrl600 ?? episode.artworkUrl160 ?? ""
-      )
-    } catch {
-      logger.error("Failed to resolve shared episode link: \(error.localizedDescription)")
     }
   }
 }

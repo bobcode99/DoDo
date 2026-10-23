@@ -183,7 +183,11 @@ struct iOSContentView: View { // "iOS" keeps Apple's casing
     } else {
       // Episode not found in SwiftData — use data from the current playback episode
       // (restored from UserDefaults) so we still have the description and metadata.
-      let currentEp = EnhancedAudioManager.shared.currentEpisode
+      // Only when it *is* that episode: a shared link to anything else showed the
+      // playing episode's description and date under the shared one's title.
+      let currentEp = EnhancedAudioManager.shared.currentEpisode.flatMap {
+        $0.title == target.episodeTitle && $0.podcastTitle == target.podcastTitle ? $0 : nil
+      }
       let episode = PodcastEpisodeInfo(
         title: target.episodeTitle,
         podcastEpisodeDescription: currentEp?.episodeDescription,
