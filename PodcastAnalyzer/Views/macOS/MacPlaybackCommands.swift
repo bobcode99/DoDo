@@ -48,10 +48,10 @@ struct MacPlaybackCommands: Commands {
 
       Divider()
 
-      Button("Show Full Player", action: navigation.requestExpandPlayer)
+      Button("Show Full Player", action: showFullPlayer)
         .disabled(!hasEpisode)
 
-      Button("Go to Current Episode", action: navigation.navigateToNowPlaying)
+      Button("Go to Current Episode", action: goToCurrentEpisode)
         .keyboardShortcut("l")
         .disabled(!hasEpisode)
     }
@@ -71,6 +71,18 @@ struct MacPlaybackCommands: Commands {
 
   private func skipBackward() {
     audioManager.skipBackward()
+  }
+
+  // Both need a window to act in, and the app keeps running after its last
+  // window closes.
+  private func showFullPlayer() {
+    MacBackgroundMode.presentMainWindow()
+    navigation.requestExpandPlayer()
+  }
+
+  private func goToCurrentEpisode() {
+    MacBackgroundMode.presentMainWindow()
+    navigation.navigateToNowPlaying()
   }
 }
 #endif

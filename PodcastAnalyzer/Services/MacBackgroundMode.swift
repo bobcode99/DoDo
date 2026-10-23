@@ -59,6 +59,10 @@ enum MacBackgroundMode {
     window.isVisible && window.styleMask.contains(.titled) && !(window is NSPanel)
   }
 
+  private static func isMinimized(_ window: NSWindow) -> Bool {
+    window.isMiniaturized && !(window is NSPanel)
+  }
+
   // MARK: - Presenting
 
   /// Set by `MacWindowCommands`. SwiftUI opens scene windows only through
@@ -70,7 +74,14 @@ enum MacBackgroundMode {
   static func presentMainWindow() {
     NSApp.setActivationPolicy(.regular)
 
-    if let window = NSApp.windows.first(where: isUserFacing) {
+    // A hidden app's windows and a minimized window both report invisible,
+    // and opening a new one then left two main windows. Unhiding brings the
+    // hidden ones back, but not before this returns, so stop there.
+    if NSApp.isHidden {
+      NSApp.unhide(nil)
+      logger.info("Unhid the app")
+    } else if let window = NSApp.windows.first(where: { isUserFacing($0) || isMinimized($0) }) {
+      window.deminiaturize(nil)
       window.makeKeyAndOrderFront(nil)
       logger.info("Presented existing window")
     } else if let openMainWindow {
