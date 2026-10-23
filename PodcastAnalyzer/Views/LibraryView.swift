@@ -48,6 +48,16 @@ struct LibraryView: View {
   /// pushed over it — see `visibleRecencySignature`.
   @State private var isVisible = false
 
+  /// Nothing to show at all. In-flight downloads count: the first download from
+  /// a show you never subscribed to was hidden behind "No Podcasts Yet" until
+  /// it finished.
+  private var libraryIsEmpty: Bool {
+    sortedPodcasts.isEmpty
+      && viewModel.savedEpisodes.isEmpty
+      && viewModel.downloadedEpisodes.isEmpty
+      && viewModel.downloadingEpisodes.isEmpty
+  }
+
   var body: some View {
     ZStack {
       ScrollView {
@@ -74,16 +84,12 @@ struct LibraryView: View {
       // `sortedPodcasts`, not `subscribedPodcasts`: touching the @Query here ran
       // its fetch a third time per body pass. The two hold the same set — the
       // grid above already renders from this one.
-      if viewModel.isLoading && sortedPodcasts.isEmpty
-          && viewModel.savedEpisodes.isEmpty && viewModel.downloadedEpisodes.isEmpty {
+      if viewModel.isLoading && libraryIsEmpty {
         ProgressView("Loading Library...")
           .scaleEffect(1.5)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(Color.platformBackground)
-      } else if lastProcessedSignature != nil
-                && sortedPodcasts.isEmpty
-                && viewModel.savedEpisodes.isEmpty
-                && viewModel.downloadedEpisodes.isEmpty {
+      } else if lastProcessedSignature != nil && libraryIsEmpty {
         ContentUnavailableView {
           Label("No Podcasts Yet", systemImage: "antenna.radiowaves.left.and.right")
         } description: {

@@ -11,11 +11,12 @@ import SwiftUI
 struct DownloadedPodcastsGridView: View {
   @Bindable var viewModel: LibraryViewModel
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.libraryGridColumns) private var gridColumns
 
-  private let columns = [
-    GridItem(.flexible(), spacing: 12),
-    GridItem(.flexible(), spacing: 12)
-  ]
+  /// Same column count as the Library grid (Settings › Grid Columns).
+  private var columns: [GridItem] {
+    Array(repeating: GridItem(.flexible(), spacing: 12), count: gridColumns.rawValue)
+  }
 
   var body: some View {
     Group {

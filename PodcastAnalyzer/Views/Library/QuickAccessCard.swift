@@ -48,6 +48,9 @@ struct QuickAccessCard: View {
     }
     .padding(12)
     .frame(maxWidth: .infinity, minHeight: 90)
+    // Glass isn't hit-testable content: in a plain-style NavigationLink only
+    // the icon and text took taps, and the rest of the card did nothing.
+    .contentShape(.rect(cornerRadius: 12))
     .glassEffect(Glass.regular, in: .rect(cornerRadius: 12))
   }
 }
