@@ -106,6 +106,13 @@ enum TranslationTargetLanguage: String, CaseIterable, Codable, Sendable {
     }
   }
 
+  /// True when translating into this language from `source` would change
+  /// nothing — e.g. the device language is the transcript's own language.
+  func isSameLanguage(as source: Locale.Language?) -> Bool {
+    guard let source, let target = localeLanguage else { return false }
+    return target.isEquivalent(to: source)
+  }
+
   /// Short abbreviated name for compact display (e.g., badge)
   var shortName: String {
     switch self {

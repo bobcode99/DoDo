@@ -184,7 +184,8 @@ final class EpisodeDetailViewModel {
     )
     self.translation = TranslationCoordinator(
       episode: episode,
-      podcastTitle: podcastTitle
+      podcastTitle: podcastTitle,
+      podcastLanguage: podcastLanguage
     )
     self.aiAnalysis = AIAnalysisCoordinator(
       episode: episode,
@@ -219,6 +220,7 @@ final class EpisodeDetailViewModel {
       podcastLanguage = lang
     }
     transcript.setPodcastLanguage(podcastLanguage)
+    translation.setPodcastLanguage(podcastLanguage)
     aiAnalysis.setPodcastLanguage(podcastLanguage)
     aiAnalysis.setModelContext(context)
     loadEpisodeModel()

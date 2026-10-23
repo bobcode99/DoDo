@@ -13,8 +13,11 @@ struct TranslationLanguagePickerSheet: View {
     /// Set of language codes that have cached translations available
     let availableTranslations: Set<String>
 
-    /// Current translation status
-    let translationStatus: TranslationStatus
+    /// The transcript's own language, never offered as a target
+    let sourceLanguage: Locale.Language?
+
+    /// Target of the transcript translation still in progress, if any
+    let translatingLanguage: TranslationTargetLanguage?
 
     /// Callback when a language is selected
     let onSelectLanguage: (TranslationTargetLanguage) -> Void
@@ -25,37 +28,39 @@ struct TranslationLanguagePickerSheet: View {
         NavigationStack {
             List {
                 // Currently selected default language section
-                Section {
-                    Button {
-                        onSelectLanguage(settings.targetLanguage)
-                        dismiss()
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Default Language")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Text(settings.targetLanguage.displayName)
-                                    .font(.headline)
+                if !settings.targetLanguage.isSameLanguage(as: sourceLanguage) {
+                    Section {
+                        Button {
+                            onSelectLanguage(settings.targetLanguage)
+                            dismiss()
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Default Language")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Text(settings.targetLanguage.displayName)
+                                        .font(.headline)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.blue)
                             }
-
-                            Spacer()
-
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.blue)
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                    } header: {
+                        Text("Quick Translate")
+                    } footer: {
+                        Text("Tap to translate to your default language. Change the default in Settings.")
                     }
-                    .buttonStyle(.plain)
-                } header: {
-                    Text("Quick Translate")
-                } footer: {
-                    Text("Tap to translate to your default language. Change the default in Settings.")
                 }
 
                 // All available languages
                 Section {
-                    ForEach(TranslationTargetLanguage.allCases.filter { $0 != .deviceLanguage }, id: \.self) { language in
+                    ForEach(Self.offeredLanguages(source: sourceLanguage), id: \.self) { language in
                         languageRow(for: language)
                     }
                 } header: {
@@ -82,7 +87,7 @@ struct TranslationLanguagePickerSheet: View {
     private func languageRow(for language: TranslationTargetLanguage) -> some View {
         let langCode = language.languageIdentifier
         let hasTranslation = availableTranslations.contains(langCode)
-        let isTranslatingThisLanguage = isCurrentlyTranslating(language)
+        let isTranslatingThisLanguage = translatingLanguage == language
 
         Button {
             onSelectLanguage(language)
@@ -119,18 +124,18 @@ struct TranslationLanguagePickerSheet: View {
         .disabled(isTranslatingThisLanguage)
     }
 
-    private func isCurrentlyTranslating(_ language: TranslationTargetLanguage) -> Bool {
-        guard case .translating = translationStatus else { return false }
-        // Check if the current translation target matches this language
-        let currentTarget = settings.targetLanguage
-        return currentTarget == language
+    /// Every explicit target except the transcript's own language, since
+    /// translating a show into the language it's already in does nothing.
+    static func offeredLanguages(source: Locale.Language?) -> [TranslationTargetLanguage] {
+        TranslationTargetLanguage.allCases.filter { $0 != .deviceLanguage && !$0.isSameLanguage(as: source) }
     }
 }
 
 #Preview {
     TranslationLanguagePickerSheet(
         availableTranslations: ["zh-Hant", "ja"],
-        translationStatus: .idle,
+        sourceLanguage: Locale.Language(identifier: "en"),
+        translatingLanguage: .korean,
         onSelectLanguage: { _ in }
     )
 }

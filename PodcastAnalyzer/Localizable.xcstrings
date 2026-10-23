@@ -103,6 +103,23 @@
         }
       }
     },
+    "Couldn't tell which language this transcript is in." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法判断这份逐字稿的语言。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法判斷這份逐字稿的語言。"
+          }
+        }
+      }
+    },
     "DoDo can only open Apple Podcasts episode links." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15591,6 +15608,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全部停止"
+          }
+        }
+      }
+    },
+    "Stop Translating" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止翻译"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止翻譯"
           }
         }
       }

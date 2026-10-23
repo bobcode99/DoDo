@@ -2,13 +2,13 @@
 //  TranslationService.swift
 //  PodcastAnalyzer
 //
-//  Actor-based translation service for managing translation state and storage.
-//  NOTE: Actual translation using TranslationSession must happen in SwiftUI views
-//  via .translationTask() modifier - TranslationSession cannot be directly initialized.
+//  Translation status, source-language detection, and session configuration
+//  helpers. Transcript translation jobs run in TranscriptTranslationManager;
+//  description and title translations run in SwiftUI's .translationTask().
 //
 
 import Foundation
-import OSLog
+import NaturalLanguage
 
 #if canImport(Translation)
 import Translation
@@ -79,15 +79,9 @@ enum TranslationStatus: Equatable {
 
 // MARK: - Translation Service
 
-/// Service for managing translation state and storage.
-/// NOTE: Actual translation must be triggered from SwiftUI views using .translationTask() modifier.
+/// Language-detection and configuration helpers for the Translation framework.
 actor TranslationService {
   static let shared = TranslationService()
-
-  private let logger = Logger(subsystem: "com.podcast.analyzer", category: "TranslationService")
-
-  // Track active translations for cancellation
-  private var activeTasks: [String: Task<Void, Never>] = [:]
 
   private init() {}
 
@@ -101,61 +95,6 @@ actor TranslationService {
     }
     #endif
     return false
-  }
-
-  // MARK: - Storage Methods
-
-  /// Save translated segments, keyed by target language alongside the base transcript.
-  func saveTranslatedSRT(
-    segments: [TranscriptSegment],
-    episodeTitle: String,
-    podcastTitle: String,
-    targetLanguage: String
-  ) async throws {
-    try await MainActor.run {
-      try TranscriptStore.shared.saveTranslation(
-        segments, targetLanguage: targetLanguage, episodeTitle: episodeTitle, podcastTitle: podcastTitle
-      )
-    }
-    self.logger.info("Saved translation for \(episodeTitle) [\(targetLanguage)]")
-  }
-
-  /// Load existing translation, merged onto the stored base segments.
-  func loadExistingTranslation(
-    segments: [TranscriptSegment],
-    episodeTitle: String,
-    podcastTitle: String,
-    targetLanguage: String
-  ) async -> [TranscriptSegment]? {
-    await MainActor.run {
-      TranscriptStore.shared.loadTranslation(
-        targetLanguage: targetLanguage, episodeTitle: episodeTitle, podcastTitle: podcastTitle
-      )
-    }
-  }
-
-  /// Check if a translation exists for this language
-  func hasExistingTranslation(
-    episodeTitle: String,
-    podcastTitle: String,
-    targetLanguage: String
-  ) async -> Bool {
-    await MainActor.run {
-      TranscriptStore.shared.hasTranslation(
-        targetLanguage: targetLanguage, episodeTitle: episodeTitle, podcastTitle: podcastTitle
-      )
-    }
-  }
-
-  // MARK: - Cancellation
-
-  /// Cancel ongoing translation for an episode
-  func cancelTranslation(episodeTitle: String, podcastTitle: String) {
-    let taskKey = "\(podcastTitle)_\(episodeTitle)"
-    if let task = activeTasks.removeValue(forKey: taskKey) {
-      task.cancel()
-      self.logger.info("Cancelled translation for: \(taskKey)")
-    }
   }
 }
 
@@ -200,6 +139,21 @@ extension TranslationService {
       // Try to use the code directly
       return Locale.Language(identifier: normalized)
     }
+  }
+}
+
+// MARK: - Transcript Language Detection
+
+/// Reads the language off the transcript text itself; a feed's declared
+/// language is often missing or wrong (e.g. "zh" for a Traditional Chinese show).
+nonisolated enum TranscriptLanguageDetector {
+  static func dominantLanguage(of texts: [String]) -> Locale.Language? {
+    let recognizer = NLLanguageRecognizer()
+    // The opening few thousand characters settle the language; reading a
+    // multi-hour transcript in full would only cost time.
+    recognizer.processString(String(texts.joined(separator: " ").prefix(3000)))
+    guard let language = recognizer.dominantLanguage, language != .undetermined else { return nil }
+    return Locale.Language(identifier: language.rawValue)
   }
 }
 

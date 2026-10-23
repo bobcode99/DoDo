@@ -54,6 +54,8 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
             .onChange(of: viewModel.translation.translationStatus) { _, newStatus in
                 if case .failed(let error) = newStatus {
                     translationError = error
+                } else if newStatus == .completed {
+                    viewModel.translation.applyFinishedJob()
                 }
             }
             .confirmationDialog(
@@ -77,7 +79,8 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
             .sheet(isPresented: $showTranslationLanguagePicker) {
                 TranslationLanguagePickerSheet(
                     availableTranslations: viewModel.translation.availableTranslationLanguages,
-                    translationStatus: viewModel.translation.translationStatus,
+                    sourceLanguage: viewModel.translation.sourceLanguage,
+                    translatingLanguage: viewModel.translation.translatingLanguage,
                     onSelectLanguage: { language in
                         viewModel.translation.translateTo(language)
                     }
@@ -86,7 +89,6 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
             .onAppear {
                 viewModel.setModelContext(modelContext)
                 viewModel.transcript.checkTranscriptStatus()
-                viewModel.translation.loadExistingTranslations()
                 viewModel.translation.checkAvailableTranslations()
             }
             .onDisappear {
@@ -105,7 +107,7 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
                 triggerPodcastTitleTranslation()
             }
             .translationTask(transcriptTranslationConfig) { session in
-                await viewModel.translation.performTranscriptTranslation(using: session)
+                await viewModel.translation.prepareAndStart(using: session)
             }
             .translationTask(descriptionTranslationConfig) { session in
                 await viewModel.translation.performDescriptionTranslation(using: session)
@@ -126,9 +128,8 @@ private struct EpisodeDetailSheetsModifier: ViewModifier {
     /// contract for that case is `invalidate()`, which restarts the session.
     private func refreshConfig(_ config: inout TranslationSession.Configuration?) {
         guard let targetLang = viewModel.translation.selectedTranslationLanguage?.localeLanguage else { return }
-        let sourceLang = TranslationService.shared.detectSourceLanguage(from: viewModel.podcastLanguage)
         let newConfig = TranslationService.shared.makeConfiguration(
-            sourceLanguage: sourceLang,
+            sourceLanguage: viewModel.translation.sourceLanguage,
             targetLanguage: targetLang
         )
         if config == newConfig {

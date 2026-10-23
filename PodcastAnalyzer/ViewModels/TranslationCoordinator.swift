@@ -2,9 +2,10 @@
 //  TranslationCoordinator.swift
 //  PodcastAnalyzer
 //
-//  Owns the translation lifecycle for the detail screen: per-segment
-//  transcript translation, plus description / episode-title / podcast-title
-//  translations via Apple's Translation framework.
+//  Translation state for the detail screen: the transcript translation job
+//  (owned app-wide by TranscriptTranslationManager, so it survives this
+//  screen), plus description / episode-title / podcast-title translations via
+//  Apple's Translation framework.
 //
 //  Extracted from EpisodeDetailViewModel. Reads transcript segments and
 //  pushes results back through the TranscriptCoordinator's
@@ -26,7 +27,15 @@ final class TranslationCoordinator {
 
   // MARK: - Status
 
-  var translationStatus: TranslationStatus = .idle
+  /// The app-wide job is the single source of truth, so a re-entered page
+  /// shows the progress of a translation started before it existed.
+  var translationStatus: TranslationStatus { job?.status ?? .idle }
+
+  /// Target of the transcript translation still preparing or running.
+  var translatingLanguage: TranslationTargetLanguage? {
+    guard let job, job.status.isTranslating else { return nil }
+    return job.target
+  }
 
   // MARK: - Translated copy
 
@@ -50,6 +59,8 @@ final class TranslationCoordinator {
 
   @ObservationIgnored let episode: PodcastEpisodeInfo
   @ObservationIgnored let podcastTitle: String
+  @ObservationIgnored private let episodeKey: String
+  @ObservationIgnored private var podcastLanguage: String
 
   /// Weak link to the transcript coordinator so we can read segments and
   /// push translated segments back via `applyTranslations(_:)`.
@@ -57,24 +68,38 @@ final class TranslationCoordinator {
 
   @ObservationIgnored private let translationService = TranslationService.shared
   @ObservationIgnored private let subtitleSettings = SubtitleSettingsManager.shared
+  @ObservationIgnored private let manager = TranscriptTranslationManager.shared
 
   // MARK: - Task Ownership
 
-  @ObservationIgnored private var translationTask: Task<Void, Never>?
   @ObservationIgnored private var availableTranslationsTask: Task<Void, Never>?
 
   // MARK: - Init / Setup
 
-  init(episode: PodcastEpisodeInfo, podcastTitle: String) {
+  init(episode: PodcastEpisodeInfo, podcastTitle: String, podcastLanguage: String) {
     self.episode = episode
     self.podcastTitle = podcastTitle
+    self.episodeKey = EpisodeKeyUtils.makeKey(podcastTitle: podcastTitle, episodeTitle: episode.title)
+    self.podcastLanguage = podcastLanguage
   }
 
   func attach(transcript: TranscriptCoordinator) {
     self.transcript = transcript
   }
 
+  func setPodcastLanguage(_ language: String) {
+    self.podcastLanguage = language
+  }
+
   // MARK: - Computed
+
+  private var job: TranscriptTranslationManager.Job? { manager.jobs[episodeKey] }
+
+  /// The transcript's own language, falling back to the feed's declared one.
+  var sourceLanguage: Locale.Language? {
+    TranscriptLanguageDetector.dominantLanguage(of: transcript?.transcriptSegments.map(\.text) ?? [])
+      ?? translationService.detectSourceLanguage(from: podcastLanguage)
+  }
 
   /// True when the live transcript carries translated text in any segment.
   var hasExistingTranslation: Bool {
@@ -94,47 +119,39 @@ final class TranslationCoordinator {
   /// Top-level entry point: translate the description + both titles, and (if
   /// segments exist) the transcript. Called from the language picker.
   func translateTo(_ language: TranslationTargetLanguage) {
+    // Covers auto-translate on load too: a show already in the target
+    // language (often the device language) has nothing to translate.
+    guard !language.isSameLanguage(as: sourceLanguage) else {
+      logger.info("Skipping translation: content is already in \(language.displayName)")
+      return
+    }
     selectedTranslationLanguage = language
-    let targetLang = language.languageIdentifier
-
-    logger.debug("Translate requested to: \(language.displayName) (\(targetLang))")
+    logger.debug("Translate requested to: \(language.displayName) (\(language.languageIdentifier))")
 
     descriptionTranslationTrigger.toggle()
     episodeTitleTranslationTrigger.toggle()
     podcastTitleTranslationTrigger.toggle()
 
-    let segments = transcript?.transcriptSegments ?? []
-    guard !segments.isEmpty else {
-      // `translationStatus` tracks transcript translation only. Setting
-      // .preparingSession before this guard stranded the progress circle at
-      // 0 forever whenever the page had no transcript segments loaded.
-      translationStatus = .idle
+    guard let transcript, !transcript.transcriptSegments.isEmpty else {
       logger.info("No transcript segments - translating title/description only")
       return
     }
 
-    translationStatus = .preparingSession
-    translationTask?.cancel()
-    translationTask = Task { [weak self] in
-      guard let self else { return }
-      if let translated = await self.translationService.loadExistingTranslation(
-        segments: segments,
-        episodeTitle: self.episode.title,
-        podcastTitle: self.podcastTitle,
-        targetLanguage: targetLang
-      ) {
-        guard !Task.isCancelled else { return }
-        self.transcript?.applyTranslations(translated)
-        self.translationStatus = .completed
-        if self.subtitleSettings.displayMode == .originalOnly {
-          self.subtitleSettings.displayMode = .dualTranslatedFirst
-        }
-        logger.info("Loaded cached translation for \(self.episode.title) in \(language.displayName)")
-        return
-      }
-      guard !Task.isCancelled else { return }
-      self.transcriptTranslationTrigger.toggle()
+    if let cached = cachedTranslation(for: language) {
+      // A job still running for another language would overwrite this when it finishes.
+      manager.cancel(episodeKey: episodeKey)
+      show(cached, in: language)
+      return
     }
+    guard sourceLanguage != nil else {
+      manager.fail(
+        episodeKey: episodeKey, target: language,
+        message: String.appLocalized("Couldn't tell which language this transcript is in.")
+      )
+      return
+    }
+    manager.markPreparing(episodeKey: episodeKey, target: language)
+    transcriptTranslationTrigger.toggle()
   }
 
   func translateDescription() {
@@ -155,161 +172,75 @@ final class TranslationCoordinator {
     }
   }
 
-  func translateTranscript() {
-    guard let transcript, !transcript.transcriptSegments.isEmpty else {
-      logger.warning("No transcript segments to translate")
-      return
-    }
-
-    let targetLang = (selectedTranslationLanguage ?? subtitleSettings.targetLanguage).languageIdentifier
-    let segments = transcript.transcriptSegments
-
-    translationTask?.cancel()
-    translationTask = Task { [weak self] in
-      guard let self else { return }
-      if let translated = await self.translationService.loadExistingTranslation(
-        segments: segments,
-        episodeTitle: self.episode.title,
-        podcastTitle: self.podcastTitle,
-        targetLanguage: targetLang
-      ) {
-        guard !Task.isCancelled else { return }
-        self.transcript?.applyTranslations(translated)
-        self.translationStatus = .completed
-        logger.info("Loaded cached translation for \(self.episode.title)")
-        return
-      }
-      guard !Task.isCancelled else { return }
-      self.translationStatus = .preparingSession
-      self.transcriptTranslationTrigger.toggle()
-    }
-  }
-
-  /// Called once the SRT parses — checks for a cached translation and
-  /// auto-loads it (or kicks off auto-translate if the user opted in).
+  /// Called once the SRT parses: picks up this episode's translation job, else
+  /// a cached translation, else auto-translates if the user opted in.
   func loadTranslationsAfterParsing() async {
     guard let transcript, !transcript.transcriptSegments.isEmpty else { return }
-    let targetLang = subtitleSettings.targetLanguage.languageIdentifier
 
-    if let translated = await translationService.loadExistingTranslation(
-      segments: transcript.transcriptSegments,
-      episodeTitle: episode.title,
-      podcastTitle: podcastTitle,
-      targetLanguage: targetLang
-    ) {
-      transcript.applyTranslations(translated)
-      translationStatus = .completed
-      if subtitleSettings.displayMode == .originalOnly {
-        subtitleSettings.displayMode = .dualTranslatedFirst
+    if let job {
+      if job.status == .completed {
+        applyFinishedJob()
+        return
       }
+      if job.status.isTranslating {
+        selectedTranslationLanguage = job.target
+        return
+      }
+    }
+
+    if let target = cachedTargetLanguage(), let cached = cachedTranslation(for: target) {
+      show(cached, in: target)
       logger.info("Restored cached translation for \(self.episode.title)")
     } else if subtitleSettings.autoTranslateOnLoad {
       translateTo(subtitleSettings.targetLanguage)
-    } else {
-      translationStatus = .idle
     }
   }
 
-  /// Load existing translations for current segments
-  func loadExistingTranslations() {
-    guard let transcript, !transcript.transcriptSegments.isEmpty else { return }
-    let targetLang = subtitleSettings.targetLanguage.languageIdentifier
-    let segments = transcript.transcriptSegments
+  /// Drops the transcript translation in progress; no partial result is kept.
+  func stopTranscriptTranslation() {
+    manager.cancel(episodeKey: episodeKey)
+  }
 
-    translationTask?.cancel()
-    translationTask = Task { [weak self] in
-      guard let self else { return }
-      if let translated = await self.translationService.loadExistingTranslation(
-        segments: segments,
-        episodeTitle: self.episode.title,
-        podcastTitle: self.podcastTitle,
-        targetLanguage: targetLang
-      ) {
-        guard !Task.isCancelled else { return }
-        self.transcript?.applyTranslations(translated)
-        self.translationStatus = .completed
-        logger.info("Restored cached translation on demand")
-      }
-    }
+  func applyFinishedJob() {
+    guard let job, job.status == .completed, let segments = job.segments,
+          let transcript, !transcript.transcriptSegments.isEmpty else { return }
+    show(segments, in: job.target)
   }
 
   // MARK: - .translationTask handlers
 
+  /// The view-hosted session only prepares the language pair (which may ask
+  /// the user to download it); the manager then translates without the view.
   @available(iOS 17.4, macOS 14.4, *)
-  func performTranscriptTranslation(using session: TranslationSession) async {
-    #if canImport(Translation)
-    guard let transcript else {
-      translationStatus = .failed("No transcript coordinator attached")
-      return
-    }
+  func prepareAndStart(using session: TranslationSession) async {
+    // Read before suspending: leaving the page runs cleanup(), which empties
+    // the live segments, but a prepared pair should still start the job.
+    guard let target = selectedTranslationLanguage, let transcript, let source = sourceLanguage else { return }
     let segments = transcript.transcriptSegments
-    let total = segments.count
-    guard total > 0 else {
-      translationStatus = .failed("No segments to translate")
-      return
-    }
-
-    translationStatus = .translating(progress: 0, completed: 0, total: total)
-
-    let texts = segments.map(\.text)
-    var translatedTexts = [Int: String](minimumCapacity: total)
-    var completedCount = 0
-    let concurrencyLimit = min(8, total)
-
     do {
-      try await withThrowingTaskGroup(of: (Int, String).self) { group in
-        var nextIndex = 0
-        while nextIndex < concurrencyLimit {
-          let i = nextIndex
-          group.addTask { (i, try await session.translate(texts[i]).targetText) }
-          nextIndex += 1
-        }
-        for try await (i, translated) in group {
-          try Task.checkCancellation()
-          translatedTexts[i] = translated
-          completedCount += 1
-          let progress = Double(completedCount) / Double(total)
-          translationStatus = .translating(progress: progress, completed: completedCount, total: total)
-          if nextIndex < total {
-            let i = nextIndex
-            group.addTask { (i, try await session.translate(texts[i]).targetText) }
-            nextIndex += 1
-          }
-        }
-      }
+      try await session.prepareTranslation()
     } catch is CancellationError {
+      // The page left mid-prompt; don't strand the job in .preparingSession.
+      if let job, job.target == target, job.status == .preparingSession {
+        manager.cancel(episodeKey: episodeKey)
+      }
       return
     } catch {
-      logger.error("Translation failed: \(error.localizedDescription, privacy: .public)")
-      translationStatus = .failed(error.localizedDescription)
+      logger.error("Preparing translation failed: \(error.localizedDescription, privacy: .public)")
+      manager.fail(episodeKey: episodeKey, target: target, message: error.localizedDescription)
       return
     }
+    // Stopped (or replaced) while the pair was preparing.
+    guard let job, job.target == target, job.status == .preparingSession else { return }
 
-    var translatedSegments = segments
-    for (i, text) in translatedTexts {
-      translatedSegments[i].translatedText = text
-    }
-
-    let targetLang = (selectedTranslationLanguage ?? subtitleSettings.targetLanguage).languageIdentifier
-    do {
-      try await translationService.saveTranslatedSRT(
-        segments: translatedSegments,
-        episodeTitle: episode.title,
-        podcastTitle: podcastTitle,
-        targetLanguage: targetLang
-      )
-    } catch {
-      logger.error("Failed to save translation: \(error.localizedDescription, privacy: .public)")
-    }
-
-    self.transcript?.applyTranslations(translatedSegments)
-    translationStatus = .completed
-    availableTranslationLanguages.insert(targetLang)
-    if subtitleSettings.displayMode == .originalOnly {
-      subtitleSettings.displayMode = .dualTranslatedFirst
-    }
-    logger.info("Completed translation for \(self.episode.title)")
-    #endif
+    manager.translate(
+      segments,
+      episodeKey: episodeKey,
+      episodeTitle: episode.title,
+      podcastTitle: podcastTitle,
+      source: source,
+      target: target
+    )
   }
 
   @available(iOS 17.4, macOS 14.4, *)
@@ -359,6 +290,39 @@ final class TranslationCoordinator {
 
   // MARK: - Helpers
 
+  private func cachedTranslation(for language: TranslationTargetLanguage) -> [TranscriptSegment]? {
+    TranscriptStore.shared.loadTranslation(
+      targetLanguage: language.languageIdentifier, episodeTitle: episode.title, podcastTitle: podcastTitle
+    )
+  }
+
+  /// The default target when it's cached, else the first cached language, so a
+  /// finished translation to a non-default language still shows on re-entry.
+  private func cachedTargetLanguage() -> TranslationTargetLanguage? {
+    let cached = TranscriptStore.shared.availableTranslationLanguages(
+      episodeTitle: episode.title, podcastTitle: podcastTitle
+    )
+    let preferred = subtitleSettings.targetLanguage
+    if cached.contains(preferred.languageIdentifier) { return preferred }
+    return cached.sorted().lazy.compactMap(Self.targetLanguage(forIdentifier:)).first
+  }
+
+  /// Cached translations are keyed by `languageIdentifier`, which equals the
+  /// raw value for every case except `.deviceLanguage`.
+  private static func targetLanguage(forIdentifier identifier: String) -> TranslationTargetLanguage? {
+    TranslationTargetLanguage(rawValue: identifier)
+      ?? (TranslationTargetLanguage.deviceLanguage.languageIdentifier == identifier ? .deviceLanguage : nil)
+  }
+
+  private func show(_ translated: [TranscriptSegment], in language: TranslationTargetLanguage) {
+    transcript?.applyTranslations(translated)
+    selectedTranslationLanguage = language
+    availableTranslationLanguages.insert(language.languageIdentifier)
+    if subtitleSettings.displayMode == .originalOnly {
+      subtitleSettings.displayMode = .dualTranslatedFirst
+    }
+  }
+
   /// Strip HTML tags + decode entities for translation payloads.
   /// Decode delegates to the TranscriptCoordinator's shared helper so the
   /// entity table is defined in exactly one place.
@@ -375,7 +339,9 @@ final class TranslationCoordinator {
   // MARK: - Cleanup
 
   func cleanup() {
-    translationTask?.cancel(); translationTask = nil
     availableTranslationsTask?.cancel(); availableTranslationsTask = nil
+    // Preparing needs this page's session, which SwiftUI cancels as it
+    // disappears; a running job belongs to the manager and keeps going.
+    if job?.status == .preparingSession { manager.cancel(episodeKey: episodeKey) }
   }
 }

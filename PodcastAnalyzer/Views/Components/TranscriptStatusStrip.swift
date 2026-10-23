@@ -49,14 +49,17 @@ struct TranscriptStatusStrip: View {
             languageChipLabel
         }
         .menuOrder(.fixed)
-        .disabled(viewModel.translation.translationStatus.isTranslating)
         .accessibilityLabel(Text(languageAccessibilityLabel))
         .accessibilityHint("Adjust translation and subtitle display")
     }
 
     @ViewBuilder
     private var languageMenuContent: some View {
-        if viewModel.translation.hasExistingTranslation {
+        if viewModel.translation.translationStatus.isTranslating {
+            Button("Stop Translating", systemImage: "stop.circle", role: .destructive) {
+                viewModel.translation.stopTranscriptTranslation()
+            }
+        } else if viewModel.translation.hasExistingTranslation {
             Section("Display") {
                 ForEach(SubtitleDisplayMode.allCases, id: \.self) { mode in
                     Button {
@@ -100,11 +103,19 @@ struct TranscriptStatusStrip: View {
     private var languageChipLabel: some View {
         HStack(spacing: 6) {
             languageChipIcon
-            Text(currentLanguageLabel)
-                .font(.caption.weight(.medium))
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .semibold))
-                .opacity(0.6)
+            if case .translating(_, let completed, let total) = viewModel.translation.translationStatus {
+                // While translating, the chip reports progress instead of the language.
+                Text(verbatim: "\(completed)/\(total)")
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            } else {
+                Text(currentLanguageLabel)
+                    .font(.caption.weight(.medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .opacity(0.6)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

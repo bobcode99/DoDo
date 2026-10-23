@@ -84,6 +84,8 @@ final class TranscriptStore {
     model.translationsJSON = nil
     model.wordTimingsJSON = nil
     model.generatedAt = Date()
+    // A translation job's segments are aligned to the old boundaries too.
+    TranscriptTranslationManager.shared.cancel(episodeKey: model.episodeId)
 
     do {
       try context.save()
@@ -228,6 +230,7 @@ final class TranscriptStore {
     model.source = payload.source
     model.generatedAt = payload.generatedAt
     model.plainText = Self.decodeSegments(payload.segmentsJSON).map(\.text).joined(separator: " ")
+    TranscriptTranslationManager.shared.cancel(episodeKey: model.episodeId)
     try context.save()
     return (payload.podcastTitle, payload.episodeTitle)
   }

@@ -82,13 +82,23 @@ private struct TranslateButton: View {
     @Binding var showPicker: Bool
 
     var body: some View {
-        Button {
-            showPicker = true
-        } label: {
-            translateButtonLabel
+        if viewModel.translation.translationStatus.isTranslating {
+            Menu {
+                Button("Stop Translating", systemImage: "stop.circle", role: .destructive) {
+                    viewModel.translation.stopTranscriptTranslation()
+                }
+            } label: {
+                translateButtonLabel
+            }
+            .accessibilityLabel(translateAccessibilityLabel)
+        } else {
+            Button {
+                showPicker = true
+            } label: {
+                translateButtonLabel
+            }
+            .accessibilityLabel(translateAccessibilityLabel)
         }
-        .disabled(viewModel.translation.translationStatus.isTranslating)
-        .accessibilityLabel(translateAccessibilityLabel)
     }
 
     // MARK: - Translate Button Status
