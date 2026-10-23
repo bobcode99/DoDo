@@ -39,6 +39,10 @@ struct PodcastAnalyzerApp: App {
   /// CloudKit container shared by every device signed into the same Apple ID.
   static let cloudKitContainerIdentifier = "iCloud.com.jn.PodcastAnalyzer"
 
+  /// Lets the Mac reopen the main window with `openWindow(id:)` after the user
+  /// closed it.
+  static let mainWindowID = "main"
+
   let sharedModelContainer: ModelContainer = {
     let fullSchema = Schema([
       PodcastInfoModel.self,
@@ -173,7 +177,7 @@ struct PodcastAnalyzerApp: App {
   @State private var sharedLinkError: String?
 
   var body: some Scene {
-    WindowGroup {
+    WindowGroup(id: Self.mainWindowID) {
       ContentView()
         .alert("Transcript Import", item: $transcriptImportMessage) { _ in
           Button("OK", role: .cancel) {}
@@ -277,7 +281,11 @@ struct PodcastAnalyzerApp: App {
     .commands {
       SidebarCommands()
       MacPlaybackCommands()
+      MacWindowCommands()
     }
+    // MacAppDelegate decides at launch whether a window opens, so a login-item
+    // launch can stay in the menubar.
+    .defaultLaunchBehavior(.suppressed)
     #endif
     .onChange(of: scenePhase) { _, newPhase in
       switch newPhase {

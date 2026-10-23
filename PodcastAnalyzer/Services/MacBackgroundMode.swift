@@ -17,6 +17,7 @@
 
 import AppKit
 import OSLog
+import SwiftUI
 
 @MainActor
 enum MacBackgroundMode {
@@ -60,6 +61,11 @@ enum MacBackgroundMode {
 
   // MARK: - Presenting
 
+  /// Set by `MacWindowCommands`. SwiftUI opens scene windows only through
+  /// this action: `NSDocumentController.newDocument` has no document type to
+  /// create here and showed "No document could be created." instead.
+  static var openMainWindow: OpenWindowAction?
+
   /// Brings the app forward with a window, whatever policy it was in.
   static func presentMainWindow() {
     NSApp.setActivationPolicy(.regular)
@@ -67,12 +73,11 @@ enum MacBackgroundMode {
     if let window = NSApp.windows.first(where: isUserFacing) {
       window.makeKeyAndOrderFront(nil)
       logger.info("Presented existing window")
-    } else {
+    } else if let openMainWindow {
       logger.info("No window to present; asking the scene for a new one")
-      // Every window was closed. `newDocument:` is what SwiftUI's WindowGroup
-      // installs behind File ▸ New Window, so this asks the scene for a fresh
-      // one rather than trying to resurrect an NSWindow it no longer owns.
-      NSDocumentController.shared.newDocument(nil)
+      openMainWindow(id: PodcastAnalyzerApp.mainWindowID)
+    } else {
+      logger.fault("No openWindow action yet; cannot open the main window")
     }
 
     NSApp.activate(ignoringOtherApps: true)
