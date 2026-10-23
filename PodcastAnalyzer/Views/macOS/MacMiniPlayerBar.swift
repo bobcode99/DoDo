@@ -128,6 +128,7 @@ struct MacMiniPlayerBar: View {
 private struct MacMiniPlayerProgressBar: View {
   @Binding var isHoveringProgress: Bool
   @Binding var isDraggingProgress: Bool
+  @State private var dragProgress: Double = 0
   private var audioManager: EnhancedAudioManager { .shared }
 
   private var progressPercentage: Double {
@@ -137,27 +138,39 @@ private struct MacMiniPlayerProgressBar: View {
 
   var body: some View {
     GeometryReader { geometry in
+      let currentProgress = isDraggingProgress ? dragProgress : progressPercentage
+
       ZStack(alignment: .leading) {
         Rectangle()
           .fill(Color.gray.opacity(0.2))
 
         Rectangle()
           .fill(.tint)
-          .frame(width: geometry.size.width * progressPercentage)
+          .frame(width: geometry.size.width * currentProgress)
       }
       .contentShape(Rectangle())
       .gesture(
         DragGesture(minimumDistance: 0)
           .onChanged { value in
             isDraggingProgress = true
-            let progress = max(0, min(1, value.location.x / geometry.size.width))
-            let newTime = progress * audioManager.duration
-            audioManager.seek(to: newTime)
+            dragProgress = max(0, min(1, value.location.x / geometry.size.width))
           }
-          .onEnded { _ in
+          .onEnded { value in
+            let finalProgress = max(0, min(1, value.location.x / geometry.size.width))
+            audioManager.seek(to: finalProgress * audioManager.duration)
             isDraggingProgress = false
           }
       )
+    }
+    .accessibilityElement()
+    .accessibilityLabel("Playback position")
+    .accessibilityValue(Text("\(Formatters.formatPlaybackTime(audioManager.currentTime)) of \(Formatters.formatPlaybackTime(audioManager.duration))"))
+    .accessibilityAdjustableAction { direction in
+      switch direction {
+      case .increment: audioManager.skipForward()
+      case .decrement: audioManager.skipBackward()
+      @unknown default: break
+      }
     }
   }
 }

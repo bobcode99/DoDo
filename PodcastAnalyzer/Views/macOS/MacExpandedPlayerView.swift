@@ -147,6 +147,16 @@ struct MacExpandedPlayerView: View {
         )
       }
       .frame(height: 4)
+      .accessibilityElement()
+      .accessibilityLabel("Playback position")
+      .accessibilityValue(Text("\(viewModel.currentTimeString) of \(viewModel.durationString)"))
+      .accessibilityAdjustableAction { direction in
+        switch direction {
+        case .increment: viewModel.skipForward()
+        case .decrement: viewModel.skipBackward()
+        @unknown default: break
+        }
+      }
 
       HStack {
         Text(viewModel.currentTimeString)
