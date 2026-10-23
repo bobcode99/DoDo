@@ -80,7 +80,7 @@ enum MacBackgroundMode {
       logger.fault("No openWindow action yet; cannot open the main window")
     }
 
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
   }
 
   // MARK: - Observation

@@ -42,10 +42,9 @@ struct MacLibraryEpisodeRow: View {
       Spacer()
 
       if episode.audioURL != nil {
-        Button(action: {
-          playEpisode()
-        }) {
-          Image(systemName: "play.fill")
+        Button(action: playEpisode) {
+          Label("Play", systemImage: "play.fill")
+            .labelStyle(.iconOnly)
             .font(.title3)
             .frame(width: 32, height: 32)
             // Same reason as the sidebar badge: a white glyph on a `.tint`
@@ -53,6 +52,7 @@ struct MacLibraryEpisodeRow: View {
             .accentFilled(in: .circle)
         }
         .buttonStyle(.plain)
+        .help("Play")
       }
     }
     .padding(.vertical, 4)

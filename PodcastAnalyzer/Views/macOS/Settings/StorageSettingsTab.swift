@@ -78,8 +78,8 @@ struct StorageSettingsTab: View {
     }
     .formStyle(.grouped)
     .padding()
-    .onAppear {
-      calculateStorageInfo()
+    .task {
+      await calculateStorageInfo()
     }
     .alert("Clear Image Cache", isPresented: $showClearCacheAlert) {
       Button("Cancel", role: .cancel) {}
@@ -133,7 +133,7 @@ struct StorageSettingsTab: View {
 
       if isClearing {
         ProgressView()
-          .scaleEffect(0.7)
+          .controlSize(.small)
       } else {
         Button(isDestructive ? "Remove All" : "Clear") {
           action()
@@ -146,20 +146,18 @@ struct StorageSettingsTab: View {
 
   // MARK: - Storage Calculations
 
-  private func calculateStorageInfo() {
-    Task {
-      let cacheSize = await calculateImageCacheSize()
-      imageCacheSize = formatBytes(cacheSize)
+  private func calculateStorageInfo() async {
+    let cacheSize = await calculateImageCacheSize()
+    imageCacheSize = formatBytes(cacheSize)
 
-      let audioSize = await calculateDownloadedAudioSize()
-      downloadedAudioSize = formatBytes(audioSize)
+    let audioSize = await calculateDownloadedAudioSize()
+    downloadedAudioSize = formatBytes(audioSize)
 
-      let captionsSize = await calculateTranscriptsSize()
-      transcriptsSize = formatBytes(captionsSize)
+    let captionsSize = await calculateTranscriptsSize()
+    transcriptsSize = formatBytes(captionsSize)
 
-      let analysisCount = countAIAnalyses()
-      aiAnalysisCount = analysisCount
-    }
+    let analysisCount = countAIAnalyses()
+    aiAnalysisCount = analysisCount
   }
 
   private func calculateImageCacheSize() async -> Int64 {

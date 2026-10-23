@@ -22,7 +22,7 @@ struct GeneralSettingsTab: View {
 
     Form {
       Section {
-        Button("Add RSS Feed") {
+        Button("Add RSS Feed…") {
           showAddFeedSheet = true
         }
         Button("Import Podcasts…") {
@@ -52,7 +52,7 @@ struct GeneralSettingsTab: View {
       }
 
       Section {
-        Button("Listening Stats") {
+        Button("Listening Stats…") {
           showListeningStats = true
         }
       } header: {

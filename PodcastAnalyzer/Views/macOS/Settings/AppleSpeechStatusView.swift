@@ -16,7 +16,7 @@ struct AppleSpeechStatusView: View {
     switch viewModel.transcriptModelStatus {
     case .checking:
       HStack(spacing: 8) {
-        ProgressView().scaleEffect(0.7)
+        ProgressView().controlSize(.small)
         Text("Checking...").foregroundStyle(.secondary)
       }
     case .notDownloaded:
@@ -28,7 +28,7 @@ struct AppleSpeechStatusView: View {
     case .downloading(let progress):
       HStack(spacing: 8) {
         ProgressView(value: progress).frame(width: 80)
-        Text("\(Int(progress * 100))%").foregroundStyle(.secondary)
+        Text(progress, format: .percent.precision(.fractionLength(0))).foregroundStyle(.secondary)
         Button("Cancel download", systemImage: "xmark.circle.fill") {
           viewModel.cancelTranscriptDownload()
         }
@@ -42,7 +42,7 @@ struct AppleSpeechStatusView: View {
       }
     case .error(let message):
       HStack(spacing: 8) {
-        Text(message).foregroundStyle(.red).lineLimit(1)
+        Text(message).foregroundStyle(.red).lineLimit(1).help(message)
         Button("Retry") { viewModel.downloadTranscriptModel() }
           .buttonStyle(.accentProminent).controlSize(.small)
       }

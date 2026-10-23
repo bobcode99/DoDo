@@ -47,11 +47,10 @@ struct MacLibraryPodcastsView: View {
     .navigationTitle("Your Podcasts")
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
-        Button(action: {
+        Button("Refresh", systemImage: "arrow.clockwise") {
           Task { await viewModel.refreshAllPodcasts() }
-        }) {
-          Image(systemName: "arrow.clockwise")
         }
+        .help("Refresh")
         .disabled(viewModel.isLoading)
       }
     }

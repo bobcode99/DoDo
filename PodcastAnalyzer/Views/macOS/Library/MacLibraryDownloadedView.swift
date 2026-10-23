@@ -26,12 +26,12 @@ struct MacLibraryDownloadedView: View {
       episodeModels: $episodeModels
     )
     .navigationTitle("Downloaded")
-    .onAppear {
+    .task {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
       // Same staleness fix as Saved — pick up newly-completed downloads
       // triggered from EpisodeDetailView / DownloadManager elsewhere.
-      Task { await viewModel.refreshDownloadedEpisodes() }
+      await viewModel.refreshDownloadedEpisodes()
     }
     .onDisappear {
       viewModel.cleanup()
