@@ -92,7 +92,7 @@ nonisolated struct ClaudeClient: AIProviderClient {
         model: String,
         maxTokens: Int
     ) async throws -> String {
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: endpoint, timeoutInterval: AIProviderHelpers.generationTimeout)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue(anthropicVersion, forHTTPHeaderField: "anthropic-version")
@@ -121,9 +121,16 @@ nonisolated struct ClaudeClient: AIProviderClient {
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let content = json?["content"] as? [[String: Any]],
-              let firstBlock = content.first,
-              let text = firstBlock["text"] as? String else {
+        // Join every text block: a thinking block can come first, and the
+        // answer itself may span several blocks.
+        let text = (json?["content"] as? [[String: Any]] ?? [])
+            .filter { $0["type"] as? String == "text" }
+            .compactMap { $0["text"] as? String }
+            .joined()
+        guard !text.isEmpty else {
+            if json?["stop_reason"] as? String == "max_tokens" {
+                throw AIProviderHelpers.outputBudgetExhausted(provider)
+            }
             throw CloudAIError.invalidResponse
         }
 
@@ -140,7 +147,7 @@ nonisolated struct ClaudeClient: AIProviderClient {
         maxTokens: Int,
         onChunk: @escaping @Sendable (String) -> Void
     ) async throws -> String {
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: endpoint, timeoutInterval: AIProviderHelpers.generationTimeout)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue(anthropicVersion, forHTTPHeaderField: "anthropic-version")
@@ -173,6 +180,7 @@ nonisolated struct ClaudeClient: AIProviderClient {
         }
 
         var fullContent = ""
+        var stopReason: String?
 
         for try await line in bytes.lines {
             guard line.hasPrefix("data: ") else { continue }
@@ -190,6 +198,10 @@ nonisolated struct ClaudeClient: AIProviderClient {
                 throw CloudAIError.apiError(statusCode: 200, message: message)
             }
 
+            if let reason = (json["delta"] as? [String: Any])?["stop_reason"] as? String {
+                stopReason = reason
+            }
+
             if let type = json["type"] as? String,
                type == "content_block_delta",
                let delta = json["delta"] as? [String: Any],
@@ -199,6 +211,9 @@ nonisolated struct ClaudeClient: AIProviderClient {
             }
         }
 
+        if fullContent.isEmpty, stopReason == "max_tokens" {
+            throw AIProviderHelpers.outputBudgetExhausted(provider)
+        }
         if fullContent.isEmpty {
             throw CloudAIError.apiError(
                 statusCode: 200,

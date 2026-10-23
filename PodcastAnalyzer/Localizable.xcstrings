@@ -1433,6 +1433,54 @@
         }
       }
     },
+    "Download one, then tap Add Shortcut in the Shortcuts app. Its name is added to the list above and made active." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载其中一个，然后在“快捷指令” App 中轻点“添加快捷指令”。其名称会添加到上方列表并设为当前使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載其中一個，然後在「捷徑」App 中點一下「新增捷徑」。它的名稱會加入上方列表並設為使用中。"
+          }
+        }
+      }
+    },
+    "Example Shortcuts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示例快捷指令"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "範例捷徑"
+          }
+        }
+      }
+    },
+    "View All on GitHub" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上查看全部"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上檢視全部"
+          }
+        }
+      }
+    },
     "Add Shortcut" : {
       "localizations" : {
         "zh-Hans" : {

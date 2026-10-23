@@ -109,6 +109,20 @@ extension AIProviderClient {
 
 /// Shared helpers for reading error responses from streaming byte sequences
 nonisolated enum AIProviderHelpers {
+    /// Per-request timeout for generation calls. `URLSession.shared` gives up
+    /// after 60s without a byte, and a reasoning model can think silently for
+    /// longer than that on a full transcript before its first output token.
+    static let generationTimeout: TimeInterval = 600
+
+    /// Shown when the response hit the output limit before any visible text —
+    /// on reasoning models the thinking tokens count against the same limit.
+    static func outputBudgetExhausted(_ provider: CloudAIProvider) -> CloudAIError {
+        .apiError(
+            statusCode: 200,
+            message: "\(provider.displayName) used its whole output limit before writing an answer — usually on reasoning. Try a non-reasoning model or a shorter episode."
+        )
+    }
+
     /// Read error body from a byte stream (up to 500 chars)
     static func readStreamError(from bytes: URLSession.AsyncBytes) async throws -> String {
         var errorMessage = ""

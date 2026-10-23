@@ -90,22 +90,14 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
         maxTokens: Int,
         disableThinking: Bool
     ) async throws -> String {
-        var request = URLRequest(url: baseURL)
+        var request = URLRequest(url: baseURL, timeoutInterval: AIProviderHelpers.generationTimeout)
         request.httpMethod = "POST"
         if !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        var body: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": prompt]
-            ],
-            "temperature": 0.7,
-            "max_tokens": maxTokens
-        ]
+        var body = requestBody(prompt: prompt, systemPrompt: systemPrompt, model: model, maxTokens: maxTokens)
         if disableThinking { body["think"] = false }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -133,6 +125,8 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
               let message = firstChoice["message"] as? [String: Any],
               let content = message["content"] as? String,
               !content.isEmpty else {
+            let finishReason = (json?["choices"] as? [[String: Any]])?.first?["finish_reason"] as? String
+            if finishReason == "length" { throw AIProviderHelpers.outputBudgetExhausted(provider) }
             throw CloudAIError.invalidResponse
         }
 
@@ -165,23 +159,15 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
         disableThinking: Bool,
         onChunk: @escaping @Sendable (String) -> Void
     ) async throws -> String {
-        var request = URLRequest(url: baseURL)
+        var request = URLRequest(url: baseURL, timeoutInterval: AIProviderHelpers.generationTimeout)
         request.httpMethod = "POST"
         if !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        var body: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": prompt]
-            ],
-            "temperature": 0.7,
-            "max_tokens": maxTokens,
-            "stream": true
-        ]
+        var body = requestBody(prompt: prompt, systemPrompt: systemPrompt, model: model, maxTokens: maxTokens)
+        body["stream"] = true
         if disableThinking { body["think"] = false }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -201,6 +187,7 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
         }
 
         var fullContent = ""
+        var finishReason: String?
 
         for try await line in bytes.lines {
             guard line.hasPrefix("data: "), line != "data: [DONE]" else { continue }
@@ -221,8 +208,9 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
                 throw CloudAIError.apiError(statusCode: 200, message: message)
             }
 
-            guard let choices = json["choices"] as? [[String: Any]],
-                  let delta = choices.first?["delta"] as? [String: Any],
+            let choice = (json["choices"] as? [[String: Any]])?.first
+            if let reason = choice?["finish_reason"] as? String { finishReason = reason }
+            guard let delta = choice?["delta"] as? [String: Any],
                   let content = delta["content"] as? String else {
                 continue
             }
@@ -231,6 +219,9 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
             await MainActor.run { onChunk(fullContent) }
         }
 
+        if fullContent.isEmpty, finishReason == "length" {
+            throw AIProviderHelpers.outputBudgetExhausted(provider)
+        }
         if fullContent.isEmpty {
             throw CloudAIError.apiError(
                 statusCode: 200,
@@ -239,6 +230,32 @@ nonisolated struct OpenAICompatibleClient: AIProviderClient {
         }
 
         return fullContent
+    }
+}
+
+// MARK: - Request Body
+
+extension OpenAICompatibleClient {
+    /// The chat-completions body, minus `stream`.
+    ///
+    /// Cloud providers get `max_completion_tokens`: OpenAI's reasoning models
+    /// (o-series, GPT-5) reject `max_tokens` outright, and Groq and xAI accept
+    /// the newer name too. Local servers keep `max_tokens`, which every
+    /// LM Studio and Ollama version understands.
+    ///
+    /// OpenAI gets no `temperature`: its reasoning models only take the
+    /// default and answer anything else with a 400.
+    func requestBody(prompt: String, systemPrompt: String, model: String, maxTokens: Int) -> [String: Any] {
+        var body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": prompt]
+            ]
+        ]
+        body[provider.usesLocalServer ? "max_tokens" : "max_completion_tokens"] = maxTokens
+        if provider != .openai { body["temperature"] = 0.7 }
+        return body
     }
 }
 

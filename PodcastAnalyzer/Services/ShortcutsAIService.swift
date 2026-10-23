@@ -56,7 +56,7 @@ class ShortcutsAIService {
     @ObservationIgnored private var analysisCompletedObserver: NSObjectProtocol?
 
     // Default shortcut name
-    static let defaultShortcutName = "PA-WithAIViaGPT" // CHANGE THIS TO THE NAME OF YOUR SHORTCUT
+    static let defaultShortcutName = "DoDo-WithAIViaGpt" // matches the example in the repo's Shortcuts folder
 
     private init() {
         // Load the saved list, falling back to the legacy single-name key.

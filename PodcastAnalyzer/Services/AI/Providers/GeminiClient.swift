@@ -112,24 +112,12 @@ nonisolated struct GeminiClient: AIProviderClient {
     ) async throws -> String {
         let endpoint = try generateEndpoint(model: model, method: "generateContent")
 
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: endpoint, timeoutInterval: AIProviderHelpers.generationTimeout)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
-            "contents": [
-                [
-                    "parts": [
-                        ["text": "\(systemPrompt)\n\n\(prompt)"]
-                    ]
-                ]
-            ],
-            "generationConfig": [
-                "temperature": 0.7,
-                "maxOutputTokens": maxTokens
-            ]
-        ]
+        let body = requestBody(prompt: prompt, systemPrompt: systemPrompt, maxTokens: maxTokens)
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -145,12 +133,12 @@ nonisolated struct GeminiClient: AIProviderClient {
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let candidates = json?["candidates"] as? [[String: Any]],
-              let firstCandidate = candidates.first,
-              let content = firstCandidate["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]],
-              let firstPart = parts.first,
-              let text = firstPart["text"] as? String else {
+        let candidate = (json?["candidates"] as? [[String: Any]])?.first
+        let text = Self.answerText(in: candidate)
+        guard !text.isEmpty else {
+            if candidate?["finishReason"] as? String == "MAX_TOKENS" {
+                throw AIProviderHelpers.outputBudgetExhausted(provider)
+            }
             throw CloudAIError.invalidResponse
         }
 
@@ -169,24 +157,12 @@ nonisolated struct GeminiClient: AIProviderClient {
     ) async throws -> String {
         let endpoint = try generateEndpoint(model: model, method: "streamGenerateContent", sse: true)
 
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: endpoint, timeoutInterval: AIProviderHelpers.generationTimeout)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
-            "contents": [
-                [
-                    "parts": [
-                        ["text": "\(systemPrompt)\n\n\(prompt)"]
-                    ]
-                ]
-            ],
-            "generationConfig": [
-                "temperature": 0.7,
-                "maxOutputTokens": maxTokens
-            ]
-        ]
+        let body = requestBody(prompt: prompt, systemPrompt: systemPrompt, maxTokens: maxTokens)
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -205,6 +181,7 @@ nonisolated struct GeminiClient: AIProviderClient {
         }
 
         var fullContent = ""
+        var finishReason: String?
 
         for try await line in bytes.lines {
             guard line.hasPrefix("data: ") else { continue }
@@ -222,17 +199,18 @@ nonisolated struct GeminiClient: AIProviderClient {
                 throw CloudAIError.apiError(statusCode: 200, message: message)
             }
 
-            guard let candidates = json["candidates"] as? [[String: Any]],
-                  let content = candidates.first?["content"] as? [String: Any],
-                  let parts = content["parts"] as? [[String: Any]],
-                  let text = parts.first?["text"] as? String else {
-                continue
-            }
+            let candidate = (json["candidates"] as? [[String: Any]])?.first
+            if let reason = candidate?["finishReason"] as? String { finishReason = reason }
+            let text = Self.answerText(in: candidate)
+            guard !text.isEmpty else { continue }
 
             fullContent += text
             await MainActor.run { onChunk(fullContent) }
         }
 
+        if fullContent.isEmpty, finishReason == "MAX_TOKENS" {
+            throw AIProviderHelpers.outputBudgetExhausted(provider)
+        }
         if fullContent.isEmpty {
             throw CloudAIError.apiError(
                 statusCode: 200,
@@ -241,5 +219,31 @@ nonisolated struct GeminiClient: AIProviderClient {
         }
 
         return fullContent
+    }
+}
+
+// MARK: - Request / Response Shape
+
+extension GeminiClient {
+    /// The system prompt goes in `systemInstruction`, not glued onto the user
+    /// turn. No `temperature`: Google asks that Gemini 3 stay at its default of
+    /// 1.0 — lower values can make it loop — and older models default the same.
+    func requestBody(prompt: String, systemPrompt: String, maxTokens: Int) -> [String: Any] {
+        [
+            "systemInstruction": ["parts": [["text": systemPrompt]]],
+            "contents": [["role": "user", "parts": [["text": prompt]]]],
+            "generationConfig": ["maxOutputTokens": maxTokens]
+        ]
+    }
+
+    /// Every text part of a candidate, in order, skipping thought summaries.
+    /// An answer can arrive split across parts; reading only the first one
+    /// dropped the rest.
+    static func answerText(in candidate: [String: Any]?) -> String {
+        let parts = (candidate?["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
+        return parts
+            .filter { $0["thought"] as? Bool != true }
+            .compactMap { $0["text"] as? String }
+            .joined()
     }
 }

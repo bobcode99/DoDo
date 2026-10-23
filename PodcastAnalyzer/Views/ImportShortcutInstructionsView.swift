@@ -12,10 +12,10 @@ import SwiftUI
 struct ImportShortcutInstructionsView: View {
   @Environment(\.openURL) private var openURL
 
-  /// iCloud link to the "ApplePodcast to Dodo" shortcut.
+  /// The signed shortcut file in the repo; opening it offers to add it to Shortcuts.
   private let shortcutLink = URL(string: "https://github.com/bobcode99/DoDo/raw/refs/heads/main/Shortcuts/ApplePodcast%20To%20DoDo.shortcut")!
-  /// Runs the installed shortcut by name.
-  private let runLink = URL(string: "shortcuts://run-shortcut?name=ApplePodcast%20to%20Dodo")!
+  /// Runs the installed shortcut by name — the file name it was added under.
+  private let runLink = URL(string: "shortcuts://run-shortcut?name=ApplePodcast%20To%20DoDo")!
 
   var body: some View {
     VStack(alignment: .leading, spacing: 22) {

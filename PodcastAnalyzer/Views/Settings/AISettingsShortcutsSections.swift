@@ -10,6 +10,13 @@ import SwiftUI
 struct AISettingsShortcutsSections: View {
     private let shortcuts = ShortcutsAIService.shared
 
+    /// Ready-made AI shortcuts in the repo. Each name must match the file name,
+    /// which is what the shortcut is called once added.
+    private static let exampleShortcuts = ["DoDo-WithAIViaGpt", "DoDo-WithChatGpt"]
+    private static let shortcutsFolder = URL(string: "https://github.com/bobcode99/DoDo/tree/main/Shortcuts")!
+
+    @Environment(\.openURL) private var openURL
+
     @Bindable private var settings = AISettingsManager.shared
     @State private var newShortcutName: String = ""
     @State private var isAddingShortcut: Bool = false
@@ -93,7 +100,23 @@ struct AISettingsShortcutsSections: View {
             Text("Tap a shortcut to make it active. Add as many as you need to switch between providers quickly.")
         }
 
-        // Section 3: open shortcuts + timeout
+        // Section 3: ready-made shortcuts to start from
+        Section {
+            ForEach(Self.exampleShortcuts, id: \.self) { name in
+                Button(name, systemImage: "square.and.arrow.down") {
+                    getExampleShortcut(name)
+                }
+            }
+            Link(destination: Self.shortcutsFolder) {
+                Label("View All on GitHub", systemImage: "arrow.up.right.square")
+            }
+        } header: {
+            Text("Example Shortcuts")
+        } footer: {
+            Text("Download one, then tap Add Shortcut in the Shortcuts app. Its name is added to the list above and made active.")
+        }
+
+        // Section 4: open shortcuts + timeout
         Section {
             Button(action: {
                 ShortcutsAIService.shared.openShortcutsApp()
@@ -119,7 +142,7 @@ struct AISettingsShortcutsSections: View {
             Text("How long to wait for Shortcuts to return a result before timing out.")
         }
 
-        // Section 4: setup instructions
+        // Section 5: setup instructions
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Setup Instructions:")
@@ -172,6 +195,15 @@ struct AISettingsShortcutsSections: View {
             .clipShape(.rect(cornerRadius: 8))
         } header: {
             Text("Setup Instructions")
+        }
+    }
+
+    private func getExampleShortcut(_ name: String) {
+        shortcuts.addShortcutName(name)
+        shortcuts.shortcutName = name
+        let file = "\(name).shortcut".addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        if let url = URL(string: "https://github.com/bobcode99/DoDo/raw/refs/heads/main/Shortcuts/\(file)") {
+            openURL(url)
         }
     }
 
