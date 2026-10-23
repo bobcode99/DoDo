@@ -98,6 +98,11 @@ final class TranslationCoordinator {
   /// The transcript's own language, falling back to the feed's declared one.
   var sourceLanguage: Locale.Language? {
     TranscriptLanguageDetector.dominantLanguage(of: transcript?.transcriptSegments.map(\.text) ?? [])
+      // Before the transcript loads, the episode's own text still beats the
+      // feed tag: Taiwanese shows often declare a bare "zh", read as Simplified.
+      ?? TranscriptLanguageDetector.dominantLanguage(
+        of: [episode.title, stripHTMLForTranslation(episode.podcastEpisodeDescription ?? "")]
+      )
       ?? translationService.detectSourceLanguage(from: podcastLanguage)
   }
 

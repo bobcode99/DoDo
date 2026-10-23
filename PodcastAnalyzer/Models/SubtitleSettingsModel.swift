@@ -110,7 +110,12 @@ enum TranslationTargetLanguage: String, CaseIterable, Codable, Sendable {
   /// nothing — e.g. the device language is the transcript's own language.
   func isSameLanguage(as source: Locale.Language?) -> Bool {
     guard let source, let target = localeLanguage else { return false }
-    return target.isEquivalent(to: source)
+    // Language and script, not region: `isEquivalent(to:)` compares maximal
+    // identifiers, so an English device in Taiwan ("en-TW" → en-Latn-TW)
+    // never matched an English transcript ("en" → en-Latn-US).
+    let full = Locale.Language(identifier: target.maximalIdentifier)
+    let fullSource = Locale.Language(identifier: source.maximalIdentifier)
+    return full.languageCode == fullSource.languageCode && full.script == fullSource.script
   }
 
   /// Short abbreviated name for compact display (e.g., badge)
