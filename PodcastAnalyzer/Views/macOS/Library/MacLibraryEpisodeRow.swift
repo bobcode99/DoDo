@@ -14,8 +14,6 @@ struct MacLibraryEpisodeRow: View {
   let podcastImageURL: String
   let podcastLanguage: String
 
-  private var audioManager: EnhancedAudioManager { EnhancedAudioManager.shared }
-
   var body: some View {
     HStack(spacing: 12) {
       CachedArtworkImage(urlString: episode.imageURL ?? podcastImageURL, size: 56, cornerRadius: 8)
@@ -59,25 +57,45 @@ struct MacLibraryEpisodeRow: View {
   }
 
   private func playEpisode() {
-    guard let audioURL = episode.audioURL else { return }
+    Self.play(episode, podcastTitle: podcastTitle, imageURL: episode.imageURL ?? podcastImageURL)
+  }
+}
 
-    let playbackEpisode = PlaybackEpisode(
-      id: "\(podcastTitle)\u{1F}\(episode.title)",
+// MARK: - Playback
+
+extension MacLibraryEpisodeRow {
+  /// The local file when downloaded, otherwise the feed URL. Nil without audio.
+  static func playbackEpisode(
+    for episode: PodcastEpisodeInfo, podcastTitle: String, imageURL: String
+  ) -> PlaybackEpisode? {
+    let statusChecker = EpisodeStatusChecker(episode: episode, podcastTitle: podcastTitle)
+    let playbackURL = statusChecker.playbackURL
+    guard !playbackURL.isEmpty else { return nil }
+    return PlaybackEpisode(
+      id: statusChecker.episodeKey,
       title: episode.title,
       podcastTitle: podcastTitle,
-      audioURL: audioURL,
-      imageURL: episode.imageURL ?? podcastImageURL,
+      audioURL: playbackURL,
+      imageURL: imageURL,
       episodeDescription: episode.podcastEpisodeDescription,
       pubDate: episode.pubDate,
       duration: episode.duration,
       guid: episode.guid
     )
+  }
 
-    audioManager.play(
+  static func play(_ episode: PodcastEpisodeInfo, podcastTitle: String, imageURL: String) {
+    guard let playbackEpisode = playbackEpisode(
+      for: episode, podcastTitle: podcastTitle, imageURL: imageURL
+    ) else { return }
+    // Live store, not a row snapshot (can be stale); returns 0 for completed
+    // episodes — see EpisodeRowView.playAction().
+    EnhancedAudioManager.shared.play(
       episode: playbackEpisode,
-      audioURL: audioURL,
-      startTime: 0,
-      imageURL: episode.imageURL ?? podcastImageURL,
+      audioURL: playbackEpisode.audioURL,
+      startTime: PlaybackStateCoordinator.savedPlaybackPosition(
+        podcastTitle: podcastTitle, episodeTitle: episode.title),
+      imageURL: imageURL,
       useDefaultSpeed: true
     )
   }
