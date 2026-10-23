@@ -96,7 +96,7 @@ struct MacContentView: View {
     .sheet(isPresented: $importManager.showImportSheet) {
       PodcastImportSheet().frame(minWidth: 400, minHeight: 300)
     }
-    .onChange(of: notificationManager.shouldNavigate) { _, shouldNavigate in
+    .onChange(of: notificationManager.shouldNavigate, initial: true) { _, shouldNavigate in
       if shouldNavigate, let target = notificationManager.navigationTarget {
         handleNotificationNavigation(target: target)
       }
