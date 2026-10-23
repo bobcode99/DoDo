@@ -18,6 +18,8 @@ struct TopPodcastRow: View {
   let onSubscribe: () -> Void
 
   @Environment(\.zoomNamespace) private var zoomNamespace
+  /// Room for a three-digit rank; charts go to 200.
+  @ScaledMetric(relativeTo: .headline) private var rankWidth: CGFloat = 34
 
   var body: some View {
     NavigationLink(value: podcast) {
@@ -25,8 +27,11 @@ struct TopPodcastRow: View {
         // Rank
         Text("\(rank)")
           .font(.headline)
+          .monospacedDigit()
+          .lineLimit(1)
+          .minimumScaleFactor(0.7)
           .foregroundStyle(.secondary)
-          .frame(width: 24)
+          .frame(width: rankWidth)
 
         // Artwork - using CachedAsyncImage for better performance
         CachedArtworkImage(urlString: podcast.safeArtworkUrl, size: 56, cornerRadius: 8)
