@@ -141,7 +141,9 @@ struct StorageSettingsTab: View {
         ProgressView()
           .controlSize(.small)
       } else {
-        Button(isDestructive ? "Remove All" : "Clear", role: isDestructive ? .destructive : nil, action: action)
+        Button(
+          isDestructive ? LocalizedStringResource("Remove All") : "Clear",
+          role: isDestructive ? .destructive : nil, action: action)
       }
     }
   }
