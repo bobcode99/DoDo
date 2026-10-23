@@ -266,6 +266,11 @@ struct PodcastAnalyzerApp: App {
           // Handle URL callbacks from Shortcuts
           handleIncomingURL(url)
         }
+        #if os(macOS)
+        // Let the open window take deep links. Without this every widget tap,
+        // share-extension link or Shortcuts callback opened another window.
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+        #endif
     }
     .modelContainer(sharedModelContainer)
     #if os(macOS)
