@@ -74,16 +74,17 @@ struct MacMiniPlayerBar: View {
 
           // Playback speed button
           Menu {
-            ForEach(Formatters.playbackSpeeds, id: \.self) { speed in
-              Button(action: { audioManager.setPlaybackRate(Float(speed)) }) {
-                HStack {
-                  Text(Formatters.formatSpeed(Float(speed)))
-                  if abs(audioManager.playbackRate - Float(speed)) < 0.01 {
-                    Image(systemName: "checkmark")
-                  }
-                }
+            // Routed through setPlaybackRate so the player and saved rate stay in step.
+            Picker("Playback Speed", selection: Binding(
+              get: { audioManager.playbackRate },
+              set: { audioManager.setPlaybackRate($0) }
+            )) {
+              ForEach(Formatters.playbackSpeeds, id: \.self) { speed in
+                Text(Formatters.formatSpeed(speed)).tag(speed)
               }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
           } label: {
             Text(Formatters.formatSpeed(audioManager.playbackRate))
               .font(.system(size: 11, weight: .medium))
@@ -96,11 +97,12 @@ struct MacMiniPlayerBar: View {
           .help("Playback speed")
 
           // Expand button
-          Button(action: { showExpandedPlayer = true }) {
-            Image(systemName: "chevron.up.2")
-              .font(.system(size: 12))
-              .foregroundStyle(.secondary)
+          Button("Expand Player", systemImage: "chevron.up.2") {
+            showExpandedPlayer = true
           }
+          .labelStyle(.iconOnly)
+          .font(.system(size: 12))
+          .foregroundStyle(.secondary)
           .buttonStyle(.plain)
           .help("Expand player")
         }
@@ -109,16 +111,8 @@ struct MacMiniPlayerBar: View {
       .padding(.horizontal, 20)
       .padding(.vertical, 12)
     }
-    Group {
-      if #available(macOS 26, *) {
-        content
-          .glassEffect(.regular, in: .rect(cornerRadius: 14))
-      } else {
-        content
-          .clipShape(.rect(cornerRadius: 14))
-          .background(.ultraThinMaterial, in: .rect(cornerRadius: 14))
-      }
-    }
+    content
+      .glassEffect(.regular, in: .rect(cornerRadius: 14))
     // Now floats directly over page content (Library lists, Episode Detail, etc.)
     // instead of sitting in a reserved safe-area strip, so it needs its own
     // elevation to read as a floating card rather than blending into the page.

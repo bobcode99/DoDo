@@ -54,7 +54,8 @@ struct MacExpandedPlayerView: View {
       // Top toolbar
       HStack {
         Button(action: { dismiss() }) {
-          Image(systemName: "chevron.down")
+          Label("Close Player", systemImage: "chevron.down")
+            .labelStyle(.iconOnly)
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(.secondary)
             .frame(width: 32, height: 32)
@@ -178,12 +179,14 @@ struct MacExpandedPlayerView: View {
         Label("Share Episode", systemImage: "square.and.arrow.up")
       }
     } label: {
-      Image(systemName: "ellipsis.circle")
+      Label("More", systemImage: "ellipsis.circle")
+        .labelStyle(.iconOnly)
         .font(.title3)
         .foregroundStyle(.secondary)
     }
     .menuStyle(.borderlessButton)
     .frame(width: 32)
+    .help("More")
   }
 
   // MARK: - Right Panel (Queue)
@@ -212,7 +215,7 @@ struct MacExpandedPlayerView: View {
         )
       } else {
         List {
-          ForEach(Array(viewModel.queue.enumerated()), id: \.element.id) { index, episode in
+          ForEach(viewModel.queue.enumerated(), id: \.element.id) { index, episode in
             MacQueueRow(episode: episode)
               .contentShape(Rectangle())
               .onTapGesture {

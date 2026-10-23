@@ -32,6 +32,12 @@ struct MacMCPSettingsView: View {
       }
       .formStyle(.grouped)
     }
+    .task(id: copiedHint) {
+      guard copiedHint != nil else { return }
+      try? await Task.sleep(for: .seconds(2))
+      guard !Task.isCancelled else { return }
+      withAnimation { copiedHint = nil }
+    }
   }
 
   // MARK: - Server
@@ -285,10 +291,6 @@ struct MacMCPSettingsView: View {
 
   private func flashHint(_ text: String) {
     withAnimation { copiedHint = text }
-    Task {
-      try? await Task.sleep(for: .seconds(2))
-      withAnimation { copiedHint = nil }
-    }
   }
 
   private func applyActivationPolicy(headless: Bool) {

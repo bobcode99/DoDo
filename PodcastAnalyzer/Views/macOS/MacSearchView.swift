@@ -314,23 +314,24 @@ struct MacApplePodcastRow: View {
           .font(.subheadline)
           .fontWeight(.semibold)
           .foregroundStyle(.green)
+          .accessibilityLabel("Subscribed")
       } else if isSubscribing {
         ProgressView()
-          .scaleEffect(0.8)
+          .controlSize(.small)
       } else {
-        Button(action: {
+        Button("Subscribe", systemImage: "plus") {
           isSubscribing = true
           onSubscribe()
           Task {
             try? await Task.sleep(for: .seconds(2))
             isSubscribing = false
           }
-        }) {
-          Image(systemName: "plus")
-            .font(.title3)
-            .foregroundStyle(.blue)
         }
+        .labelStyle(.iconOnly)
+        .font(.title3)
+        .foregroundStyle(.blue)
         .buttonStyle(.plain)
+        .help("Subscribe")
       }
 
       Image(systemName: "chevron.right")
