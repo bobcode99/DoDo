@@ -101,6 +101,13 @@ struct MacContentView: View {
         handleNotificationNavigation(target: target)
       }
     }
+    // Controls > Show Full Player, the widget's expand link, and the Open Now
+    // Playing intent all raise this flag.
+    .onChange(of: notificationManager.shouldExpandPlayer) { _, shouldExpand in
+      guard shouldExpand else { return }
+      notificationManager.shouldExpandPlayer = false
+      showExpandedPlayer = hasCurrentEpisode
+    }
     .task {
       for await notification in NotificationCenter.default.notifications(
         named: .audioPlaybackUnavailable)

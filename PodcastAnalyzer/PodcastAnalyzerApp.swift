@@ -268,6 +268,12 @@ struct PodcastAnalyzerApp: App {
         }
     }
     .modelContainer(sharedModelContainer)
+    #if os(macOS)
+    .commands {
+      SidebarCommands()
+      MacPlaybackCommands()
+    }
+    #endif
     .onChange(of: scenePhase) { _, newPhase in
       switch newPhase {
       case .active:

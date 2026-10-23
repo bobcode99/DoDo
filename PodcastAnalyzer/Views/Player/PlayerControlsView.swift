@@ -122,7 +122,10 @@ struct PlayerControlsView: View {
             }
             .buttonStyle(.plain)
             .frame(width: playFrame)
+            #if os(iOS)
+            // macOS gets Space from the Controls menu (MacPlaybackCommands).
             .keyboardShortcut(.space, modifiers: [])
+            #endif
             .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
             // Strip any animation inherited from the ExpandedPlayerView
             // transition so the button doesn't crossfade its layout on tap.
