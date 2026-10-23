@@ -12,6 +12,7 @@ import SwiftUI
 struct MacWhisperModelRow: View {
   let variant: WhisperModelVariant
   private var manager: WhisperModelManager { .shared }
+  @State private var isConfirmingDelete = false
 
   var body: some View {
     let status = manager.status(for: variant)
@@ -74,13 +75,18 @@ struct MacWhisperModelRow: View {
     case .ready:
       HStack(spacing: 8) {
         Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        Button { manager.deleteModel(variant) } label: {
+        Button { isConfirmingDelete = true } label: {
           Label("Delete Model", systemImage: "trash")
             .labelStyle(.iconOnly)
             .foregroundStyle(.red).font(.caption)
         }
         .buttonStyle(.plain)
         .help("Delete model from disk")
+        .confirmationDialog("Delete \(variant.displayName)?", isPresented: $isConfirmingDelete) {
+          Button("Delete", role: .destructive) { manager.deleteModel(variant) }
+        } message: {
+          Text("You can download it again later.")
+        }
       }
     case .error(let message):
       HStack(spacing: 4) {

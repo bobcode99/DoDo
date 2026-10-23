@@ -24,6 +24,7 @@ struct StorageSettingsTab: View {
   @State private var showClearDownloadsAlert = false
   @State private var showClearTranscriptsAlert = false
   @State private var showClearAIAlert = false
+  @State private var clearError: String?
 
   var body: some View {
     Form {
@@ -105,6 +106,11 @@ struct StorageSettingsTab: View {
     } message: {
       Text("This will delete all AI-generated summaries, entities, highlights, and Q&A history.")
     }
+    .alert("Couldn't Clear Data", item: $clearError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { message in
+      Text(message)
+    }
   }
 
   @ViewBuilder
@@ -135,13 +141,9 @@ struct StorageSettingsTab: View {
         ProgressView()
           .controlSize(.small)
       } else {
-        Button(isDestructive ? "Remove All" : "Clear") {
-          action()
-        }
-        .foregroundStyle(isDestructive ? .red : .blue)
+        Button(isDestructive ? "Remove All" : "Clear", role: isDestructive ? .destructive : nil, action: action)
       }
     }
-    .buttonStyle(.plain)
   }
 
   // MARK: - Storage Calculations
@@ -188,9 +190,9 @@ struct StorageSettingsTab: View {
 
     Task {
       ImageCacheUtility.clearAllCache()
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      imageCacheSize = 0
     }
   }
 
@@ -203,23 +205,26 @@ struct StorageSettingsTab: View {
         predicate: #Predicate { $0.localAudioPath != nil }
       )
 
-      if let downloadedEpisodes = try? modelContext.fetch(descriptor) {
-        for episode in downloadedEpisodes {
-          if let localPath = episode.localAudioPath {
-            try? FileManager.default.removeItem(atPath: localPath)
+      do {
+        for episode in try modelContext.fetch(descriptor) {
+          // A file already gone is the outcome we want, not a failure.
+          if let localPath = episode.localAudioPath,
+             FileManager.default.fileExists(atPath: localPath) {
+            try FileManager.default.removeItem(atPath: localPath)
           }
           episode.localAudioPath = nil
           episode.downloadedDate = nil
           episode.fileSize = 0
         }
-        modelContext.saveOrLog()
+        try modelContext.save()
+        await FileStorageManager.shared.clearAllAudioFiles()
+      } catch {
+        clearError = error.localizedDescription
       }
 
-      await FileStorageManager.shared.clearAllAudioFiles()
-
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      downloadedAudioSize = 0
     }
   }
 
@@ -228,11 +233,15 @@ struct StorageSettingsTab: View {
     clearingMessage = "transcripts"
 
     Task {
-      try? TranscriptStore.shared.deleteAll()
+      do {
+        try TranscriptStore.shared.deleteAll()
+      } catch {
+        clearError = error.localizedDescription
+      }
 
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      transcriptsSize = 0
     }
   }
 
@@ -242,16 +251,18 @@ struct StorageSettingsTab: View {
 
     Task {
       let descriptor = FetchDescriptor<EpisodeAIAnalysis>()
-      if let analyses = try? modelContext.fetch(descriptor) {
-        for analysis in analyses {
+      do {
+        for analysis in try modelContext.fetch(descriptor) {
           modelContext.delete(analysis)
         }
-        modelContext.saveOrLog()
+        try modelContext.save()
+      } catch {
+        clearError = error.localizedDescription
       }
 
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      aiAnalysisCount = 0
     }
   }
 }
