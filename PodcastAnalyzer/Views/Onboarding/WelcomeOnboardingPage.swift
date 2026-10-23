@@ -10,6 +10,7 @@ import SwiftUI
 
 struct WelcomeOnboardingPage: View {
   let onNext: () -> Void
+  @State private var languageManager = LanguageManager.shared
 
   var body: some View {
     VStack(spacing: 0) {
@@ -88,6 +89,28 @@ struct WelcomeOnboardingPage: View {
       }
       .padding(.horizontal, 24)
       .padding(.bottom, 40)
+    }
+    // First screen anyone sees, so the language can be fixed before reading
+    // the rest; the same setting as Settings › App Language.
+    .overlay(alignment: .topTrailing) {
+      Menu {
+        Picker("App Language", selection: $languageManager.appLanguage) {
+          ForEach(LanguageManager.availableLanguages) { language in
+            // Language names stay in their own language; only "System Default"
+            // is translated.
+            (language.id == "system" ? Text("System Default") : Text(verbatim: language.displayName))
+              .tag(language.id)
+          }
+        }
+      } label: {
+        Label("Language", systemImage: "globe")
+          .font(.subheadline)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 8)
+          .background(.fill.tertiary, in: .capsule)
+      }
+      .padding(.trailing, 20)
+      .padding(.top, 8)
     }
   }
 }
