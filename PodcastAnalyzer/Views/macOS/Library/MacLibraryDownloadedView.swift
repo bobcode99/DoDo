@@ -23,7 +23,10 @@ struct MacLibraryDownloadedView: View {
       emptyDescription: "Downloaded episodes will appear here for offline listening",
       createIfMissing: false,
       modelContext: modelContext,
-      episodeModels: $episodeModels
+      episodeModels: $episodeModels,
+      onEpisodeMutated: {
+        Task { await viewModel.refreshDownloadedEpisodes() }
+      }
     )
     .navigationTitle("Downloaded")
     .task {
