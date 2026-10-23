@@ -6,11 +6,11 @@
 
 **Podcasts you can read, search, and analyze — on device.**
 
-An iOS &amp; macOS podcast player with on-device transcription and AI-assisted insights, built in SwiftUI.
+A podcast player for iPhone, iPad and Apple Watch with on-device transcription and AI-assisted insights, built in SwiftUI.
 
 <p>
   <img alt="iOS 26+" src="https://img.shields.io/badge/iOS-26%2B-000000?logo=apple&logoColor=white">
-  <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white">
+  <img alt="watchOS 26+" src="https://img.shields.io/badge/watchOS-26%2B-000000?logo=apple&logoColor=white">
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white">
   <img alt="SwiftUI + SwiftData" src="https://img.shields.io/badge/SwiftUI-SwiftData-0A84FF?logo=swift&logoColor=white">
   <img alt="On-device AI" src="https://img.shields.io/badge/AI-on--device-34C759">
@@ -25,10 +25,12 @@ An iOS &amp; macOS podcast player with on-device transcription and AI-assisted i
 - **Library**: Subscribe to shows via RSS, browse and manage saved episodes.
 - **Player**: Background audio, lock-screen controls, SRT captions synced to playback.
 - **Downloads**: Background episode downloads for offline listening.
-- **On-device transcription**: Generate transcripts with Apple SpeechAnalyzer or WhisperKit — runs locally, with optional long-audio splitting and per-podcast context bias.
-- **AI analysis**: Per-episode insights and transcript-driven features.
+- **Transcripts**: Uses the publisher's transcript when the feed has one. Otherwise generate one on device with Apple SpeechAnalyzer or WhisperKit, with optional long-audio splitting and per-podcast context bias, or send it to your own yap server.
+- **AI analysis**: Per-episode insights and transcript-driven features, using Apple Intelligence via Shortcuts or your own API key (OpenAI, Anthropic, Google Gemini, Groq, xAI).
 - **Search**: Find shows and episodes by title or metadata.
-- **SwiftUI + SwiftData**: Modern, responsive interface across iOS and macOS.
+- **Apple Watch**: Control playback on the iPhone, or download episodes and play them on the watch, with the system Now Playing screen and hand-off back to the iPhone.
+- **Open in DoDo**: Share an Apple Podcasts episode link from Safari or another app to open it in DoDo.
+- **iCloud sync**: Subscriptions, progress and queue sync through your private iCloud account. No DoDo account needed.
 
 ### Architecture
 
@@ -37,7 +39,9 @@ An iOS &amp; macOS podcast player with on-device transcription and AI-assisted i
 ### Requirements
 
 - **Xcode**: 26 or later.
-- **Platforms**: iOS 26+ and macOS 26+.
+- **Platforms**: iOS / iPadOS 26+ and watchOS 26+.
+
+> **macOS**: The project also builds a Mac app (with an embedded [MCP server](mcp-docs.md) for local LLM clients), but it isn't stable yet and isn't shipped.
 
 ### Getting started
 
@@ -65,7 +69,7 @@ open PodcastAnalyzer.xcodeproj
 xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer \
   -destination 'platform=iOS Simulator,name=iPhone 17' build
 
-# macOS
+# macOS (experimental)
 xcodebuild -project PodcastAnalyzer.xcodeproj -scheme PodcastAnalyzer \
   -destination 'platform=macOS' build
 ```
@@ -88,6 +92,7 @@ GitHub Actions runs the `PodcastAnalyzerTests` unit tests by default.
 - **WhisperKit** — on-device speech-to-text
 - **Nuke** — image loading and caching
 - **ZMarkupParser** — HTML description rendering
+- **MCP Swift SDK** + **Hummingbird** — the Mac app's MCP server
 
 ### Contributing
 
