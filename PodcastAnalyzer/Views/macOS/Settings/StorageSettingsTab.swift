@@ -12,9 +12,9 @@ import SwiftUI
 struct StorageSettingsTab: View {
   @Environment(\.modelContext) private var modelContext
 
-  @State private var imageCacheSize: String = "Calculating..."
-  @State private var downloadedAudioSize: String = "Calculating..."
-  @State private var transcriptsSize: String = "Calculating..."
+  @State private var imageCacheSize: Int64?
+  @State private var downloadedAudioSize: Int64?
+  @State private var transcriptsSize: Int64?
   @State private var aiAnalysisCount: Int = 0
 
   @State private var isClearingData = false
@@ -32,7 +32,7 @@ struct StorageSettingsTab: View {
           icon: "photo.on.rectangle",
           iconColor: .orange,
           title: "Image Cache",
-          size: imageCacheSize,
+          size: sizeText(imageCacheSize),
           isClearing: isClearingData && clearingMessage == "cache"
         ) {
           showClearCacheAlert = true
@@ -42,7 +42,7 @@ struct StorageSettingsTab: View {
           icon: "arrow.down.circle.fill",
           iconColor: .green,
           title: "Downloaded Episodes",
-          size: downloadedAudioSize,
+          size: sizeText(downloadedAudioSize),
           isClearing: isClearingData && clearingMessage == "downloads",
           isDestructive: true
         ) {
@@ -53,7 +53,7 @@ struct StorageSettingsTab: View {
           icon: "text.bubble",
           iconColor: .blue,
           title: "Transcripts",
-          size: transcriptsSize,
+          size: sizeText(transcriptsSize),
           isClearing: isClearingData && clearingMessage == "transcripts",
           isDestructive: true
         ) {
@@ -64,7 +64,7 @@ struct StorageSettingsTab: View {
           icon: "sparkles",
           iconColor: .purple,
           title: "AI Analysis Data",
-          size: "\(aiAnalysisCount) analyses",
+          size: Text("\(aiAnalysisCount) analyses"),
           isClearing: isClearingData && clearingMessage == "ai",
           isDestructive: true
         ) {
@@ -111,8 +111,8 @@ struct StorageSettingsTab: View {
   private func storageRow(
     icon: String,
     iconColor: Color,
-    title: String,
-    size: String,
+    title: LocalizedStringResource,
+    size: Text,
     isClearing: Bool,
     isDestructive: Bool = false,
     action: @escaping () -> Void
@@ -124,7 +124,7 @@ struct StorageSettingsTab: View {
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
-        Text(size)
+        size
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -147,14 +147,9 @@ struct StorageSettingsTab: View {
   // MARK: - Storage Calculations
 
   private func calculateStorageInfo() async {
-    let cacheSize = await calculateImageCacheSize()
-    imageCacheSize = formatBytes(cacheSize)
-
-    let audioSize = await calculateDownloadedAudioSize()
-    downloadedAudioSize = formatBytes(audioSize)
-
-    let captionsSize = await calculateTranscriptsSize()
-    transcriptsSize = formatBytes(captionsSize)
+    imageCacheSize = await calculateImageCacheSize()
+    downloadedAudioSize = await calculateDownloadedAudioSize()
+    transcriptsSize = await calculateTranscriptsSize()
 
     let analysisCount = countAIAnalyses()
     aiAnalysisCount = analysisCount
@@ -177,10 +172,12 @@ struct StorageSettingsTab: View {
     return (try? modelContext.fetchCount(descriptor)) ?? 0
   }
 
-  private func formatBytes(_ bytes: Int64) -> String {
-    let formatter = ByteCountFormatter()
-    formatter.countStyle = .file
-    return formatter.string(fromByteCount: bytes)
+  private func sizeText(_ bytes: Int64?) -> Text {
+    if let bytes {
+      Text(bytes, format: .byteCount(style: .file))
+    } else {
+      Text("Calculating...")
+    }
   }
 
   // MARK: - Clear Actions
@@ -193,7 +190,7 @@ struct StorageSettingsTab: View {
       ImageCacheUtility.clearAllCache()
       isClearingData = false
       clearingMessage = ""
-      imageCacheSize = "0 bytes"
+      imageCacheSize = 0
     }
   }
 
@@ -222,7 +219,7 @@ struct StorageSettingsTab: View {
 
       isClearingData = false
       clearingMessage = ""
-      downloadedAudioSize = "0 bytes"
+      downloadedAudioSize = 0
     }
   }
 
@@ -235,7 +232,7 @@ struct StorageSettingsTab: View {
 
       isClearingData = false
       clearingMessage = ""
-      transcriptsSize = "0 bytes"
+      transcriptsSize = 0
     }
   }
 

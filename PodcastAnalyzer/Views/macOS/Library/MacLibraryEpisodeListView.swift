@@ -13,9 +13,9 @@ import SwiftUI
 struct MacLibraryEpisodeListView: View {
   let episodes: [LibraryEpisode]
   let podcastInfoModelList: [PodcastInfoModel]
-  let emptyTitle: String
+  let emptyTitle: LocalizedStringResource
   let emptySystemImage: String
-  let emptyDescription: String
+  let emptyDescription: LocalizedStringResource
   let createIfMissing: Bool
   let modelContext: ModelContext
   @Binding var episodeModels: [String: EpisodeDownloadModel]

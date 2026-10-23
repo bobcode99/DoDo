@@ -14,13 +14,7 @@ struct SyncSettingsTab: View {
   @AppStorage("allowAutoDownloadOnBattery") private var allowAutoDownloadOnBattery = false
   @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
 
-  private let cacheLimitOptions: [(label: String, value: Int)] = [
-    ("Unlimited", 0),
-    ("5 episodes", 5),
-    ("10 episodes", 10),
-    ("25 episodes", 25),
-    ("50 episodes", 50)
-  ]
+  private let cacheLimitOptions = [0, 5, 10, 25, 50]
 
   var body: some View {
     @Bindable var syncManager = BackgroundSyncManager.shared
@@ -69,8 +63,12 @@ struct SyncSettingsTab: View {
         }
 
         Picker("Episode Cache Limit", selection: $episodeCacheLimit) {
-          ForEach(cacheLimitOptions, id: \.value) { option in
-            Text(option.label).tag(option.value)
+          ForEach(cacheLimitOptions, id: \.self) { limit in
+            if limit == 0 {
+              Text("Unlimited").tag(limit)
+            } else {
+              Text("\(limit) episodes").tag(limit)
+            }
           }
         }
       } header: {
