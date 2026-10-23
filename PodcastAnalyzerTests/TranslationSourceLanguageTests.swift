@@ -64,6 +64,39 @@ struct TranslationSourceLanguageTests {
         #expect(TranslationTargetLanguage.deviceLanguage.isSameLanguage(as: Locale.Language(identifier: device)))
     }
 
+    @Test(
+        "Region doesn't make a different language",
+        arguments: ["en-TW", "en-GB", "en-HK"]
+    )
+    func regionIsIgnored(deviceLanguage: String) {
+        // An English device set to a non-US region reports e.g. "en-TW", while
+        // the transcript is detected as plain "en".
+        let device = Locale.Language(identifier: deviceLanguage)
+        #expect(TranslationTargetLanguage.english.isSameLanguage(as: device))
+        let offered = TranslationLanguagePickerSheet.offeredLanguages(source: device)
+        #expect(!offered.contains(.english))
+    }
+
+    @Test("Script still separates Traditional from Simplified Chinese")
+    func scriptStillMatters() {
+        #expect(TranslationTargetLanguage.traditionalChinese.isSameLanguage(as: Locale.Language(identifier: "zh-TW")))
+        #expect(!TranslationTargetLanguage.simplifiedChinese.isSameLanguage(as: Locale.Language(identifier: "zh-TW")))
+    }
+
+    @Test("Before the transcript loads, a Traditional Chinese show reads as Traditional even when the feed says zh")
+    func traditionalShowWithoutTranscript() {
+        let episode = PodcastEpisodeInfo(
+            title: "EP178【女人心事】荒野攝影師徐仁修 重返差點死掉的巴布亞",
+            podcastEpisodeDescription: "<p>這一集我們邀請到荒野攝影師徐仁修，聊聊他重返巴布亞紐幾內亞的旅程，以及這些年來對自然與攝影的體會。</p>"
+        )
+        let coordinator = TranslationCoordinator(episode: episode, podcastTitle: "女人心事", podcastLanguage: "zh")
+
+        let source = coordinator.sourceLanguage
+        #expect(TranslationTargetLanguage.traditionalChinese.isSameLanguage(as: source))
+        #expect(!TranslationLanguagePickerSheet.offeredLanguages(source: source).contains(.traditionalChinese))
+        #expect(TranslationLanguagePickerSheet.offeredLanguages(source: source).contains(.simplifiedChinese))
+    }
+
     @Test("The picker hides only the transcript's own language")
     func pickerHidesSourceLanguage() {
         let offered = TranslationLanguagePickerSheet.offeredLanguages(source: Locale.Language(identifier: "zh-Hant"))
