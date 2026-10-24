@@ -16,7 +16,7 @@ struct DownloadedPodcastCell: View {
         image.resizable().aspectRatio(contentMode: .fill)
       } placeholder: {
         Color.gray.opacity(0.2)
-          .overlay(ProgressView().scaleEffect(0.5))
+          .overlay { ProgressView().scaleEffect(0.5) }
       }
       .aspectRatio(1, contentMode: .fit)
       .clipShape(.rect(cornerRadius: 10))

@@ -20,10 +20,10 @@ struct ActiveDownloadRow: View {
       } placeholder: {
         Rectangle()
           .fill(Color.gray.opacity(0.2))
-          .overlay(
+          .overlay {
             Image(systemName: "music.note")
               .foregroundStyle(.gray)
-          )
+          }
       }
       .frame(width: 56, height: 56)
       .clipShape(.rect(cornerRadius: 8))
