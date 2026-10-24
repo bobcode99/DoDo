@@ -344,7 +344,6 @@ struct AnalysisTabView: View {
         Text(viewModel.aiAnalysis.streamingText)
           .font(.body)
           .textSelection(.enabled)
-          .animation(.easeInOut(duration: 0.1), value: viewModel.aiAnalysis.streamingText)
       } else {
         HStack {
           Text("Waiting for response...")
