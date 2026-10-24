@@ -22,6 +22,12 @@ struct SyncProgressToolbarBadge: View {
             .foregroundStyle(.secondary)
         }
       }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(
+        syncManager.syncProgressTotal > 0
+          ? "Syncing \(syncManager.syncProgressCurrent) of \(syncManager.syncProgressTotal)…"
+          : "Sync"
+      )
       .transition(.opacity)
     }
   }
