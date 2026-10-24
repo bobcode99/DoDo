@@ -18,12 +18,13 @@ struct AISettingsLocalServerSection: View {
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                Label {
                     Text("No API key needed!")
                         .font(.subheadline)
                         .fontWeight(.medium)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
                 }
 
                 Text("Runs locally on your machine. Make sure \(settings.selectedProvider.displayName) is running before connecting.")
@@ -32,12 +33,10 @@ struct AISettingsLocalServerSection: View {
             }
 
             // Base URL configuration
-            HStack {
-                Text("Server URL")
-                Spacer()
+            LabeledContent("Server URL") {
                 TextField("http://localhost:1234", text: localURLBinding)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
+                    .frame(maxWidth: 220)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     #if os(iOS)
@@ -58,16 +57,7 @@ struct AISettingsLocalServerSection: View {
             HStack {
                 AIModelPicker(provider: settings.selectedProvider, modelState: modelState)
 
-                Button(action: { modelState.fetchModels(for: settings.selectedProvider) }) {
-                    if modelState.isFetchingModels {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .disabled(modelState.isFetchingModels)
-                .buttonStyle(.borderless)
+                AIModelRefreshButton(provider: settings.selectedProvider, modelState: modelState)
             }
 
             AIModelFetchStatusView(provider: settings.selectedProvider, modelState: modelState)

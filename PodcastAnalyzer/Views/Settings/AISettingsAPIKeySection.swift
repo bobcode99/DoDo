@@ -20,17 +20,11 @@ struct AISettingsAPIKeySection: View {
             HStack {
                 AIModelPicker(provider: settings.selectedProvider, modelState: modelState)
 
-                // Refresh models button
-                Button(action: { modelState.fetchModels(for: settings.selectedProvider) }) {
-                    if modelState.isFetchingModels {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .disabled(settings.currentAPIKey.isEmpty || modelState.isFetchingModels)
-                .buttonStyle(.borderless)
+                AIModelRefreshButton(
+                    provider: settings.selectedProvider,
+                    modelState: modelState,
+                    isDisabled: settings.currentAPIKey.isEmpty
+                )
             }
 
             AIModelFetchStatusView(provider: settings.selectedProvider, modelState: modelState)

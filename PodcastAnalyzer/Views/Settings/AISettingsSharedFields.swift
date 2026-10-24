@@ -28,7 +28,7 @@ struct AIAPIKeyField: View {
         )
 
         // LM Studio's token is optional, so flag it as such in the placeholder.
-        let placeholder = provider == .lmstudio
+        let placeholder: LocalizedStringKey = provider == .lmstudio
             ? "LM Studio API Token (Optional)"
             : "\(provider.displayName) API Key"
 
@@ -91,16 +91,14 @@ struct AIModelPicker: View {
         }()
 
         if models.isEmpty && provider.usesLocalServer {
-            HStack {
-                Text("Model")
-                Spacer()
+            LabeledContent("Model") {
                 // No example model id. "e.g. llama3.2" named an October 2024
                 // release, and a placeholder is the one hint a user reads while
                 // guessing what to type — pointing them at a model that may no
                 // longer be the one they have installed is worse than no hint.
                 TextField("Model name", text: binding)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
+                    .frame(maxWidth: 200)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     #if os(iOS)
@@ -108,13 +106,10 @@ struct AIModelPicker: View {
                     #endif
             }
         } else if models.isEmpty {
-            HStack {
-                Text("Model")
-                Spacer()
+            LabeledContent("Model") {
                 Text(settings.apiKey(for: provider).isEmpty
                      ? "Add an API key to load models"
                      : "No models loaded")
-                    .foregroundStyle(.secondary)
                     .font(.caption)
             }
         } else {
@@ -142,20 +137,22 @@ struct AIModelFetchStatusView: View {
                     .foregroundStyle(.secondary)
             }
         } else if let error = modelState.modelFetchError {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+            Label {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.orange)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
             }
         } else if let models = modelState.fetchedModels[provider], !models.isEmpty {
-            HStack {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+            Label {
                 Text("\(models.count) models available")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
             }
         }
     }
@@ -175,6 +172,7 @@ struct AITestConnectionButton: View {
                         .scaleEffect(0.8)
                 } else {
                     Image(systemName: "checkmark.circle")
+                        .accessibilityHidden(true)
                 }
                 Text("Test Connection")
             }

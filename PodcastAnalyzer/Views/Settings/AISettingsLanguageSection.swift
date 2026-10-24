@@ -53,6 +53,7 @@ struct AISettingsLanguageSection: View {
             HStack {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(settings.analysisLanguage.description)
                         .font(.caption)

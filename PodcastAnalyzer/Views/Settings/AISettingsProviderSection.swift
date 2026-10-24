@@ -30,6 +30,7 @@ struct AISettingsProviderSection: View {
                         Text("Get \(settings.selectedProvider.displayName) API Key")
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
+                            .accessibilityHidden(true)
                     }
                 }
             }
@@ -47,6 +48,7 @@ struct AISettingsProviderSection: View {
                         Text("View \(settings.selectedProvider.displayName) Pricing")
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
+                            .accessibilityHidden(true)
                     }
                 }
             }

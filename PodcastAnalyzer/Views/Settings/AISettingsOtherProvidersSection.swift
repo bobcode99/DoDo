@@ -25,12 +25,13 @@ struct AISettingsOtherProvidersSection: View {
                         AIAPIKeyField(provider: provider, modelState: modelState)
 
                         if !settings.apiKey(for: provider).isEmpty {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
+                            Label {
                                 Text("Key configured")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                            } icon: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
                             }
                         }
 

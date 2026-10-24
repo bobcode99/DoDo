@@ -24,12 +24,13 @@ struct AISettingsShortcutsSections: View {
     var body: some View {
         // Section 1: info
         Section {
-            HStack {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+            Label {
                 Text("No API key needed!")
                     .font(.subheadline)
                     .fontWeight(.medium)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
             }
             Text("Shortcuts calls your configured shortcut to process AI requests. You can use any AI provider (Apple Intelligence, ChatGPT, Gemini, etc.) inside your shortcut.")
                 .font(.caption)
@@ -41,28 +42,39 @@ struct AISettingsShortcutsSections: View {
         // Section 2: shortcut names list — ForEach as direct Section children
         Section {
             ForEach(shortcuts.shortcutNames, id: \.self) { name in
+                let isActive = shortcuts.shortcutName == name
                 HStack(spacing: 12) {
-                    Image(systemName: shortcuts.shortcutName == name ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(shortcuts.shortcutName == name ? .blue : .secondary)
-                        .font(.system(size: 18))
-                        .animation(.easeInOut(duration: 0.15), value: shortcuts.shortcutName)
-                    Text(name)
-                        .foregroundStyle(.primary)
-                    Spacer()
+                    Button {
+                        shortcuts.shortcutName = name
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(isActive ? .blue : .secondary)
+                                .font(.title3)
+                                .animation(.easeInOut(duration: 0.15), value: shortcuts.shortcutName)
+                                .accessibilityHidden(true)
+                            Text(name)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isActive ? .isSelected : [])
+
                     if shortcuts.shortcutNames.count > 1 {
                         Button(role: .destructive) {
                             shortcuts.removeShortcutName(name)
                         } label: {
-                            Image(systemName: "trash")
+                            Label("Remove \(name)", systemImage: "trash")
+                                .labelStyle(.iconOnly)
                                 .font(.subheadline)
                                 .foregroundStyle(.red.opacity(0.7))
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(.rect)
                         }
                         .buttonStyle(.borderless)
                     }
-                }
-                .contentShape(.rect)
-                .onTapGesture {
-                    shortcuts.shortcutName = name
                 }
             }
 
@@ -118,13 +130,8 @@ struct AISettingsShortcutsSections: View {
 
         // Section 4: open shortcuts + timeout
         Section {
-            Button(action: {
+            Button("Open Shortcuts App", systemImage: "square.on.square") {
                 ShortcutsAIService.shared.openShortcutsApp()
-            }) {
-                HStack {
-                    Image(systemName: "square.on.square")
-                    Text("Open Shortcuts App")
-                }
             }
 
             HStack {
@@ -162,12 +169,13 @@ struct AISettingsShortcutsSections: View {
 
             // Tip about Ask Every Time
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "lightbulb.fill")
-                        .foregroundStyle(.yellow)
+                Label {
                     Text("Pro Tip")
                         .font(.caption)
                         .fontWeight(.semibold)
+                } icon: {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundStyle(.yellow)
                 }
                 Text("Use 'Ask Every Time' for the Model parameter to choose between ChatGPT, Apple Intelligence, Gemini, or other models each time you run the shortcut.")
                     .font(.caption2)
@@ -179,12 +187,13 @@ struct AISettingsShortcutsSections: View {
 
             // How it works
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundStyle(.blue)
+                Label {
                     Text("How It Works")
                         .font(.caption)
                         .fontWeight(.semibold)
+                } icon: {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundStyle(.blue)
                 }
                 Text("When you analyze a transcript, the app will automatically run your shortcut, wait for it to complete, and display the result. No manual copy/paste needed!")
                     .font(.caption2)
