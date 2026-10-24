@@ -36,8 +36,11 @@ struct PlayerEpisodeInfoView: View {
                             .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .padding(.vertical, 12)
+                            .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .padding(.vertical, -12)
                 }
 
                 Spacer(minLength: 0)
