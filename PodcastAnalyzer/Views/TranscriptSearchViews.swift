@@ -6,11 +6,6 @@
 //
 
 import SwiftUI
-#if os(iOS)
-import UIKit
-#else
-import AppKit
-#endif
 
 // MARK: - Transcript Result Row
 
@@ -101,12 +96,7 @@ struct TranscriptSnippetRow: View {
 
     private func shareTimestamp() {
         let label = "\(result.podcastTitle) – \(result.episode.title) [\(TimestampUtils.formatSeconds(match.timestamp))]"
-        #if os(iOS)
-        UIPasteboard.general.string = label
-        #else
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(label, forType: .string)
-        #endif
+        PlatformClipboard.string = label
     }
 }
 

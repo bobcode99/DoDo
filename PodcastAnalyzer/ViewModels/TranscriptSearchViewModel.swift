@@ -124,7 +124,7 @@ final class TranscriptSearchViewModel {
             }
 
             let matchingSegments = segments.filter {
-                $0.text.localizedCaseInsensitiveContains(query)
+                $0.text.localizedStandardContains(query)
             }
 
             guard !matchingSegments.isEmpty else { continue }

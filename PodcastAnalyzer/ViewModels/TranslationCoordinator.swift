@@ -333,11 +333,11 @@ final class TranslationCoordinator {
   /// entity table is defined in exactly one place.
   private func stripHTMLForTranslation(_ html: String) -> String {
     var result = html
-    result = result.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+    result = result.replacing(/<[^>]+>/, with: " ")
     if let transcript {
       result = transcript.decodeHTMLEntities(result)
     }
-    result = result.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    result = result.replacing(/\s+/, with: " ")
     return result.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 

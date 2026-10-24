@@ -109,7 +109,7 @@ struct TranscribeBackfillSheet: View {
 
   private func countForRange(_ range: BackfillRange) -> Int {
     guard let cutoff = range.cutoff, range != .none else { return 0 }
-    return episodes.filter { ($0.pubDate ?? .distantPast) >= cutoff }.count
+    return episodes.count(where: { ($0.pubDate ?? .distantPast) >= cutoff })
   }
 
   private func confirm() {

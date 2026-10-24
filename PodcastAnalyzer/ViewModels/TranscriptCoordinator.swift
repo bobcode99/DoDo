@@ -473,7 +473,7 @@ final class TranscriptCoordinator {
   func seekToSegment(_ segment: TranscriptSegment) {
     guard let host else { return }
     let targetTime = segment.startTime
-    logger.info("seekToSegment id=\(segment.id) target=\(String(format: "%.3f", targetTime))s")
+    logger.info("seekToSegment id=\(segment.id) target=\(targetTime, format: .fixed(precision: 3))s")
     if !host.isPlayingThisEpisode {
       host.playAction()
       seekTask?.cancel()
