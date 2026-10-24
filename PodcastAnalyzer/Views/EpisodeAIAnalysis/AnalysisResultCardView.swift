@@ -112,7 +112,7 @@ struct AnalysisResultCardView: View {
   // MARK: - Structured Result Views
 
   @ViewBuilder
-  private func entitySection(title: String, icon: String, items: [String], color: Color)
+  private func entitySection(title: LocalizedStringKey, icon: String, items: [String], color: Color)
     -> some View
   {
     if !items.isEmpty {

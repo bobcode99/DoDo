@@ -185,21 +185,23 @@ struct PromptPreviewSheet: View {
   }
 
   @ViewBuilder
-  private func promptSection(title: String, body: String) -> some View {
+  private func promptSection(title: LocalizedStringKey, body: String) -> some View {
     let truncated = body.count > Self.previewCharLimit
     let displayed: String = {
       guard truncated else { return body }
       let head = body.prefix(Self.previewCharLimit)
       let omitted = body.count - Self.previewCharLimit
-      return "\(head)\n\n… [\(omitted) more characters — full prompt is copied to clipboard]"
+      let note = String(localized: "… [\(omitted) more characters — full prompt is copied to clipboard]")
+      return "\(head)\n\n\(note)"
     }()
 
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text(title.uppercased())
+        Text(title)
           .font(.caption2.bold())
           .foregroundStyle(.secondary)
           .tracking(0.5)
+          .textCase(.uppercase)
         Spacer()
         if truncated {
           Text("preview truncated")

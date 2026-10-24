@@ -247,7 +247,7 @@ struct AnalysisTabView: View {
 
   /// Pair of buttons shown together: primary "Analyze" + secondary "Copy prompt".
   /// Stacked so the secondary action is discoverable instead of buried behind a long-press.
-  private func generateButton(title: String, action: @escaping () -> Void) -> some View {
+  private func generateButton(title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
     VStack(spacing: 10) {
       Button(action: action) {
         HStack {
