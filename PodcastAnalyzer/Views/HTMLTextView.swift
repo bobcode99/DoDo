@@ -63,7 +63,11 @@ struct HTMLTextView: View {
         #endif
 
         let paragraphStyle = NSMutableParagraphStyle()
+        // A paragraph's own break mode overrides the text container's, so on iOS
+        // this has to stay word wrapping or every line breaks mid-word.
+        #if os(macOS)
         paragraphStyle.lineBreakMode = .byCharWrapping
+        #endif
         paragraphStyle.lineSpacing = 2
         result.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
 
