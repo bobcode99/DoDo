@@ -28,7 +28,7 @@ struct ActiveDownloadsSectionCard: View {
             .font(.subheadline)
             .fontWeight(.semibold)
             .foregroundStyle(.primary)
-          Text(downloadingSubtitle)
+          Text("^[\(viewModel.downloadingEpisodes.count) episode](inflect: true)")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -44,10 +44,5 @@ struct ActiveDownloadsSectionCard: View {
       .background(.regularMaterial, in: .rect(cornerRadius: 12))
     }
     .buttonStyle(.plain)
-  }
-
-  private var downloadingSubtitle: String {
-    let count = viewModel.downloadingEpisodes.count
-    return count == 1 ? "1 episode" : "\(count) episodes"
   }
 }
