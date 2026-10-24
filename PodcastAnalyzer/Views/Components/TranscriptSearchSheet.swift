@@ -42,13 +42,9 @@ struct TranscriptSearchSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
+                    Button("Close search", systemImage: "xmark") {
                         dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .semibold))
                     }
-                    .accessibilityLabel("Close search")
                 }
             }
         }
@@ -72,33 +68,33 @@ struct TranscriptSearchSheet: View {
                     .submitLabel(.search)
 
                 if !localQuery.isEmpty {
-                    Button {
+                    Button("Clear", systemImage: "xmark.circle.fill") {
                         localQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
                     }
+                    .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Clear")
+                    .foregroundStyle(.secondary)
+                    // 44pt target; the negative inset keeps the glyph where it was.
+                    .frame(width: 44, height: 44)
+                    .padding(.trailing, -12)
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .frame(minHeight: 44)
             .background(.regularMaterial, in: .rect(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(.secondary.opacity(0.15), lineWidth: 1)
             )
 
-            Button {
+            Button("Search", systemImage: "magnifyingglass") {
                 fieldFocused = true
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .padding(10)
-                    .background(.thickMaterial, in: .rect(cornerRadius: 10))
             }
+            .labelStyle(.iconOnly)
             .buttonStyle(.plain)
+            .font(.headline)
+            .frame(width: 44, height: 44)
+            .background(.thickMaterial, in: .rect(cornerRadius: 10))
         }
     }
 
@@ -107,8 +103,9 @@ struct TranscriptSearchSheet: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "text.magnifyingglass")
-                .font(.system(size: 36))
+                .font(.largeTitle)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Search the transcript")
                 .font(.headline)
                 .foregroundStyle(.primary)
@@ -124,8 +121,9 @@ struct TranscriptSearchSheet: View {
     private var noResults: some View {
         VStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 28))
+                .font(.title)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("No matches")
                 .font(.headline)
             Text("Try a different word or shorter phrase.")
@@ -150,15 +148,19 @@ struct TranscriptSearchSheet: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(viewModel.transcript.searchMatches.enumerated(), id: \.element.id) { index, sentence in
-                    TranscriptSearchResultRow(
-                        sentence: sentence,
-                        query: localQuery
-                    )
-                    .contentShape(.rect)
-                    .onTapGesture {
-                        handleSelect(matchIndex: index, sentenceID: sentence.id)
+                    VStack(spacing: 0) {
+                        Button {
+                            handleSelect(matchIndex: index, sentenceID: sentence.id)
+                        } label: {
+                            TranscriptSearchResultRow(
+                                sentence: sentence,
+                                query: localQuery
+                            )
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        Divider().padding(.leading, 16)
                     }
-                    Divider().padding(.leading, 16)
                 }
             }
             .padding(.vertical, 4)
@@ -197,9 +199,10 @@ private struct TranscriptSearchResultRow: View {
             }
             Spacer(minLength: 8)
             Image(systemName: "arrow.right")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
