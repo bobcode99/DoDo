@@ -402,12 +402,12 @@ struct PodcastSearchView: View {
                 } else {
                     let podcastInfoModel = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now)
                     modelContext.insert(podcastInfoModel)
-                    modelContext.saveOrLog()
+                    try modelContext.save()
                     SubscriptionSyncCoordinator.shared.sync(from: podcastInfoModel)
                     return
                 }
 
-                modelContext.saveOrLog()
+                try modelContext.save()
             } catch {
                 subscribeError = error.localizedDescription
             }
