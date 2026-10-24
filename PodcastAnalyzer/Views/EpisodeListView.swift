@@ -102,6 +102,9 @@ struct EpisodeListView: View {
   // Browse mode state
   @State private var isLoadingRSS = false
   @State private var loadError: String?
+  /// A failed subscribe or unsubscribe save. Separate from `loadError`, which
+  /// only the browse screen shows: a subscribed show never rendered it.
+  @State private var actionError: String?
   @State private var podcastModel: PodcastInfoModel?
   @State private var activeSheet: EpisodeListSheet?
   /// A play tapped before the view model finished loading. Held rather than
@@ -202,6 +205,11 @@ struct EpisodeListView: View {
     .onDisappear {
       // Clean up all resources when view disappears (works for both modes)
       viewModel?.cleanup()
+    }
+    .alert("Subscription Failed", item: $actionError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { message in
+      Text(message)
     }
   }
 
@@ -375,7 +383,7 @@ struct EpisodeListView: View {
     do {
       try modelContext.save()
     } catch {
-      loadError = "Failed to subscribe: \(error.localizedDescription)"
+      actionError = error.localizedDescription
     }
   }
 
@@ -390,7 +398,7 @@ struct EpisodeListView: View {
       // Navigate back after unsubscribing
       dismiss()
     } catch {
-      loadError = "Failed to unsubscribe: \(error.localizedDescription)"
+      actionError = error.localizedDescription
     }
   }
 
