@@ -8,6 +8,7 @@ struct ExpandedPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel = ExpandedPlayerViewModel()
     @State private var showQueue = false
 
@@ -66,7 +67,7 @@ struct ExpandedPlayerView: View {
                             withAnimation { showQueue = false }
                         }
                     )
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
                 }
             }
             .onAppear {
