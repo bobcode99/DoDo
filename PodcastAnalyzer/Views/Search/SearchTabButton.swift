@@ -39,6 +39,7 @@ struct SearchTabButton: View {
             tabLabel
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -47,8 +48,8 @@ struct SearchTabButton: View {
             .font(.subheadline)
             .fontWeight(isSelected ? .semibold : .regular)
             .foregroundStyle(isSelected ? .primary : .secondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(.rect)
 
         if isSelected {
             base.glassEffect(Glass.regular.interactive(), in: .rect(cornerRadius: 8))
