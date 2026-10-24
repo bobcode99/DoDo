@@ -2,65 +2,11 @@
 //  AddFeedView.swift
 //  PodcastAnalyzer
 //
-//  Feed row and add-feed sheet for Settings.
+//  Add-feed sheet for Settings.
 //
 
 import SwiftData
 import SwiftUI
-
-// MARK: - Feed Row View
-
-struct FeedRowView: View {
-  let feed: PodcastInfoModel
-
-  var body: some View {
-    HStack(spacing: 12) {
-      // Podcast artwork
-      if let urlString = feed.imageURL.isEmpty ? nil : feed.imageURL,
-        let url = URL(string: urlString)
-      {
-        AsyncImage(url: url) { phase in
-          switch phase {
-          case .empty:
-            ZStack {
-              Color.gray.opacity(0.2)
-              ProgressView().scaleEffect(0.5)
-            }
-          case .success(let image):
-            image.resizable().scaledToFill()
-          case .failure:
-            Image(systemName: "mic.fill")
-              .foregroundStyle(.purple)
-          @unknown default:
-            EmptyView()
-          }
-        }
-        .frame(width: 50, height: 50)
-        .clipShape(.rect(cornerRadius: 8))
-      } else {
-        Color.purple.opacity(0.2)
-          .clipShape(.rect(cornerRadius: 8))
-          .frame(width: 50, height: 50)
-          .overlay(
-            Image(systemName: "mic.fill")
-              .foregroundStyle(.purple)
-          )
-      }
-
-      VStack(alignment: .leading, spacing: 4) {
-        Text(feed.title)
-          .font(.body)
-          .fontWeight(.medium)
-          .lineLimit(1)
-
-        Text("\(feed.episodeCount) episodes")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-    }
-    .padding(.vertical, 4)
-  }
-}
 
 // MARK: - Add Feed Sheet View
 
@@ -71,6 +17,10 @@ struct AddFeedView: View {
 
   @FocusState private var isTextFieldFocused: Bool
   @State private var dismissTask: Task<Void, Never>?
+
+  private var canAdd: Bool {
+    !viewModel.rssUrlInput.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.isValidating
+  }
 
   var body: some View {
     NavigationStack {
@@ -163,17 +113,9 @@ struct AddFeedView: View {
           .foregroundStyle(.white)
           .frame(maxWidth: .infinity)
           .padding(.vertical, 16)
-          .background(
-            RoundedRectangle(cornerRadius: 14)
-              .fill(
-                viewModel.rssUrlInput.trimmingCharacters(in: .whitespaces).isEmpty
-                  || viewModel.isValidating ? Color.gray : Color.blue)
-          )
+          .background(canAdd ? Color.blue : Color.gray, in: .rect(cornerRadius: 14))
         }
-        .disabled(
-          viewModel.rssUrlInput.trimmingCharacters(in: .whitespaces).isEmpty
-            || viewModel.isValidating
-        )
+        .disabled(!canAdd)
         .padding(.horizontal, 24)
         .padding(.bottom, 24)
       }

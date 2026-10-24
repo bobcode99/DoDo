@@ -20,7 +20,7 @@ struct WelcomeOnboardingPage: View {
         .resizable()
         .scaledToFill()
         .frame(width: 116, height: 116)
-        .clipShape(RoundedRectangle(cornerRadius: 26))
+        .clipShape(.rect(cornerRadius: 26))
         .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
         .padding(.bottom, 28)
         .accessibilityHidden(true)
