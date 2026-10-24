@@ -14,10 +14,11 @@ struct TranscriptDurationMismatchBanner: View {
     let audioDuration: TimeInterval
     let transcriptDuration: TimeInterval
 
-    private var deltaText: String {
-        let delta = abs(audioDuration - transcriptDuration)
-        let which = audioDuration > transcriptDuration ? "audio longer" : "transcript longer"
-        return "\(Formatters.formatPlaybackTime(delta)) \(which)"
+    private var message: LocalizedStringResource {
+        let delta = Formatters.formatPlaybackTime(abs(audioDuration - transcriptDuration))
+        return audioDuration > transcriptDuration
+            ? "Audio and transcript lengths differ (\(delta) audio longer) — highlight may drift, possibly due to ads"
+            : "Audio and transcript lengths differ (\(delta) transcript longer) — highlight may drift, possibly due to ads"
     }
 
     var body: some View {
@@ -25,7 +26,7 @@ struct TranscriptDurationMismatchBanner: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.caption2)
                 .foregroundStyle(.orange)
-            Text("Audio and transcript lengths differ (\(deltaText)) — highlight may drift, possibly due to ads")
+            Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)

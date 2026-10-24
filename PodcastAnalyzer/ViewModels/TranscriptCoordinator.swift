@@ -371,12 +371,12 @@ final class TranscriptCoordinator {
 
     if effectiveEngine != .yapServer, localAudioPath == nil {
       transcriptState = .error(
-        "No local audio file available. Please download the episode first.")
+        String.appLocalized("No local audio file available. Please download the episode first."))
       return
     }
 
     if effectiveEngine == .yapServer, localAudioPath == nil, (episode.audioURL ?? "").isEmpty {
-      transcriptState = .error("No audio URL available for this episode.")
+      transcriptState = .error(String.appLocalized("No audio URL available for this episode."))
       return
     }
 
@@ -435,7 +435,7 @@ final class TranscriptCoordinator {
     guard let segments = TranscriptStore.shared.loadSegments(
       episodeTitle: episode.title, podcastTitle: podcastTitle
     ) else {
-      transcriptState = .error("Failed to load transcript")
+      transcriptState = .error(String.appLocalized("Failed to load transcript"))
       return
     }
 
@@ -564,7 +564,8 @@ extension TranscriptCoordinator {
     let resolved = resolvedLanguage(lang)
     if standard.contains(where: { $0.id == resolved }) { return standard }
     let displayName = Locale.current.localizedString(forLanguageCode: lang) ?? lang
-    return [SettingsViewModel.TranscriptLocaleOption(id: lang, name: "\(displayName) (podcast)")] + standard
+    let name = String(format: String.appLocalized("%@ (podcast)"), displayName)
+    return [SettingsViewModel.TranscriptLocaleOption(id: lang, name: name)] + standard
   }
 
   /// Human-readable name of the language this job will (or did) transcribe in.
@@ -575,7 +576,7 @@ extension TranscriptCoordinator {
           ?? Locale.current.localizedString(forLanguageCode: detected)
           ?? detected
       }
-      return "Auto-detect"
+      return String.appLocalized("Auto-detect")
     }
     let code = selectedTranscriptLanguage ?? podcastLanguage
     return pickerLocales.first { $0.id == resolvedLanguage(code) }?.name ?? code

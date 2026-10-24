@@ -217,11 +217,11 @@ struct TranscriptStatusStrip: View {
             return translated.shortName
         }
         let code = viewModel.podcastLanguage
-        if code.isEmpty { return "Auto" }
+        if code.isEmpty { return String.appLocalized("Auto") }
         return code.uppercased()
     }
 
-    private var languageAccessibilityLabel: String {
+    private var languageAccessibilityLabel: LocalizedStringResource {
         if viewModel.translation.translationStatus.isTranslating { return "Translating in progress" }
         if case .failed = viewModel.translation.translationStatus { return "Translation failed" }
         if viewModel.translation.hasExistingTranslation,

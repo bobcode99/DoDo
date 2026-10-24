@@ -22,7 +22,7 @@ struct TranscribeBackfillSheet: View {
   enum BackfillRange: String, CaseIterable, Identifiable {
     case none, last7, last30, all
     var id: String { rawValue }
-    var label: String {
+    var label: LocalizedStringResource {
       switch self {
       case .none:   return "None — only future episodes"
       case .last7:  return "Last 7 days"

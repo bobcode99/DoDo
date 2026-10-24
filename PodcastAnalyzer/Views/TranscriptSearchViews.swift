@@ -37,7 +37,7 @@ struct TranscriptResultRow: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         Spacer()
-                        Text("\(result.matchCount) match\(result.matchCount == 1 ? "" : "es")")
+                        Text("^[\(result.matchCount) match](inflect: true)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
