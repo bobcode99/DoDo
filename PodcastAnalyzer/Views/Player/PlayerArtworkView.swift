@@ -7,6 +7,10 @@ struct PlayerArtworkView: View {
     var size: CGFloat = 280
     private let playingScale: CGFloat = 1.08
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var scale: CGFloat { isPlaying && !reduceMotion ? playingScale : 1 }
+
     var body: some View {
         if let imageURL {
             CachedAsyncImage(url: imageURL) { image in
@@ -29,8 +33,8 @@ struct PlayerArtworkView: View {
                 x: 0,
                 y: isPlaying ? 12 : 8
             )
-            .scaleEffect(isPlaying ? playingScale : 1.0)
-            .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: isPlaying)
+            .scaleEffect(scale)
+            .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: isPlaying)
             .accessibilityLabel("Episode artwork")
         } else {
             Color.gray.opacity(0.3)
@@ -41,8 +45,8 @@ struct PlayerArtworkView: View {
                 )
                 .frame(width: size, height: size)
                 .clipShape(.rect(cornerRadius: 16))
-                .scaleEffect(isPlaying ? playingScale : 1.0)
-                .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: isPlaying)
+                .scaleEffect(scale)
+                .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: isPlaying)
             .accessibilityLabel("Episode artwork")
         }
     }
