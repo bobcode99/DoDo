@@ -223,7 +223,7 @@ struct QuestionAnswerTabView: View {
         .foregroundStyle(.secondary)
 
       FlowLayout(spacing: 6) {
-        ForEach(topics, id: \.self) { topic in
+        ForEach(topics.enumerated(), id: \.offset) { _, topic in
           Text(topic)
             .font(.caption2)
             .padding(.horizontal, 8)

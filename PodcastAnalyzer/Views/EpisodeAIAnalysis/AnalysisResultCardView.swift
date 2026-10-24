@@ -120,7 +120,7 @@ struct AnalysisResultCardView: View {
           .foregroundStyle(color)
 
         FlowLayout(spacing: 8) {
-          ForEach(items, id: \.self) { item in
+          ForEach(items.enumerated(), id: \.offset) { _, item in
             Text(item)
               .font(.caption)
               .padding(.horizontal, 10)
@@ -293,7 +293,7 @@ struct AnalysisResultCardView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-          ForEach(topic.keyPoints, id: \.self) { point in
+          ForEach(topic.keyPoints.enumerated(), id: \.offset) { _, point in
             HStack(alignment: .top, spacing: 8) {
               Image(systemName: "circle.fill")
                 .font(.system(size: 4))
