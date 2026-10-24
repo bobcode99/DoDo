@@ -18,6 +18,8 @@ struct MarqueeText: View {
     var pauseDuration: Double = 3 // seconds held at the start of each cycle
     var alignment: HorizontalAlignment = .leading
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var intrinsicWidth: CGFloat = 0
     /// When the current lap started scrolling; nil while held at the start.
     @State private var lapStart: Date?
@@ -50,7 +52,7 @@ struct MarqueeText: View {
 
     @ViewBuilder
     private func overlayContent(width: CGFloat, height: CGFloat) -> some View {
-        let needsScroll = intrinsicWidth > width && width > 0
+        let needsScroll = !reduceMotion && intrinsicWidth > width && width > 0
         if needsScroll {
             let total = intrinsicWidth + spacing
             let scrollDuration = max(0.1, Double(total / velocity))
@@ -67,6 +69,7 @@ struct MarqueeText: View {
                 HStack(spacing: spacing) {
                     baseText.lineLimit(1).fixedSize()
                     baseText.lineLimit(1).fixedSize()
+                        .accessibilityHidden(true)
                 }
                 .offset(x: -total * progress)
                 .frame(width: width, height: height, alignment: .leading)
