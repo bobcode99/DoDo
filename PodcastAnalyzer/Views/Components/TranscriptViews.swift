@@ -114,7 +114,7 @@ enum TranscriptGrouping {
             if cjkClauseContinuations.contains(first) { return true }
             if groupIsCJK { return false }
             // Latin: continuation if the next cue starts with a lowercase letter
-            // or non-alphanumeric (matches AntennaPod's heuristic).
+            // or non-alphanumeric.
             return !first.isUppercase && !first.isNumber
         }
 
