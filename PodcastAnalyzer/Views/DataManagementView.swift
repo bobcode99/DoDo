@@ -10,164 +10,97 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct DataManagementView: View {
-  @Environment(\.modelContext) var modelContext
+  @Environment(\.modelContext) private var modelContext
+
+  private enum StorageCategory {
+    case imageCache, downloads, transcripts, aiAnalysis
+  }
 
   // Data management state
-  @State private var showClearCacheConfirmation = false
-  @State private var showClearDownloadsConfirmation = false
-  @State private var showClearTranscriptsConfirmation = false
-  @State private var showClearAIAnalysisConfirmation = false
-  @State private var isClearingData = false
-  @State private var clearingMessage = ""
-  @State private var opmlExportItem: ShareableOPML?
-  @State private var diagnosticExportItem: ShareableOPML?
-  @State private var backupExportItem: ShareableOPML?
+  @State private var clearing: StorageCategory?
+  @State private var shareItem: ShareableOPML?
   @State private var showBackupImporter = false
   @State private var backupErrorAlert: String?
+  @State private var actionError: String?
   @Bindable private var backupService = BackupService.shared
 
   // Storage info - loaded async
-  @State private var imageCacheSize: String = "Calculating..."
-  @State private var downloadedAudioSize: String = "Calculating..."
-  @State private var transcriptsSize: String = "Calculating..."
+  @State private var imageCacheBytes: Int64 = 0
+  @State private var downloadedAudioBytes: Int64 = 0
+  @State private var transcriptsBytes: Int64 = 0
   @State private var aiAnalysisCount: Int = 0
   @State private var isCalculating = true
+
+  private var totalBytes: Int64 {
+    imageCacheBytes + downloadedAudioBytes + transcriptsBytes
+  }
+
+  private func sizeText(_ bytes: Int64) -> Text? {
+    isCalculating ? nil : Text(bytes, format: Self.byteStyle)
+  }
+
+  private static let byteStyle = ByteCountFormatStyle(
+    style: .file, allowedUnits: [.kb, .mb, .gb], spellsOutZero: false)
 
   var body: some View {
     List {
       // MARK: - Storage Usage Section
       Section {
-        // Clear Image Cache
-        Button(action: {
-          showClearCacheConfirmation = true
-        }) {
-          HStack {
-            Image(systemName: "photo.on.rectangle")
-              .foregroundStyle(.orange)
-              .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Image Cache")
-              if isCalculating {
-                ProgressView()
-                  .scaleEffect(0.6)
-              } else {
-                Text(imageCacheSize)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-            }
-            Spacer()
-            if isClearingData && clearingMessage == "cache" {
-              ProgressView()
-                .scaleEffect(0.8)
-            } else {
-              Text("Clear")
-                .font(.subheadline)
-                .foregroundStyle(.blue)
-            }
-          }
-        }
-        .buttonStyle(.plain)
-        .disabled(isClearingData || isCalculating)
+        StorageUsageRow(
+          systemImage: "photo.on.rectangle",
+          tint: .orange,
+          title: "Image Cache",
+          detail: sizeText(imageCacheBytes),
+          actionTitle: "Clear",
+          actionTint: .blue,
+          isBusy: clearing == .imageCache,
+          isDisabled: clearing != nil || isCalculating,
+          confirmationTitle: "Clear Image Cache",
+          confirmationMessage: "This will clear all cached podcast artwork. Images will be re-downloaded as needed.",
+          confirmButtonTitle: "Clear Cache"
+        ) { clear(.imageCache) }
 
-        // Clear All Downloads
-        Button(action: {
-          showClearDownloadsConfirmation = true
-        }) {
-          HStack {
-            Image(systemName: "arrow.down.circle.fill")
-              .foregroundStyle(.green)
-              .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Downloaded Episodes")
-              if isCalculating {
-                ProgressView()
-                  .scaleEffect(0.6)
-              } else {
-                Text(downloadedAudioSize)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-            }
-            Spacer()
-            if isClearingData && clearingMessage == "downloads" {
-              ProgressView()
-                .scaleEffect(0.8)
-            } else {
-              Text("Remove All")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-            }
-          }
-        }
-        .buttonStyle(.plain)
-        .disabled(isClearingData || isCalculating)
+        StorageUsageRow(
+          systemImage: "arrow.down.circle.fill",
+          tint: .green,
+          title: "Downloaded Episodes",
+          detail: sizeText(downloadedAudioBytes),
+          actionTitle: "Remove All",
+          actionTint: .red,
+          isBusy: clearing == .downloads,
+          isDisabled: clearing != nil || isCalculating,
+          confirmationTitle: "Remove All Downloads",
+          confirmationMessage: "This will delete all downloaded episodes. You can re-download them later.",
+          confirmButtonTitle: "Remove All Downloads"
+        ) { clear(.downloads) }
 
-        // Clear All Transcripts
-        Button(action: {
-          showClearTranscriptsConfirmation = true
-        }) {
-          HStack {
-            Image(systemName: "text.bubble")
-              .foregroundStyle(.blue)
-              .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Transcripts")
-              if isCalculating {
-                ProgressView()
-                  .scaleEffect(0.6)
-              } else {
-                Text(transcriptsSize)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-            }
-            Spacer()
-            if isClearingData && clearingMessage == "transcripts" {
-              ProgressView()
-                .scaleEffect(0.8)
-            } else {
-              Text("Remove All")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-            }
-          }
-        }
-        .buttonStyle(.plain)
-        .disabled(isClearingData || isCalculating)
+        StorageUsageRow(
+          systemImage: "text.bubble",
+          tint: .blue,
+          title: "Transcripts",
+          detail: sizeText(transcriptsBytes),
+          actionTitle: "Remove All",
+          actionTint: .red,
+          isBusy: clearing == .transcripts,
+          isDisabled: clearing != nil || isCalculating,
+          confirmationTitle: "Remove All Transcripts",
+          confirmationMessage: "This will delete all generated transcripts. You can regenerate them later.",
+          confirmButtonTitle: "Remove All Transcripts"
+        ) { clear(.transcripts) }
 
-        // Clear All AI Analysis
-        Button(action: {
-          showClearAIAnalysisConfirmation = true
-        }) {
-          HStack {
-            Image(systemName: "sparkles")
-              .foregroundStyle(.purple)
-              .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-              Text("AI Analysis Data")
-              if isCalculating {
-                ProgressView()
-                  .scaleEffect(0.6)
-              } else {
-                Text("\(aiAnalysisCount) analyses")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-            }
-            Spacer()
-            if isClearingData && clearingMessage == "ai" {
-              ProgressView()
-                .scaleEffect(0.8)
-            } else {
-              Text("Remove All")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-            }
-          }
-        }
-        .buttonStyle(.plain)
-        .disabled(isClearingData || isCalculating)
+        StorageUsageRow(
+          systemImage: "sparkles",
+          tint: .purple,
+          title: "AI Analysis Data",
+          detail: isCalculating ? nil : Text("\(aiAnalysisCount) analyses"),
+          actionTitle: "Remove All",
+          actionTint: .red,
+          isBusy: clearing == .aiAnalysis,
+          isDisabled: clearing != nil || isCalculating,
+          confirmationTitle: "Remove All AI Analysis",
+          confirmationMessage: "This will delete all AI-generated analysis data. You can regenerate them later.",
+          confirmButtonTitle: "Remove All Analysis"
+        ) { clear(.aiAnalysis) }
       } header: {
         Text("Storage Usage")
       } footer: {
@@ -177,11 +110,8 @@ struct DataManagementView: View {
       // MARK: - Storage Summary
       if !isCalculating {
         Section {
-          HStack {
-            Text("Total Storage Used")
-            Spacer()
-            Text(calculateTotalSize())
-              .foregroundStyle(.secondary)
+          LabeledContent("Total Storage Used") {
+            Text(totalBytes, format: Self.byteStyle)
           }
         }
       }
@@ -193,6 +123,7 @@ struct DataManagementView: View {
             Image(systemName: "square.and.arrow.up")
               .foregroundStyle(.blue)
               .frame(width: 24)
+              .accessibilityHidden(true)
             Text("Export Subscriptions (OPML)")
           }
         }
@@ -203,6 +134,7 @@ struct DataManagementView: View {
             Image(systemName: "doc.text.magnifyingglass")
               .foregroundStyle(.purple)
               .frame(width: 24)
+              .accessibilityHidden(true)
             Text("Export Diagnostic Report")
           }
         }
@@ -220,6 +152,7 @@ struct DataManagementView: View {
             Image(systemName: "tray.and.arrow.up.fill")
               .foregroundStyle(.indigo)
               .frame(width: 24)
+              .accessibilityHidden(true)
             Text("Export Full Backup")
             Spacer()
             if BackupService.shared.isExporting {
@@ -237,6 +170,7 @@ struct DataManagementView: View {
             Image(systemName: "tray.and.arrow.down.fill")
               .foregroundStyle(.indigo)
               .frame(width: 24)
+              .accessibilityHidden(true)
             Text("Restore from Backup")
             Spacer()
             if BackupService.shared.isImporting {
@@ -256,13 +190,7 @@ struct DataManagementView: View {
         Text("Backs up subscriptions, full playback history, queue, AI analyses, and settings as a single JSON file. Restore on a new device with smart merge — your existing data is never deleted. Local audio, captions, and credentials are not included.")
       }
     }
-    .sheet(item: $opmlExportItem) { item in
-      ShareSheet(items: [item.url])
-    }
-    .sheet(item: $diagnosticExportItem) { item in
-      ShareSheet(items: [item.url])
-    }
-    .sheet(item: $backupExportItem) { item in
+    .sheet(item: $shareItem) { item in
       ShareSheet(items: [item.url])
     }
     .sheet(isPresented: $backupService.showProgressSheet) {
@@ -280,217 +208,82 @@ struct DataManagementView: View {
     } message: { error in
       Text(error)
     }
+    .alert("Error", item: $actionError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { error in
+      Text(error)
+    }
     .navigationTitle("Data Management")
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
     #endif
     .task {
       BackupService.shared.setModelContext(modelContext)
-      await calculateStorageInfoParallel()
-    }
-    // Confirmation dialogs
-    .confirmationDialog(
-      "Clear Image Cache",
-      isPresented: $showClearCacheConfirmation,
-      titleVisibility: .visible
-    ) {
-      Button("Clear Cache", role: .destructive) {
-        clearImageCache()
-      }
-    } message: {
-      Text("This will clear all cached podcast artwork. Images will be re-downloaded as needed.")
-    }
-    .confirmationDialog(
-      "Remove All Downloads",
-      isPresented: $showClearDownloadsConfirmation,
-      titleVisibility: .visible
-    ) {
-      Button("Remove All Downloads", role: .destructive) {
-        clearAllDownloads()
-      }
-    } message: {
-      Text("This will delete all downloaded episodes. You can re-download them later.")
-    }
-    .confirmationDialog(
-      "Remove All Transcripts",
-      isPresented: $showClearTranscriptsConfirmation,
-      titleVisibility: .visible
-    ) {
-      Button("Remove All Transcripts", role: .destructive) {
-        clearAllTranscripts()
-      }
-    } message: {
-      Text("This will delete all generated transcripts. You can regenerate them later.")
-    }
-    .confirmationDialog(
-      "Remove All AI Analysis",
-      isPresented: $showClearAIAnalysisConfirmation,
-      titleVisibility: .visible
-    ) {
-      Button("Remove All Analysis", role: .destructive) {
-        clearAllAIAnalysis()
-      }
-    } message: {
-      Text("This will delete all AI-generated analysis data. You can regenerate them later.")
+      await calculateStorageInfo()
     }
   }
 
-  // MARK: - Calculate Storage (Parallel)
+  // MARK: - Calculate Storage
 
-  private func calculateStorageInfoParallel() async {
+  private func calculateStorageInfo() async {
     isCalculating = true
 
-    // Run all calculations in parallel
-    async let cacheTask = calculateImageCacheSize()
-    async let audioTask = calculateDownloadedAudioSize()
-    async let captionsTask = calculateTranscriptsSize()
-    async let analysisTask = countAIAnalyses()
-
-    let (cacheSize, audioSize, captionsSize, analysisCount) = await (
-      cacheTask, audioTask, captionsTask, analysisTask
-    )
-
-    imageCacheSize = formatBytes(cacheSize)
-    downloadedAudioSize = formatBytes(audioSize)
-    transcriptsSize = formatBytes(captionsSize)
-    aiAnalysisCount = analysisCount
+    // The audio walk runs on the FileStorageManager actor; the rest is cheap.
+    async let audioBytes = FileStorageManager.shared.getTotalAudioSize()
+    imageCacheBytes = ImageCacheUtility.dataCacheTotalSize()
+    transcriptsBytes = TranscriptStore.shared.totalStorageSize()
+    aiAnalysisCount = (try? modelContext.fetchCount(FetchDescriptor<EpisodeAIAnalysis>())) ?? 0
+    downloadedAudioBytes = await audioBytes
     isCalculating = false
-  }
-
-  private func calculateTotalSize() -> String {
-    // Parse sizes back to calculate total (rough estimate)
-    var total: Int64 = 0
-    if let bytes = parseBytes(imageCacheSize) { total += bytes }
-    if let bytes = parseBytes(downloadedAudioSize) { total += bytes }
-    if let bytes = parseBytes(transcriptsSize) { total += bytes }
-    return formatBytes(total)
-  }
-
-  private func parseBytes(_ str: String) -> Int64? {
-    let parts = str.components(separatedBy: " ")
-    guard parts.count == 2, let value = Double(parts[0]) else { return nil }
-    let unit = parts[1]
-    switch unit {
-    case "KB": return Int64(value * 1024)
-    case "MB": return Int64(value * 1024 * 1024)
-    case "GB": return Int64(value * 1024 * 1024 * 1024)
-    default: return Int64(value)
-    }
-  }
-
-  private func calculateImageCacheSize() async -> Int64 {
-    ImageCacheUtility.dataCacheTotalSize()
-  }
-
-  private func calculateDownloadedAudioSize() async -> Int64 {
-    await Task.detached(priority: .utility) {
-      let fileManager = FileManager.default
-      let libraryDir = fileManager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-      let audioDir = libraryDir.appendingPathComponent("Audio")
-
-      guard let enumerator = fileManager.enumerator(
-        at: audioDir,
-        includingPropertiesForKeys: [.fileSizeKey]
-      ) else { return Int64(0) }
-
-      var totalSize: Int64 = 0
-      while let fileURL = enumerator.nextObject() as? URL {
-        if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-          totalSize += Int64(size)
-        }
-      }
-      return totalSize
-    }.value
-  }
-
-  private func calculateTranscriptsSize() async -> Int64 {
-    TranscriptStore.shared.totalStorageSize()
-  }
-
-  private func countAIAnalyses() async -> Int {
-    let descriptor = FetchDescriptor<EpisodeAIAnalysis>()
-    return (try? modelContext.fetchCount(descriptor)) ?? 0
-  }
-
-  private func formatBytes(_ bytes: Int64) -> String {
-    let formatter = ByteCountFormatter()
-    formatter.allowedUnits = [.useKB, .useMB, .useGB]
-    formatter.countStyle = .file
-    return formatter.string(fromByteCount: bytes)
   }
 
   // MARK: - Clear Actions
 
-  private func clearImageCache() {
-    isClearingData = true
-    clearingMessage = "cache"
-
-    ImageCacheUtility.clearAllCache()
-    imageCacheSize = "0 KB"
-    isClearingData = false
-    clearingMessage = ""
-  }
-
-  private func clearAllDownloads() {
-    isClearingData = true
-    clearingMessage = "downloads"
-
+  private func clear(_ category: StorageCategory) {
+    clearing = category
     Task {
-      // Clear files
-      await Task.detached(priority: .utility) {
-        let fileManager = FileManager.default
-        let libraryDir = fileManager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-        let audioDir = libraryDir.appendingPathComponent("Audio")
-        try? fileManager.removeItem(at: audioDir)
-        try? fileManager.createDirectory(at: audioDir, withIntermediateDirectories: true)
-      }.value
-
-      // Clear SwiftData records
-      let descriptor = FetchDescriptor<EpisodeDownloadModel>()
-      if let episodes = try? modelContext.fetch(descriptor) {
-        for episode in episodes where episode.localAudioPath != nil {
-          episode.localAudioPath = nil
-          episode.downloadedDate = nil
-          episode.fileSize = 0
+      defer { clearing = nil }
+      do {
+        switch category {
+        case .imageCache:
+          ImageCacheUtility.clearAllCache()
+          imageCacheBytes = 0
+        case .downloads:
+          try await Self.removeDownloadedAudio()
+          for episode in try modelContext.fetch(FetchDescriptor<EpisodeDownloadModel>())
+          where episode.localAudioPath != nil {
+            episode.localAudioPath = nil
+            episode.downloadedDate = nil
+            episode.fileSize = 0
+          }
+          try modelContext.save()
+          downloadedAudioBytes = 0
+        case .transcripts:
+          try TranscriptStore.shared.deleteAll()
+          transcriptsBytes = 0
+        case .aiAnalysis:
+          for analysis in try modelContext.fetch(FetchDescriptor<EpisodeAIAnalysis>()) {
+            modelContext.delete(analysis)
+          }
+          try modelContext.save()
+          aiAnalysisCount = 0
         }
-        modelContext.saveOrLog()
+      } catch {
+        actionError = error.localizedDescription
       }
-      downloadedAudioSize = "0 KB"
-      isClearingData = false
-      clearingMessage = ""
     }
   }
 
-  private func clearAllTranscripts() {
-    isClearingData = true
-    clearingMessage = "transcripts"
-
-    Task {
-      try? TranscriptStore.shared.deleteAll()
-      transcriptsSize = "0 KB"
-      isClearingData = false
-      clearingMessage = ""
-    }
+  /// Recreates the audio directory empty. A missing directory is already the
+  /// goal, so only a real failure to remove or recreate it throws.
+  @concurrent private static func removeDownloadedAudio() async throws {
+    let fileManager = FileManager.default
+    let audioDir = FileStorageManager.platformAudioDirectory(fileManager: fileManager)
+    do {
+      try fileManager.removeItem(at: audioDir)
+    } catch let error as CocoaError where error.code == .fileNoSuchFile {}
+    try fileManager.createDirectory(at: audioDir, withIntermediateDirectories: true)
   }
-
-  private func clearAllAIAnalysis() {
-    isClearingData = true
-    clearingMessage = "ai"
-
-    Task {
-      let descriptor = FetchDescriptor<EpisodeAIAnalysis>()
-      if let analyses = try? modelContext.fetch(descriptor) {
-        for analysis in analyses {
-          modelContext.delete(analysis)
-        }
-        modelContext.saveOrLog()
-      }
-      aiAnalysisCount = 0
-      isClearingData = false
-      clearingMessage = ""
-    }
-  }
-
 }
 
 // Export/import actions, split from the struct body to keep it readable; same
@@ -499,53 +292,44 @@ extension DataManagementView {
   // MARK: - Diagnostic Export
 
   private func exportDiagnosticReport() {
-    Task {
-      // Gather library stats
-      let podcastDescriptor = FetchDescriptor<PodcastInfoModel>(
-        predicate: #Predicate { $0.isSubscribed == true }
-      )
-      let podcastCount = (try? modelContext.fetch(podcastDescriptor).count) ?? 0
+    // Gather library stats
+    let podcastCount = (try? modelContext.fetchCount(
+      FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.isSubscribed == true }))) ?? 0
+    let episodeCount = (try? modelContext.fetchCount(FetchDescriptor<EpisodeDownloadModel>())) ?? 0
 
-      let episodeDescriptor = FetchDescriptor<EpisodeDownloadModel>()
-      let episodeCount = (try? modelContext.fetch(episodeDescriptor).count) ?? 0
+    // Build report
+    var report: [String: Any] = [:]
+    report["appVersion"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
+    report["build"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "unknown"
+    report["osVersion"] = ProcessInfo.processInfo.operatingSystemVersionString
+    report["date"] = Date.now.formatted(.iso8601)
+    report["subscribedPodcasts"] = podcastCount
+    report["trackedEpisodes"] = episodeCount
 
-      // Build report
-      var report: [String: Any] = [:]
-      report["appVersion"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
-      report["build"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "unknown"
-      report["osVersion"] = ProcessInfo.processInfo.operatingSystemVersionString
-      report["date"] = ISO8601DateFormatter().string(from: Date.now)
-      report["subscribedPodcasts"] = podcastCount
-      report["trackedEpisodes"] = episodeCount
+    // Include non-sensitive UserDefaults keys (skip API keys)
+    let safeKeys = [
+      "transcriptEngine", "selectedTranscriptLocale", "defaultPlaybackSpeed",
+      "autoPlayNextEpisode", "autoDownloadNewEpisodes", "showTrendingEpisodes",
+      "skipForwardInterval", "skipBackwardInterval", "selectedPodcastRegion"
+    ]
+    var settingsSnapshot: [String: Any] = [:]
+    for key in safeKeys {
+      settingsSnapshot[key] = UserDefaults.standard.object(forKey: key) ?? "not set"
+    }
+    report["settings"] = settingsSnapshot
 
-      // Include non-sensitive UserDefaults keys (skip API keys)
-      let safeKeys = [
-        "transcriptEngine", "selectedTranscriptLocale", "defaultPlaybackSpeed",
-        "autoPlayNextEpisode", "autoDownloadNewEpisodes", "showTrendingEpisodes",
-        "skipForwardInterval", "skipBackwardInterval", "selectedPodcastRegion"
-      ]
-      var settingsSnapshot: [String: Any] = [:]
-      for key in safeKeys {
-        settingsSnapshot[key] = UserDefaults.standard.object(forKey: key) ?? "not set"
-      }
-      report["settings"] = settingsSnapshot
-
-      // Serialize
-      guard let jsonData = try? JSONSerialization.data(withJSONObject: report, options: .prettyPrinted),
-            let jsonString = String(data: jsonData, encoding: .utf8) else { return }
+    do {
+      let jsonData = try JSONSerialization.data(withJSONObject: report, options: .prettyPrinted)
+      var fullReport = "=== Diagnostic Report ===\n\n" + String(decoding: jsonData, as: UTF8.self)
 
       // Append recent log file if available
-      let logURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
-        .appendingPathComponent("app_logs.txt")
-      var fullReport = "=== Diagnostic Report ===\n\n" + jsonString
-      if let logURL, let logs = try? String(contentsOf: logURL, encoding: .utf8) {
+      let logURL = URL.documentsDirectory.appending(path: "app_logs.txt")
+      if let logs = try? String(contentsOf: logURL, encoding: .utf8) {
         fullReport += "\n\n=== Recent Logs ===\n" + logs.suffix(8000)
       }
-
-      let tempURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("diagnostic_report.txt")
-      try? fullReport.write(to: tempURL, atomically: true, encoding: .utf8)
-      diagnosticExportItem = ShareableOPML(url: tempURL)
+      shareItem = try shareableFile(fullReport, named: "diagnostic_report.txt")
+    } catch {
+      actionError = error.localizedDescription
     }
   }
 
@@ -555,7 +339,7 @@ extension DataManagementView {
     Task {
       do {
         let url = try await BackupService.shared.exportBackup()
-        backupExportItem = ShareableOPML(url: url)
+        shareItem = ShareableOPML(url: url)
       } catch {
         backupErrorAlert = error.localizedDescription
       }
@@ -585,18 +369,22 @@ extension DataManagementView {
   // MARK: - OPML Export
 
   private func exportOPML() {
-    let descriptor = FetchDescriptor<PodcastInfoModel>(
-      predicate: #Predicate { $0.isSubscribed == true }
-    )
-    guard let models = try? modelContext.fetch(descriptor) else { return }
-    let podcasts = models.map { $0.podcastInfo }
-    let opmlString = OPMLParser.export(podcasts: podcasts)
+    do {
+      let descriptor = FetchDescriptor<PodcastInfoModel>(
+        predicate: #Predicate { $0.isSubscribed == true }
+      )
+      let podcasts = try modelContext.fetch(descriptor).map { $0.podcastInfo }
+      shareItem = try shareableFile(OPMLParser.export(podcasts: podcasts), named: "subscriptions.opml")
+    } catch {
+      actionError = error.localizedDescription
+    }
+  }
 
-    // Write to a temp file so ShareSheet/ShareLink can share it
-    let tempURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("subscriptions.opml")
-    try? opmlString.write(to: tempURL, atomically: true, encoding: .utf8)
-    opmlExportItem = ShareableOPML(url: tempURL)
+  /// Writes to a temp file so ShareSheet/ShareLink can share it.
+  private func shareableFile(_ contents: String, named name: String) throws -> ShareableOPML {
+    let url = URL.temporaryDirectory.appending(path: name)
+    try contents.write(to: url, atomically: true, encoding: .utf8)
+    return ShareableOPML(url: url)
   }
 }
 
@@ -683,11 +471,11 @@ struct BackupProgressSheet: View {
     }
   }
 
-  private func statRow(_ label: String, value: String) -> some View {
-    HStack {
+  private func statRow(_ label: LocalizedStringKey, value: LocalizedStringKey) -> some View {
+    LabeledContent {
+      Text(value)
+    } label: {
       Text(label)
-      Spacer()
-      Text(value).foregroundStyle(.secondary)
     }
   }
 }
