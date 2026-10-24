@@ -82,10 +82,10 @@ struct TranscriptSearchSheet: View {
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
             .background(.regularMaterial, in: .rect(cornerRadius: 10))
-            .overlay(
+            .overlay {
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(.secondary.opacity(0.15), lineWidth: 1)
-            )
+            }
 
             Button("Search", systemImage: "magnifyingglass") {
                 fieldFocused = true

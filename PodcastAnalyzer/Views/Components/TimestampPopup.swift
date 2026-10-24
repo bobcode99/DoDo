@@ -26,7 +26,7 @@ struct TimestampPopup: View {
         .font(.body)
         .foregroundStyle(.primary)
         .frame(width: 240)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 14))
         .shadow(color: .black.opacity(0.2), radius: 16, y: 6)
     }
 }

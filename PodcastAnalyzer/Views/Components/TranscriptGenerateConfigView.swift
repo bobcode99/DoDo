@@ -154,7 +154,7 @@ struct TranscriptGenerateConfigView: View {
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(.blue.opacity(0.15), in: Capsule())
+                                .background(.blue.opacity(0.15), in: .capsule)
                                 .foregroundStyle(.blue)
                         }
                     }
@@ -171,10 +171,10 @@ struct TranscriptGenerateConfigView: View {
             .padding(12)
             .frame(maxWidth: .infinity)
             .background(.regularMaterial, in: .rect(cornerRadius: 14))
-            .overlay(
+            .overlay {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(selected ? Color.blue : .clear, lineWidth: 2)
-            )
+            }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -317,7 +317,7 @@ struct TranscriptGenerateConfigView: View {
                                     .font(.caption)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 4)
-                                    .background(.regularMaterial, in: Capsule())
+                                    .background(.regularMaterial, in: .capsule)
                             }
                         }
                     }

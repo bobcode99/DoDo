@@ -11,8 +11,8 @@ struct TranslationProgressCircle: View {
                 Circle()
                     .stroke(Color.gray.opacity(0.2), lineWidth: 2)
                 Circle()
-                    .trim(from: 0, to: CGFloat(progress))
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .trim(from: 0, to: progress)
+                    .stroke(.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.2), value: progress)
             }
