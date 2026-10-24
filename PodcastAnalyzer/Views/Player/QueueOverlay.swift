@@ -23,37 +23,36 @@ struct QueueOverlay: View {
           .ignoresSafeArea()
       }
       .buttonStyle(.plain)
-      .accessibilityLabel("Dismiss")
+      .accessibilityHidden(true)
 
       VStack(spacing: 0) {
         // Header
         HStack {
           Text("Up Next")
             .font(.headline)
+            .accessibilityAddTraits(.isHeader)
           Spacer()
-          Button("Dismiss", systemImage: "xmark.circle.fill", action: onDismiss)
-            .labelStyle(.iconOnly)
-            .font(.title2)
-            .foregroundStyle(.secondary)
+          Button(action: onDismiss) {
+            Label("Dismiss", systemImage: "xmark.circle.fill")
+              .labelStyle(.iconOnly)
+              .font(.title2)
+              .foregroundStyle(.secondary)
+              .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+              .contentShape(.rect)
+          }
+          .buttonStyle(.plain)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, 8)
 
         Divider()
 
         if queue.isEmpty {
-          VStack(spacing: 12) {
-            Image(systemName: "list.bullet")
-              .font(.system(size: 40))
-              .foregroundStyle(.secondary)
-            Text("Queue is empty")
-              .font(.subheadline)
-              .foregroundStyle(.secondary)
-            Text("Add episodes using 'Play Next'")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .padding()
+          ContentUnavailableView(
+            "Queue is empty",
+            systemImage: "list.bullet",
+            description: Text("Add episodes using 'Play Next'")
+          )
         } else {
           List {
             ForEach(queue.enumerated(), id: \.element.id) { index, episode in
@@ -74,11 +73,12 @@ struct QueueOverlay: View {
                   Image(systemName: "play.circle")
                     .font(.title2)
                     .foregroundStyle(.blue)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Play \(episode.title)")
               }
-              .padding(.vertical, 4)
             }
             .onMove(perform: onMoveItems)
             .onDelete { offsets in
@@ -91,9 +91,12 @@ struct QueueOverlay: View {
           #endif
         }
       }
-      .frame(maxHeight: 400)
+      .frame(maxWidth: 560, maxHeight: 400)
       .glassEffect(Glass.regular, in: .rect(cornerRadius: 16))
       .padding(.horizontal, 16)
     }
+    .accessibilityElement(children: .contain)
+    .accessibilityAddTraits(.isModal)
+    .accessibilityAction(.escape, onDismiss)
   }
 }
