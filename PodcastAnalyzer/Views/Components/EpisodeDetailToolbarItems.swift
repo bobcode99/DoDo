@@ -31,12 +31,10 @@ struct EpisodeDetailToolbarItems: ToolbarContent {
     /// Pre-iOS 27 (and macOS) stand-in for `ToolbarOverflowMenu`.
     private var moreMenu: some ToolbarContent {
         ToolbarItem(placement: Self.placement) {
-            Menu {
+            Menu("More options", systemImage: "ellipsis.circle") {
                 moreActions
-            } label: {
-                Image(systemName: "ellipsis.circle")
             }
-            .accessibilityLabel("More options")
+            .labelStyle(.iconOnly)
         }
     }
 

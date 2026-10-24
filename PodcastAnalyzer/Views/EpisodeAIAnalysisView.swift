@@ -68,9 +68,10 @@ struct EpisodeAIAnalysisView: View {
     #endif
     .toolbar {
       ToolbarItem(placement: toolbarPlacement) {
-        Button(action: { uiState.showSettingsSheet = true }) {
-          Image(systemName: "gear")
+        Button("AI Settings", systemImage: "gear") {
+          uiState.showSettingsSheet = true
         }
+        .labelStyle(.iconOnly)
       }
     }
     .sheet(isPresented: $uiState.showSettingsSheet) {
