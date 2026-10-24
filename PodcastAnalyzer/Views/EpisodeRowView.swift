@@ -605,7 +605,7 @@ struct EpisodeRowView: View {
   }
 
   private func shareWithURL(_ urlString: String?) {
-    guard let urlString = urlString, let url = URL(string: urlString) else {
+    guard let urlString, let url = URL(string: urlString) else {
       return
     }
     PlatformShareSheet.share(url: url)

@@ -418,7 +418,7 @@ final class EpisodeListViewModel {
       object: nil,
       queue: .main
     ) { [weak self] notification in
-      guard let self = self,
+      guard let self,
             let userInfo = notification.userInfo,
             let episodeTitle = userInfo["episodeTitle"] as? String,
             let podcastTitle = userInfo["podcastTitle"] as? String,
