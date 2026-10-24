@@ -56,8 +56,7 @@ struct QueueOverlay: View {
           .padding()
         } else {
           List {
-            ForEach(queue.indices, id: \.self) { index in
-              let episode = queue[index]
+            ForEach(queue.enumerated(), id: \.element.id) { index, episode in
               HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                   Text(episode.title)
@@ -80,13 +79,11 @@ struct QueueOverlay: View {
                 .accessibilityLabel("Play \(episode.title)")
               }
               .padding(.vertical, 4)
-              .swipeActions(edge: .trailing) {
-                Button(role: .destructive, action: { onRemoveItem(index) }) {
-                  Label("Remove", systemImage: "trash")
-                }
-              }
             }
             .onMove(perform: onMoveItems)
+            .onDelete { offsets in
+              for index in offsets.sorted(by: >) { onRemoveItem(index) }
+            }
           }
           .listStyle(.plain)
           #if os(iOS)
