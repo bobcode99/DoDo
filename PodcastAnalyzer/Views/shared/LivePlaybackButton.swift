@@ -223,6 +223,7 @@ struct LivePlaybackButton: View {
       .foregroundStyle(.white)
       .padding(.horizontal, 14)
       .padding(.vertical, 10)
+      .frame(minHeight: 44)
       .background(Color.blue)
       .clipShape(.capsule)
     }
@@ -241,6 +242,7 @@ struct LivePlaybackButton: View {
     } else if isCompleted {
       Image(systemName: "arrow.counterclockwise")
         .font(.system(size: size, weight: .bold))
+        .accessibilityLabel("Replay")
     } else {
       Image(systemName: "play.fill")
         .font(.system(size: size))

@@ -9,11 +9,13 @@ struct EpisodeDownloadButton: View {
             switch viewModel.downloadState {
             case .notDownloaded:
                 Button(action: { viewModel.startDownload() }) {
-                    Image(systemName: "arrow.down.circle")
+                    Label("Download", systemImage: "arrow.down.circle")
+                        .labelStyle(.iconOnly)
                         .font(.system(size: 14))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
+                        .frame(minHeight: 44)
                         .background(Color.gray)
                         .clipShape(.capsule)
                 }
@@ -33,10 +35,12 @@ struct EpisodeDownloadButton: View {
                     )
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
+                    .frame(minHeight: 44)
                     .background(Color.orange)
                     .clipShape(.capsule)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Cancel Download")
 
             case .finishing:
                 HStack(spacing: 6) {
@@ -46,16 +50,21 @@ struct EpisodeDownloadButton: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
+                .frame(minHeight: 44)
                 .background(Color.blue)
                 .clipShape(.capsule)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Downloading")
 
             case .downloaded:
                 Button(action: { showDeleteConfirmation = true }) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Label("Downloaded", systemImage: "checkmark.circle.fill")
+                        .labelStyle(.iconOnly)
                         .font(.system(size: 14))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
+                        .frame(minHeight: 44)
                         .background(Color.green)
                         .clipShape(.capsule)
                 }
@@ -77,11 +86,13 @@ struct EpisodeDownloadButton: View {
 
             case .failed:
                 Button(action: { viewModel.startDownload() }) {
-                    Image(systemName: "exclamationmark.circle")
+                    Label("Retry", systemImage: "exclamationmark.circle")
+                        .labelStyle(.iconOnly)
                         .font(.system(size: 14))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
+                        .frame(minHeight: 44)
                         .background(Color.red)
                         .clipShape(.capsule)
                 }
