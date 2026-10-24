@@ -8,12 +8,6 @@
 
 import SwiftUI
 
-#if os(iOS)
-import UIKit
-#else
-import AppKit
-#endif
-
 struct PromptPreviewSheet: View {
   let podcastTitle: String
   let episodeTitle: String
@@ -253,12 +247,7 @@ struct PromptPreviewSheet: View {
   private func copy() {
     guard !combined.isEmpty else { return }
 
-    #if os(iOS)
-    UIPasteboard.general.string = combined
-    #else
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(combined, forType: .string)
-    #endif
+    PlatformClipboard.string = combined
 
     didCopy = true
     onCopied()
