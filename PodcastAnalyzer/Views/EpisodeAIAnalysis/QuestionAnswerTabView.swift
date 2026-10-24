@@ -29,7 +29,7 @@ struct QuestionAnswerTabView: View {
 
       // Question input with X button and Enter to send
       HStack(spacing: 8) {
-        HStack {
+        HStack(spacing: 0) {
           TextField(
             viewModel.hasTranscript
               ? "Enter your question..."
@@ -42,28 +42,34 @@ struct QuestionAnswerTabView: View {
           .onSubmit {
             submitQuestion()
           }
+          .padding(.horizontal, 12)
 
           // X button to clear input
           if !uiState.questionInput.isEmpty {
-            Button(action: {
+            Button {
               uiState.questionInput = ""
               isQuestionFocused = false
-            }) {
-              Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(.secondary)
+            } label: {
+              Label("Clear", systemImage: "xmark.circle.fill")
+                .labelStyle(.iconOnly)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .frame(minHeight: 44)
         .background(Color.platformSystemGray6)
         .clipShape(.rect(cornerRadius: 10))
         .opacity(viewModel.hasTranscript ? 1 : 0.55)
 
         Button(action: submitQuestion) {
-          Image(systemName: "paperplane.fill")
-            .font(.system(size: 18))
+          Label("Ask", systemImage: "paperplane.fill")
+            .labelStyle(.iconOnly)
+            .font(.title3)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
         }
         .disabled(
           uiState.questionInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !canAnalyze)
