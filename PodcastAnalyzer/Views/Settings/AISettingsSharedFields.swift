@@ -22,7 +22,7 @@ struct AIAPIKeyField: View {
                 // Auto-fetch models when API key is entered (or cleared) — the
                 // models endpoint may itself require the new token on LM Studio.
                 if provider == settings.selectedProvider {
-                    modelState.fetchModels(for: provider)
+                    modelState.fetchModelsAfterKeyEdit(for: provider)
                 }
             }
         )

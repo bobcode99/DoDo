@@ -30,6 +30,7 @@ final class AIModelFetchState {
     /// current fetch was still going.
     private var fetchTask: Task<Void, Never>?
     private var testTask: Task<Void, Never>?
+    private var keyEditTask: Task<Void, Never>?
 
     /// The provider whose fetch is in flight, so a late reply can be discarded
     /// if the user has moved on.
@@ -42,6 +43,19 @@ final class AIModelFetchState {
         guard fetchedModels[provider] == nil else { return }
         if provider.usesLocalServer || !settings.apiKey(for: provider).isEmpty {
             fetchModels(for: provider)
+        }
+    }
+
+    /// Fetches once typing in an API key has paused. The key field reports every
+    /// keystroke, and fetching on each one sent every partial key to the
+    /// provider's models endpoint and flashed an authentication error between
+    /// keystrokes.
+    func fetchModelsAfterKeyEdit(for provider: CloudAIProvider) {
+        keyEditTask?.cancel()
+        keyEditTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            self?.fetchModels(for: provider)
         }
     }
 
@@ -168,6 +182,7 @@ final class AIModelFetchState {
     /// Drops any probe still in flight — called when the settings screen goes
     /// away so a slow request can't resolve into a view that is gone.
     func cancelProbes() {
+        keyEditTask?.cancel()
         fetchTask?.cancel()
         testTask?.cancel()
         isFetchingModels = false
