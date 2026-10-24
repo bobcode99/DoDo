@@ -41,7 +41,7 @@ struct EpisodeAIAnalysisView: View {
           }
         }
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
       }
       .scrollIndicators(.hidden)
 
@@ -180,21 +180,26 @@ struct EpisodeAIAnalysisView: View {
     } label: {
       let label = HStack(spacing: 6) {
         Image(systemName: tab.icon)
-          .font(.system(size: 12))
+          .imageScale(.small)
         Text(tab.displayName)
-          .font(.subheadline)
       }
+      .font(.subheadline)
       .padding(.horizontal, 12)
       .padding(.vertical, 8)
 
       // The selected pill fills with the accent, so its label colour has to be
       // derived from that fill rather than assumed white — the shipped default
       // accent is white in dark mode, which made the selected tab unreadable.
-      if isSelected {
-        label.accentFilled(in: .rect(cornerRadius: 8))
-      } else {
-        label.foregroundStyle(.primary)
+      Group {
+        if isSelected {
+          label.accentFilled(in: .rect(cornerRadius: 8))
+        } else {
+          label.foregroundStyle(.primary)
+        }
       }
+      // Pads the hit area out to 44pt without growing the drawn pill.
+      .padding(.vertical, 4)
+      .contentShape(.rect)
     }
     #if os(macOS)
     .buttonStyle(.plain)      // 🔑 THIS fixes the weird macOS behavior
