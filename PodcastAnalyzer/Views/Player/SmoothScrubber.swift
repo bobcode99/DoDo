@@ -116,6 +116,8 @@ private struct ThumblessSlider: View {
     let range: ClosedRange<TimeInterval>
     let onEditingChanged: (Bool) -> Void
 
+    @Environment(\.locale) private var locale
+
     /// Finger is down. Drives the visual expand only — never the value.
     @State private var isTouching = false
     /// Set once the finger has actually travelled far enough to count as a
@@ -202,7 +204,7 @@ private struct ThumblessSlider: View {
         // Replacing UISlider loses its VoiceOver semantics, so restate them.
         .accessibilityElement()
         .accessibilityLabel("Playback position")
-        .accessibilityValue(Formatters.formatPlaybackTime(value))
+        .accessibilityValue(spokenValue)
         .accessibilityAdjustableAction { direction in
             let span = range.upperBound - range.lowerBound
             let step = max(span / 20, 1)
@@ -213,6 +215,12 @@ private struct ThumblessSlider: View {
             }
             onEditingChanged(false)
         }
+    }
+
+    /// "12 minutes, 34 seconds" rather than "12:34", which VoiceOver reads as a time of day.
+    private var spokenValue: String {
+        Duration.seconds(value.isFinite ? value : 0)
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide).locale(locale))
     }
 
     /// 0...1 position of `value` within `range`.
