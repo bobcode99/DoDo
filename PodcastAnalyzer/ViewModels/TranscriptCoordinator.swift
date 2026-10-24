@@ -107,7 +107,7 @@ final class TranscriptCoordinator {
 
   @ObservationIgnored let episode: PodcastEpisodeInfo
   @ObservationIgnored let podcastTitle: String
-  @ObservationIgnored var podcastLanguage: String
+  var podcastLanguage: String
   @ObservationIgnored private weak var host: TranscriptHost?
 
   @ObservationIgnored private let transcriptDownloadService = TranscriptDownloadService.shared
@@ -363,10 +363,7 @@ final class TranscriptCoordinator {
   }
 
   func generateTranscript() {
-    let effectiveEngine = selectedTranscriptEngine ?? TranscriptEngine(
-      rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
-    ) ?? .appleSpeech
-
+    let effectiveEngine = self.effectiveEngine
     let localAudioPath = host?.localAudioPath
 
     if effectiveEngine != .yapServer, localAudioPath == nil {
@@ -541,6 +538,41 @@ extension TranscriptCoordinator {
     selectedTranscriptEngine ?? TranscriptEngine(
       rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
     ) ?? .appleSpeech
+  }
+
+  /// Picker value for the engine. Choosing one drops a language it cannot transcribe.
+  var engineSelection: TranscriptEngine {
+    get { effectiveEngine }
+    set { selectEngine(newValue) }
+  }
+
+  func selectEngine(_ engine: TranscriptEngine) {
+    selectedTranscriptEngine = engine
+    guard engine != .whisper, let selected = selectedTranscriptLanguage else { return }
+    let resolved = resolvedLanguage(selected)
+    if !SettingsViewModel.locales(for: engine).contains(where: { $0.id == resolved }) {
+      selectedTranscriptLanguage = nil
+    }
+  }
+
+  /// Picker value for the language: the explicit choice, else the podcast's, else the
+  /// device's, mapped onto the engine's closest locale. Whisper reads "auto" for no choice.
+  var languagePickerSelection: String {
+    get {
+      if effectiveEngine == .whisper { return selectedTranscriptLanguage ?? "auto" }
+      if let selected = selectedTranscriptLanguage { return resolvedLanguage(selected) }
+      guard !podcastLanguage.isEmpty else {
+        return resolvedLanguage(Locale.current.language.languageCode?.identifier ?? "en")
+      }
+      return resolvedLanguage(podcastLanguage)
+    }
+    set {
+      if effectiveEngine == .whisper, newValue == "auto" {
+        selectedTranscriptLanguage = nil
+      } else {
+        selectedTranscriptLanguage = newValue
+      }
+    }
   }
 
   /// Maps a raw language code onto the closest locale the current engine supports.

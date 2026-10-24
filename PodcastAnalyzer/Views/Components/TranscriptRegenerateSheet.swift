@@ -5,11 +5,7 @@ struct TranscriptRegenerateSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: EpisodeDetailViewModel
 
-    private var effectiveEngine: TranscriptEngine {
-        viewModel.transcript.selectedTranscriptEngine ?? TranscriptEngine(
-            rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
-        ) ?? .appleSpeech
-    }
+    private var effectiveEngine: TranscriptEngine { viewModel.transcript.effectiveEngine }
 
     private var canRegenerate: Bool {
         if effectiveEngine == .yapServer {
@@ -25,63 +21,8 @@ struct TranscriptRegenerateSheet: View {
         return "This replaces the current transcript with one generated from the downloaded audio and preserves accurate timestamps."
     }
 
-    private func resolvedLanguage(_ code: String, for engine: TranscriptEngine) -> String {
-        guard !code.isEmpty else { return code }
-        let locales = SettingsViewModel.locales(for: engine)
-        let lower = code.lowercased()
-
-        if locales.contains(where: { $0.id == lower }) { return lower }
-        if let match = locales.first(where: { $0.id.hasPrefix(lower + "-") }) {
-            return match.id
-        }
-
-        let base = lower.split(separator: "-").first.map(String.init) ?? lower
-        if let match = locales.first(where: { $0.id == base || $0.id.hasPrefix(base + "-") }) {
-            return match.id
-        }
-
-        return lower
-    }
-
-    private var pickerLocales: [SettingsViewModel.TranscriptLocaleOption] {
-        let standard = SettingsViewModel.locales(for: effectiveEngine)
-        let podcastLang = viewModel.podcastLanguage.lowercased()
-        let resolved = resolvedLanguage(podcastLang, for: effectiveEngine)
-
-        if standard.contains(where: { $0.id == resolved }) {
-            return standard
-        }
-
-        let displayName = Locale.current.localizedString(forLanguageCode: podcastLang) ?? podcastLang
-        let dynamic = SettingsViewModel.TranscriptLocaleOption(
-            id: podcastLang,
-            name: "\(displayName) (podcast)"
-        )
-        return [dynamic] + standard
-    }
-
-    private var selectedLanguageBinding: Binding<String> {
-        Binding(
-            get: {
-                if effectiveEngine == .whisper {
-                    return viewModel.transcript.selectedTranscriptLanguage ?? "auto"
-                }
-                return resolvedLanguage(
-                    viewModel.transcript.selectedTranscriptLanguage ?? viewModel.podcastLanguage,
-                    for: effectiveEngine
-                )
-            },
-            set: { newValue in
-                if effectiveEngine == .whisper {
-                    viewModel.transcript.selectedTranscriptLanguage = (newValue == "auto") ? nil : newValue
-                } else {
-                    viewModel.transcript.selectedTranscriptLanguage = newValue
-                }
-            }
-        )
-    }
-
     var body: some View {
+        @Bindable var transcript = viewModel.transcript
         NavigationStack {
             Form {
                 Section {
@@ -89,40 +30,22 @@ struct TranscriptRegenerateSheet: View {
                 }
 
                 Section {
-                    Picker("Engine", selection: Binding(
-                        get: { effectiveEngine },
-                        set: { newEngine in
-                            viewModel.transcript.selectedTranscriptEngine = newEngine
-                            if newEngine == .whisper {
-                                return
-                            }
-
-                            if let selected = viewModel.transcript.selectedTranscriptLanguage {
-                                let resolved = resolvedLanguage(selected, for: newEngine)
-                                let isSupported = SettingsViewModel.locales(for: newEngine).contains {
-                                    $0.id == resolved
-                                }
-                                if !isSupported {
-                                    viewModel.transcript.selectedTranscriptLanguage = nil
-                                }
-                            }
-                        }
-                    )) {
+                    Picker("Engine", selection: $transcript.engineSelection) {
                         ForEach(TranscriptEngine.allCases) { engine in
                             Label(engine.displayName, systemImage: engine.systemImage)
                                 .tag(engine)
                         }
                     }
 
-                    Picker("Language", selection: selectedLanguageBinding) {
-                        // `selectedLanguageBinding` reports "auto" whenever
+                    Picker("Language", selection: $transcript.languagePickerSelection) {
+                        // `languagePickerSelection` reports "auto" whenever
                         // Whisper is selected with no explicit language, so the
                         // tag has to exist or the selection matches nothing and
                         // SwiftUI warns about undefined results.
                         if effectiveEngine == .whisper {
                             Text("Auto-detect").tag("auto")
                         }
-                        ForEach(pickerLocales) { locale in
+                        ForEach(viewModel.transcript.pickerLocales) { locale in
                             Text(locale.name).tag(locale.id)
                         }
                     }

@@ -136,7 +136,7 @@ struct TranscriptGenerateConfigView: View {
     private func engineCard(_ engine: TranscriptEngine) -> some View {
         let selected = effectiveEngine == engine
         return Button {
-            selectEngine(engine)
+            viewModel.transcript.selectEngine(engine)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: engine.systemImage)
@@ -188,17 +188,6 @@ struct TranscriptGenerateConfigView: View {
         }
     }
 
-    /// Clears the selected language if a newly-picked non-Whisper engine doesn't
-    /// support it.
-    private func selectEngine(_ newEngine: TranscriptEngine) {
-        viewModel.transcript.selectedTranscriptEngine = newEngine
-        guard newEngine != .whisper, let selected = viewModel.transcript.selectedTranscriptLanguage else { return }
-        let resolved = viewModel.transcript.resolvedLanguage(selected)
-        if !SettingsViewModel.locales(for: newEngine).contains(where: { $0.id == resolved }) {
-            viewModel.transcript.selectedTranscriptLanguage = nil
-        }
-    }
-
     // MARK: - Options card (language + split / music)
 
     @ViewBuilder
@@ -211,10 +200,7 @@ struct TranscriptGenerateConfigView: View {
             // Yap and Whisper run their own pipeline, so it's Apple-Speech-only.
             if effectiveEngine == .appleSpeech {
                 Divider()
-                Toggle(isOn: Binding(
-                    get: { settings.splitLongAudio },
-                    set: { settings.splitLongAudio = $0 }
-                )) {
+                Toggle(isOn: Bindable(settings).splitLongAudio) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Split long audio")
                         Text("Transcribe long files in parallel chunks — faster.")
@@ -226,10 +212,7 @@ struct TranscriptGenerateConfigView: View {
             // Music detection (Yap forwards detect_music; Whisper has none).
             if effectiveEngine == .appleSpeech || effectiveEngine == .yapServer {
                 Divider()
-                Toggle(isOn: Binding(
-                    get: { settings.enableMusicDetection },
-                    set: { settings.enableMusicDetection = $0 }
-                )) {
+                Toggle(isOn: Bindable(settings).enableMusicDetection) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Music detection")
                         Text("Mark music sections as [♪ Music] instead of mis-transcribing them.")
@@ -244,30 +227,10 @@ struct TranscriptGenerateConfigView: View {
         .background(.regularMaterial, in: .rect(cornerRadius: 14))
     }
 
+    @ViewBuilder
     private var languagePicker: some View {
-        Picker("Language", selection: Binding(
-            get: {
-                if effectiveEngine == .whisper {
-                    return viewModel.transcript.selectedTranscriptLanguage ?? "auto"
-                }
-                if let selected = viewModel.transcript.selectedTranscriptLanguage {
-                    return viewModel.transcript.resolvedLanguage(selected)
-                }
-                let lang = viewModel.podcastLanguage
-                guard !lang.isEmpty else {
-                    let deviceCode = Locale.current.language.languageCode?.identifier ?? "en"
-                    return viewModel.transcript.resolvedLanguage(deviceCode)
-                }
-                return viewModel.transcript.resolvedLanguage(lang)
-            },
-            set: { newValue in
-                if effectiveEngine == .whisper {
-                    viewModel.transcript.selectedTranscriptLanguage = newValue == "auto" ? nil : newValue
-                } else {
-                    viewModel.transcript.selectedTranscriptLanguage = newValue
-                }
-            }
-        )) {
+        @Bindable var transcript = viewModel.transcript
+        Picker("Language", selection: $transcript.languagePickerSelection) {
             if effectiveEngine == .whisper {
                 Text("Auto-detect").tag("auto")
             }
