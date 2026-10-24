@@ -232,6 +232,10 @@ struct EpisodeListView: View {
           // lands inside the transition. Until then the header draws from the
           // model's denormalized mirrors, which don't touch the blob.
           try? await Task.sleep(for: .milliseconds(300))
+          // Popped during the wait: `onDisappear` already ran its cleanup, so a
+          // view model built now would decode the blob on the main actor for a
+          // screen that is gone, and nothing would ever clean it up.
+          guard !Task.isCancelled else { return }
           let vm = EpisodeListViewModel(podcastModel: podcastModel, initialFilter: initialFilter)
           vm.setModelContext(modelContext)
           viewModel = vm
