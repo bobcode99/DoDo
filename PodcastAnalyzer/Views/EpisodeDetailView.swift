@@ -67,6 +67,8 @@ struct EpisodeDetailView: View {
                 .padding(.horizontal)
             }
             .padding(.vertical)
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
         }
         // SpatialTapGesture, not `DragGesture(minimumDistance: 0)`: a zero
         // distance drag claims every touch from the first pixel, so the edge
