@@ -273,6 +273,7 @@ struct MediumWidgetView: View {
           artworkPanel
             .frame(width: geo.size.height, height: geo.size.height)
             .clipped()
+            .accessibilityHidden(true)
 
           // Right: episode info, padded using widgetContentMargins
           VStack(alignment: .leading, spacing: 0) {
