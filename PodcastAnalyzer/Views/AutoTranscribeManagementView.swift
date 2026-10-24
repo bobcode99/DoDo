@@ -27,6 +27,7 @@ struct AutoTranscribeManagementView: View {
   ) private var subscribedPodcasts: [PodcastInfoModel]
 
   @State private var syncManager = TranscriptManager.shared
+  @Bindable private var subtitleSettings = SubtitleSettingsManager.shared
   @State private var showDisableAllConfirmation = false
   @State private var searchText: String = ""
 
@@ -47,12 +48,7 @@ struct AutoTranscribeManagementView: View {
   var body: some View {
     List {
       Section {
-        Toggle(isOn: Binding(
-          get: { SubtitleSettingsManager.shared.autoGenerateTranscripts },
-          set: { SubtitleSettingsManager.shared.autoGenerateTranscripts = $0 }
-        )) {
-          Text("Transcribe Downloads")
-        }
+        Toggle("Transcribe Downloads", isOn: $subtitleSettings.autoGenerateTranscripts)
       } header: {
         Text("All Podcasts")
       } footer: {

@@ -19,7 +19,7 @@ import UserNotifications
 // MARK: - Sync & Notifications
 
 struct SyncSettingsScreen: View {
-  private var syncManager: BackgroundSyncManager { .shared }
+  @Bindable private var syncManager = BackgroundSyncManager.shared
   @State private var cloud = CloudSyncStatus.shared
 
   // The three models in the CloudKit-mirrored configuration
@@ -32,10 +32,7 @@ struct SyncSettingsScreen: View {
   var body: some View {
     List {
       Section {
-        Toggle(isOn: Binding(
-          get: { syncManager.isBackgroundSyncEnabled },
-          set: { syncManager.isBackgroundSyncEnabled = $0 }
-        )) {
+        Toggle(isOn: $syncManager.isBackgroundSyncEnabled) {
           VStack(alignment: .leading, spacing: 2) {
             Text("Background Sync")
             if let lastSync = syncManager.lastSyncDate {
@@ -46,10 +43,7 @@ struct SyncSettingsScreen: View {
           }
         }
 
-        Toggle(isOn: Binding(
-          get: { syncManager.isNotificationsEnabled },
-          set: { syncManager.isNotificationsEnabled = $0 }
-        )) {
+        Toggle(isOn: $syncManager.isNotificationsEnabled) {
           VStack(alignment: .leading, spacing: 2) {
             Text("New Episode Notifications")
             notificationStatusText
@@ -304,6 +298,7 @@ struct PlaybackSettingsScreen: View {
 
 struct TranscriptSettingsScreen: View {
   @Bindable var viewModel: SettingsViewModel
+  @Bindable private var subtitleSettings = SubtitleSettingsManager.shared
 
   var body: some View {
     List {
@@ -364,30 +359,17 @@ struct TranscriptSettingsScreen: View {
       }
 
       Section {
-        Toggle(isOn: Binding(
-          get: { SubtitleSettingsManager.shared.enableMusicDetection },
-          set: { SubtitleSettingsManager.shared.enableMusicDetection = $0 }
-        )) {
-          Text("Detect Music")
-        }
+        Toggle("Detect Music", isOn: $subtitleSettings.enableMusicDetection)
 
-        if SubtitleSettingsManager.shared.enableMusicDetection {
-          Picker("Music Sensitivity", selection: Binding(
-            get: { SubtitleSettingsManager.shared.musicDetectionSensitivity },
-            set: { SubtitleSettingsManager.shared.musicDetectionSensitivity = $0 }
-          )) {
+        if subtitleSettings.enableMusicDetection {
+          Picker("Music Sensitivity", selection: $subtitleSettings.musicDetectionSensitivity) {
             ForEach(MusicDetectionSensitivity.allCases, id: \.self) { level in
               Text(level.displayName).tag(level)
             }
           }
         }
 
-        Toggle(isOn: Binding(
-          get: { SubtitleSettingsManager.shared.splitLongAudio },
-          set: { SubtitleSettingsManager.shared.splitLongAudio = $0 }
-        )) {
-          Text("Split Long Audio")
-        }
+        Toggle("Split Long Audio", isOn: $subtitleSettings.splitLongAudio)
       } header: {
         Text("Advanced")
       } footer: {
@@ -452,24 +434,18 @@ struct TranscriptSettingsScreen: View {
 // MARK: - Translation
 
 struct TranslationSettingsScreen: View {
+  @Bindable private var subtitleSettings = SubtitleSettingsManager.shared
+
   var body: some View {
     List {
       Section {
-        Picker("Language", selection: Binding(
-          get: { SubtitleSettingsManager.shared.targetLanguage },
-          set: { SubtitleSettingsManager.shared.targetLanguage = $0 }
-        )) {
+        Picker("Language", selection: $subtitleSettings.targetLanguage) {
           ForEach(TranslationTargetLanguage.allCases, id: \.self) { language in
             Text(language.displayName).tag(language)
           }
         }
 
-        Toggle(isOn: Binding(
-          get: { SubtitleSettingsManager.shared.autoTranslateOnLoad },
-          set: { SubtitleSettingsManager.shared.autoTranslateOnLoad = $0 }
-        )) {
-          Text("Translate Automatically")
-        }
+        Toggle("Translate Automatically", isOn: $subtitleSettings.autoTranslateOnLoad)
       } footer: {
         Text("Target language for transcripts and episode descriptions. Translating automatically runs as soon as a transcript loads.")
       }
@@ -775,6 +751,7 @@ struct GeneralSettingsScreen: View {
   @Bindable var viewModel: SettingsViewModel
   @State private var showingRegions = false
   @State private var regions = DiscoveryRegions.shared
+  @Bindable private var languageManager = LanguageManager.shared
 
   /// Flags of the ticked regions, or a count once there are too many to read
   /// at a glance in a settings row.
@@ -788,10 +765,7 @@ struct GeneralSettingsScreen: View {
   var body: some View {
     List {
       Section {
-        Picker("App Language", selection: Binding(
-          get: { LanguageManager.shared.appLanguage },
-          set: { LanguageManager.shared.appLanguage = $0 }
-        )) {
+        Picker("App Language", selection: $languageManager.appLanguage) {
           ForEach(LanguageManager.availableLanguages) { language in
             Text(language.displayName).tag(language.id)
           }
