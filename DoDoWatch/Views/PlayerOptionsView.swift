@@ -79,6 +79,7 @@ struct PlayerOptionsView: View {
                 Spacer()
                 if player.rate == rate {
                   Image(systemName: "checkmark")
+                    .accessibilityHidden(true)
                 }
               }
             }

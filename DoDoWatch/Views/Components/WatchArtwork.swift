@@ -33,6 +33,7 @@ struct WatchArtwork: View {
     }
     .frame(width: size, height: size)
     .clipShape(.rect(cornerRadius: size * 0.22))
+    .accessibilityHidden(true)
   }
 
   @ViewBuilder
