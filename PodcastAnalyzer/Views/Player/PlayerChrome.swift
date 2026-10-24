@@ -28,11 +28,13 @@ struct PlayerVolumeRow: View {
             Image(systemName: "speaker.fill")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             SystemVolumeSlider()
                 .frame(height: 44)
             Image(systemName: "speaker.wave.3.fill")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 32)
         #endif
