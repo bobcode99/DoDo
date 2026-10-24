@@ -16,6 +16,8 @@ struct FilterChip: View {
   var body: some View {
     Button(action: action) {
       chipLabel
+        .frame(minHeight: 44)
+        .contentShape(.rect)
     }
     .buttonStyle(.plain)
     // Selection is otherwise only a fill colour, which VoiceOver can't see.
