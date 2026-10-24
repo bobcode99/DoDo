@@ -286,26 +286,24 @@ private struct TranscriptConfigBanner: View {
   var body: some View {
     ScrollView(.horizontal) {
       HStack(spacing: 8) {
-        ConfigChip(icon: engine.systemImage, label: engine.displayName, tint: .blue)
+        ConfigChip(icon: engine.systemImage, label: Text(engine.displayName), tint: .blue)
 
         switch engine {
         case .appleSpeech, .yapServer:
           ConfigChip(
             icon: "rectangle.split.3x1",
-            label: settings.splitLongAudio
-              ? String(localized: "Split: On")
-              : String(localized: "Split: Off"),
+            label: settings.splitLongAudio ? Text("Split: On") : Text("Split: Off"),
             tint: settings.splitLongAudio ? .green : .secondary
           )
           ConfigChip(
             icon: "music.note",
             label: settings.enableMusicDetection
-              ? String(localized: "Music: \(settings.musicDetectionSensitivity.displayName)")
-              : String(localized: "Music: Off"),
+              ? Text("Music: \(settings.musicDetectionSensitivity.displayName)")
+              : Text("Music: Off"),
             tint: settings.enableMusicDetection ? .purple : .secondary
           )
         case .whisper:
-          ConfigChip(icon: "cpu", label: whisper.selectedModel.displayName, tint: .indigo)
+          ConfigChip(icon: "cpu", label: Text(whisper.selectedModel.displayName), tint: .indigo)
         }
       }
       .padding(.vertical, 2)
@@ -316,14 +314,14 @@ private struct TranscriptConfigBanner: View {
 
 struct ConfigChip: View {
   let icon: String
-  let label: String
+  let label: Text
   var tint: Color = .blue
 
   var body: some View {
     HStack(spacing: 4) {
       Image(systemName: icon)
         .font(.caption2)
-      Text(label)
+      label
         .font(.caption.weight(.medium))
     }
     .padding(.horizontal, 10)

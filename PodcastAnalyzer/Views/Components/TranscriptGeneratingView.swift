@@ -39,16 +39,17 @@ struct TranscriptGeneratingView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
         .padding(.horizontal)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(headline), \(Int(progress * 100)) percent"))
+        .accessibilityLabel(Text("\(Text(headline)), \(Int(progress * 100)) percent"))
     }
 
-    private var headline: String {
+    // LocalizedStringResource, not String(localized:): that reads the system
+    // language, while the app's own language setting arrives through the
+    // environment locale that Text applies.
+    private var headline: LocalizedStringResource {
         if isDownloadingAssets {
-            return engine == .whisper
-                ? String(localized: "Downloading Model…")
-                : String(localized: "Downloading Assets…")
+            return engine == .whisper ? "Downloading Model…" : "Downloading Assets…"
         }
-        return String(localized: "Generating Transcript (\(languageName))…")
+        return "Generating Transcript (\(languageName))…"
     }
 
     // MARK: - Ring
@@ -77,16 +78,16 @@ struct TranscriptGeneratingView: View {
     private struct Stage: Identifiable {
         // Stable identity: titles are unique per pipeline. A fresh UUID here would
         // change every body evaluation and make ForEach rebuild all rows per tick.
-        var id: String { title }
-        let title: String
-        let detail: String?
+        var id: String { title.key }
+        let title: LocalizedStringResource
+        let detail: LocalizedStringResource?
         let state: StageState
         /// Show the per-chunk bar strip under this stage (transcribe step only).
         var showsChunks: Bool = false
     }
 
-    private var partDetail: String? {
-        partProgress.map { String(localized: "Part \(min($0.completed + 1, $0.total))/\($0.total)") }
+    private var partDetail: LocalizedStringResource? {
+        partProgress.map { LocalizedStringResource("Part \(min($0.completed + 1, $0.total))/\($0.total)") }
     }
 
     private var stages: [Stage] {
@@ -109,36 +110,36 @@ struct TranscriptGeneratingView: View {
             done ? .done : (active ? .active : .pending)
         }
         return [
-            Stage(title: String(localized: "Download assets"), detail: nil,
+            Stage(title: "Download assets", detail: nil,
                   state: isDownloadingAssets ? .active : .done),
-            Stage(title: String(localized: "Prepare & split audio"), detail: nil,
+            Stage(title: "Prepare & split audio", detail: nil,
                   state: isDownloadingAssets ? .pending : s(transcribing || merging, splitting)),
-            Stage(title: String(localized: "Transcribe"), detail: partDetail,
+            Stage(title: "Transcribe", detail: partDetail,
                   state: s(merging, transcribing),
                   showsChunks: transcribing && partProgress != nil),
-            Stage(title: String(localized: "Merge & align"), detail: nil,
+            Stage(title: "Merge & align", detail: nil,
                   state: s(progress >= 1, merging)),
         ]
     }
 
     private var whisperStages: [Stage] {
         [
-            Stage(title: String(localized: "Download model"), detail: nil,
+            Stage(title: "Download model", detail: nil,
                   state: isDownloadingAssets ? .active : .done),
-            Stage(title: String(localized: "Transcribe"), detail: nil,
+            Stage(title: "Transcribe", detail: nil,
                   state: isDownloadingAssets ? .pending : (progress >= 0.99 ? .done : .active)),
-            Stage(title: String(localized: "Finalize & align"), detail: nil,
+            Stage(title: "Finalize & align", detail: nil,
                   state: progress >= 0.99 ? .active : .pending),
         ]
     }
 
     private var yapStages: [Stage] {
         [
-            Stage(title: String(localized: "Upload to server"), detail: nil,
+            Stage(title: "Upload to server", detail: nil,
                   state: progress > 0 ? .done : .active),
-            Stage(title: String(localized: "Transcribe on server"), detail: nil,
+            Stage(title: "Transcribe on server", detail: nil,
                   state: progress >= 0.99 ? .done : .active),
-            Stage(title: String(localized: "Finalize"), detail: nil,
+            Stage(title: "Finalize", detail: nil,
                   state: progress >= 0.99 ? .active : .pending),
         ]
     }
@@ -207,16 +208,14 @@ struct TranscriptGeneratingView: View {
     private var chips: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                ConfigChip(icon: engine.systemImage, label: engine.displayName, tint: .blue)
-                ConfigChip(icon: "globe", label: languageName, tint: .teal)
+                ConfigChip(icon: engine.systemImage, label: Text(engine.displayName), tint: .blue)
+                ConfigChip(icon: "globe", label: Text(languageName), tint: .teal)
 
                 switch engine {
                 case .appleSpeech:
                     ConfigChip(
                         icon: "rectangle.split.3x1",
-                        label: settings.splitLongAudio
-                            ? String(localized: "Split: On")
-                            : String(localized: "Split: Off"),
+                        label: settings.splitLongAudio ? Text("Split: On") : Text("Split: Off"),
                         tint: settings.splitLongAudio ? .green : .secondary)
                     musicChip
                 case .yapServer:
@@ -224,7 +223,7 @@ struct TranscriptGeneratingView: View {
                 case .whisper:
                     ConfigChip(
                         icon: "cpu",
-                        label: WhisperModelManager.shared.selectedModel.displayName,
+                        label: Text(WhisperModelManager.shared.selectedModel.displayName),
                         tint: .indigo)
                 }
 
@@ -233,7 +232,7 @@ struct TranscriptGeneratingView: View {
                     // when progress stops) — same chip, close enough.
                     ConfigChip(
                         icon: "timer",
-                        label: String(localized: "Timeout: \(Int(timeoutSeconds / 60))m"),
+                        label: Text("Timeout: \(Int(timeoutSeconds / 60))m"),
                         tint: .orange)
                 }
             }
@@ -246,8 +245,8 @@ struct TranscriptGeneratingView: View {
         ConfigChip(
             icon: "music.note",
             label: settings.enableMusicDetection
-                ? String(localized: "Music: \(settings.musicDetectionSensitivity.displayName)")
-                : String(localized: "Music: Off"),
+                ? Text("Music: \(settings.musicDetectionSensitivity.displayName)")
+                : Text("Music: Off"),
             tint: settings.enableMusicDetection ? .purple : .secondary)
     }
 }
