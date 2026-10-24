@@ -104,13 +104,12 @@ struct MiniPlayerBar: View {
           Spacer()
 
           // Play/Pause button
-          Button(action: {
-            handlePlayPauseAction()
-          }) {
+          Button(action: handlePlayPauseAction) {
             Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
               .font(.title2)
-              .frame(width: 32)
               .foregroundStyle(.primary)
+              .frame(width: 44, height: 44)
+              .contentShape(.rect)
           }
           .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
         }
@@ -294,6 +293,8 @@ private struct MiniPlayerProgressBar: View {
       .tint(.blue)
       .frame(height: 3)
       .opacity(audioManager.currentEpisode == nil ? 0 : 1)
+      .accessibilityLabel("Playback position")
+      .accessibilityHidden(audioManager.currentEpisode == nil)
   }
 }
 
