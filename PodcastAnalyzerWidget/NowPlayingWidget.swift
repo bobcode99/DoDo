@@ -369,8 +369,6 @@ struct MediumWidgetView: View {
 // MARK: - Empty Widget View
 
 struct EmptyWidgetView: View {
-  @Environment(\.widgetContentMargins) private var margins
-
   var body: some View {
     VStack(spacing: 8) {
       Image(systemName: "headphones")
