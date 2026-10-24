@@ -26,5 +26,7 @@ struct TypingDotsView: View {
       }
     }
     .onAppear { animate = true }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Generating...")
   }
 }
