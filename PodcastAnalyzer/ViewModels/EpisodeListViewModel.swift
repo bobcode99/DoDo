@@ -663,7 +663,7 @@ final class EpisodeListViewModel {
   func toggleStar(for episode: PodcastEpisodeInfo) {
     guard let model = ensureModel(for: episode) else { return }
     model.isStarred.toggle()
-    try? modelContext?.save()
+    modelContext?.saveOrLog()
   }
 
   func downloadEpisode(_ episode: PodcastEpisodeInfo) {
