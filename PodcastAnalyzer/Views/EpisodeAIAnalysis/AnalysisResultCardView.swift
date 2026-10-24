@@ -22,6 +22,7 @@ struct AnalysisResultCardView: View {
         HStack(spacing: 8) {
           Image(systemName: "exclamationmark.triangle.fill")
             .foregroundStyle(.orange)
+            .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 2) {
             Text("Response Format Warning")
               .font(.caption)
@@ -237,6 +238,7 @@ struct AnalysisResultCardView: View {
             Image(systemName: bullet)
               .foregroundStyle(bulletTint)
               .font(.caption)
+              .accessibilityHidden(true)
             selectableText(item)
           }
         }
@@ -297,6 +299,7 @@ struct AnalysisResultCardView: View {
                 .font(.system(size: 4))
                 .foregroundStyle(.purple)
                 .padding(.top, 6)
+                .accessibilityHidden(true)
               selectableText(point)
                 .font(.caption)
             }
@@ -355,6 +358,7 @@ struct AnalysisResultCardView: View {
             Image(systemName: "questionmark.circle.fill")
               .foregroundStyle(.cyan)
               .font(.caption)
+              .accessibilityHidden(true)
             selectableText(item.question)
               .fontWeight(.medium)
           }
@@ -363,6 +367,7 @@ struct AnalysisResultCardView: View {
               .foregroundStyle(.secondary)
               .font(.caption)
               .padding(.leading, 2)
+              .accessibilityHidden(true)
             selectableText(item.answer)
               .foregroundStyle(.secondary)
           }
@@ -391,6 +396,7 @@ struct AnalysisResultCardView: View {
     return Image(systemName: iconName)
       .foregroundStyle(color)
       .font(.caption)
+      .accessibilityHidden(true)
   }
 
   // MARK: - Selectable Text with Context Menu
