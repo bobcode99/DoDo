@@ -140,7 +140,6 @@ struct PromptPreviewSheet: View {
           }
         }
         .padding()
-        .padding(.bottom, 80)
       }
       .safeAreaInset(edge: .bottom) {
         Button(action: copy) {
