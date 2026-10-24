@@ -338,7 +338,7 @@ struct EpisodeListView: View {
       let info = try await RSSCacheService.shared.fetchPodcast(from: feedUrl)
 
       // Persist to SwiftData with isSubscribed = false (browsed podcast)
-      let model = PodcastInfoModel(podcastInfo: info, lastUpdated: Date(), isSubscribed: false)
+      let model = PodcastInfoModel(podcastInfo: info, lastUpdated: Date.now, isSubscribed: false)
       modelContext.insert(model)
       try modelContext.save()
 

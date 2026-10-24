@@ -162,7 +162,7 @@ struct LibraryView: View {
       // Holding `isVisible` false until the transition lands keeps the query
       // parked for the whole animation. The grid then re-sorts a frame later,
       // animated by LibraryPodcastsGrid's own `.animation(.smooth,)`.
-      let now = Date()
+      let now = Date.now
       let shouldRefreshSections = now.timeIntervalSince(lastAppearRefresh) > 2
       if shouldRefreshSections { lastAppearRefresh = now }
       Task {

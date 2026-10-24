@@ -514,7 +514,7 @@ extension DataManagementView {
       report["appVersion"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
       report["build"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "unknown"
       report["osVersion"] = ProcessInfo.processInfo.operatingSystemVersionString
-      report["date"] = ISO8601DateFormatter().string(from: Date())
+      report["date"] = ISO8601DateFormatter().string(from: Date.now)
       report["subscribedPodcasts"] = podcastCount
       report["trackedEpisodes"] = episodeCount
 

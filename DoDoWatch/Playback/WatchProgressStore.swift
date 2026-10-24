@@ -51,8 +51,8 @@ final class WatchProgressStore {
       row.lastPlaybackPosition = position
       if duration > 0 { row.duration = duration }
       row.isCompleted = isCompleted
-      if isCompleted { row.lastPlayedDate = Date() }
-      row.updatedAt = Date()
+      if isCompleted { row.lastPlayedDate = Date.now }
+      row.updatedAt = Date.now
       row.deviceName = Self.deviceName
     } else {
       context.insert(
@@ -61,8 +61,8 @@ final class WatchProgressStore {
           lastPlaybackPosition: position,
           duration: duration,
           isCompleted: isCompleted,
-          lastPlayedDate: isCompleted ? Date() : nil,
-          updatedAt: Date(),
+          lastPlayedDate: isCompleted ? Date.now : nil,
+          updatedAt: Date.now,
           deviceName: Self.deviceName
         )
       )

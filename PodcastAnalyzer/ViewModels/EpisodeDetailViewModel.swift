@@ -575,7 +575,7 @@ final class EpisodeDetailViewModel {
 
   private func updateLastPlayed() {
     guard let model = episodeModel else { return }
-    model.lastPlayedDate = Date()
+    model.lastPlayedDate = Date.now
     model.playCount += 1
 
     // Save image URL and pub date if not already saved

@@ -19,7 +19,7 @@ import AppKit
 struct ShortcutsDebugView: View {
   @State private var service = ShortcutsAIService.shared
   @State private var events: [DebugEvent] = []
-  @State private var testPayload: String = "Test analysis result from ShortcutsDebugView at \(Date().formatted(date: .omitted, time: .standard))."
+  @State private var testPayload: String = "Test analysis result from ShortcutsDebugView at \(Date.now.formatted(date: .omitted, time: .standard))."
   @State private var isFiring = false
   @State private var lastError: String?
   @State private var observerToken: NSObjectProtocol?
@@ -187,7 +187,7 @@ struct ShortcutsDebugView: View {
           DebugEvent(
             title: ".shortcutsAnalysisCompleted",
             preview: preview,
-            timestamp: Date(),
+            timestamp: Date.now,
             icon: "bell.fill",
             color: .green
           ),
@@ -221,7 +221,7 @@ struct ShortcutsDebugView: View {
             DebugEvent(
               title: "perform() completed",
               preview: "Fired with \(payload.count)-char payload. Notification should appear above this entry.",
-              timestamp: Date(),
+              timestamp: Date.now,
               icon: "checkmark.circle.fill",
               color: .blue
             ),

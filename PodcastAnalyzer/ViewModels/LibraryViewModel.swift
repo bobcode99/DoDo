@@ -455,7 +455,7 @@ final class LibraryViewModel {
       let updatedModel: EpisodeDownloadModel
       if let existingModel = try context.fetch(descriptor).first {
         existingModel.localAudioPath = localPath
-        existingModel.downloadedDate = Date()
+        existingModel.downloadedDate = Date.now
         if let attrs = try? FileManager.default.attributesOfItem(atPath: localPath),
            let size = attrs[.size] as? Int64 {
           existingModel.fileSize = size
@@ -474,7 +474,7 @@ final class LibraryViewModel {
           podcastTitle: podcastTitle,
           audioURL: audioURL,
           localAudioPath: localPath,
-          downloadedDate: Date(),
+          downloadedDate: Date.now,
           imageURL: episode.imageURL ?? info.imageURL,
           pubDate: episode.pubDate
         )
@@ -986,7 +986,7 @@ final class LibraryViewModel {
       if model.localAudioPath != repaired {
         model.localAudioPath = repaired
         if repaired != nil, model.downloadedDate == nil {
-          model.downloadedDate = Date()
+          model.downloadedDate = Date.now
         }
         pathChanges += 1
       }
@@ -1017,7 +1017,7 @@ final class LibraryViewModel {
           podcastTitle: info.title,
           audioURL: audioURL,
           localAudioPath: fullPath,
-          downloadedDate: Date(),
+          downloadedDate: Date.now,
           imageURL: episode.imageURL ?? info.imageURL,
           pubDate: episode.pubDate
         )
@@ -1394,7 +1394,7 @@ final class LibraryViewModel {
 
     // Update models and set lastUpdated timestamp
     var successCount = 0
-    let now = Date()
+    let now = Date.now
     for (id, updatedPodcast) in results {
       if let podcast = updatedPodcast,
          let model = self.podcastInfoModelList.first(where: { $0.id == id }) {

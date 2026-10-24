@@ -446,7 +446,7 @@ final class EpisodeListViewModel {
     // Check if model already exists
     if let existingModel = episodeModels[episodeKey] {
       existingModel.localAudioPath = localPath
-      existingModel.downloadedDate = Date()
+      existingModel.downloadedDate = Date.now
       // Get file size
       if let attrs = try? FileManager.default.attributesOfItem(atPath: localPath),
          let size = attrs[.size] as? Int64 {
@@ -464,7 +464,7 @@ final class EpisodeListViewModel {
         podcastTitle: podcastTitle,
         audioURL: audioURL,
         localAudioPath: localPath,
-        downloadedDate: Date(),
+        downloadedDate: Date.now,
         imageURL: episode.imageURL ?? podcastInfo.imageURL,
         pubDate: episode.pubDate
       )
@@ -583,7 +583,7 @@ final class EpisodeListViewModel {
       // Same bookkeeping BackgroundSyncManager does after a refresh: this is a
       // successful look at the feed, and the Library grid / macOS list treat
       // `lastUpdated` as "when we last saw this feed".
-      podcastModel.lastUpdated = Date()
+      podcastModel.lastUpdated = Date.now
 
       guard case .updated(let updatedPodcast, let cacheHeader) = result else {
         modelContext?.saveOrLog()

@@ -700,7 +700,7 @@ extension HomeViewModel {
     )
 
     if let model = try? context.fetch(descriptor).first {
-      model.upNextDismissedAt = Date()
+      model.upNextDismissedAt = Date.now
     } else {
       let model = EpisodeDownloadModel(
         episodeTitle: episode.episodeInfo.title,
@@ -708,7 +708,7 @@ extension HomeViewModel {
         audioURL: episode.episodeInfo.audioURL ?? "",
         imageURL: episode.imageURL,
         pubDate: episode.episodeInfo.pubDate,
-        upNextDismissedAt: Date()
+        upNextDismissedAt: Date.now
       )
       context.insert(model)
     }
@@ -771,7 +771,7 @@ extension HomeViewModel {
         if selectedRegion == regionToLoad {
           topPodcasts = podcasts
           displayedRegion = regionToLoad
-          popularShowsFetchedAt = Date()
+          popularShowsFetchedAt = Date.now
           hasFreshPopularShowsThisSession = true
         }
       } catch {
@@ -814,7 +814,7 @@ extension HomeViewModel {
       if selectedRegion == regionToLoad {
         topPodcasts = podcasts
         displayedRegion = regionToLoad
-        popularShowsFetchedAt = Date()
+        popularShowsFetchedAt = Date.now
         hasFreshPopularShowsThisSession = true
       }
       logger.info("Loaded \(podcasts.count) top podcasts for \(regionToLoad)")
@@ -885,7 +885,7 @@ extension HomeViewModel {
         )).first {
           existingByRSS.setSubscribed(true)
           existingByRSS.applyPodcastInfo(podcastInfo)
-          existingByRSS.lastUpdated = Date()
+          existingByRSS.lastUpdated = Date.now
           try context.save()
           await loadUpNextEpisodes()
           logger.info("Reused existing podcast row for \(podcastInfo.title)")
@@ -898,14 +898,14 @@ extension HomeViewModel {
         )).first {
           existingByTitle.setSubscribed(true)
           existingByTitle.applyPodcastInfo(podcastInfo)
-          existingByTitle.lastUpdated = Date()
+          existingByTitle.lastUpdated = Date.now
           try context.save()
           await loadUpNextEpisodes()
           logger.info("Reused title-matched podcast row for \(podcastInfo.title)")
           return
         }
 
-        let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date(), isSubscribed: true)
+        let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now, isSubscribed: true)
         context.insert(model)
         try context.save()
         SubscriptionSyncCoordinator.shared.sync(from: model)

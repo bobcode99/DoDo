@@ -119,7 +119,7 @@ nonisolated enum WidgetDataManager {
 
   /// Check if playback data is stale (more than 24 hours old)
   static func isDataStale(_ data: WidgetPlaybackData) -> Bool {
-    Date().timeIntervalSince(data.lastUpdated) > 86400
+    Date.now.timeIntervalSince(data.lastUpdated) > 86400
   }
 
   // MARK: - Artwork Image File (shared container)

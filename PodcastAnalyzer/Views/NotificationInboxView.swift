@@ -42,7 +42,7 @@ final class NotificationInbox {
 
   func add(podcastTitle: String, episodeTitle: String, audioURL: String, imageURL: String) {
     items.insert(
-      Item(date: Date(), podcastTitle: podcastTitle, episodeTitle: episodeTitle,
+      Item(date: Date.now, podcastTitle: podcastTitle, episodeTitle: episodeTitle,
            audioURL: audioURL, imageURL: imageURL),
       at: 0
     )

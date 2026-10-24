@@ -57,7 +57,7 @@ final class PodcastSubscriptionViewModel {
         )).first {
           existingByRSS.setSubscribed(true)
           existingByRSS.applyPodcastInfo(podcastInfo)
-          existingByRSS.lastUpdated = Date()
+          existingByRSS.lastUpdated = Date.now
           try context.save()
           subscriptionSuccess = true
           isSubscribing = false
@@ -72,7 +72,7 @@ final class PodcastSubscriptionViewModel {
         if let existingByTitle = try? context.fetch(existingDescriptor).first {
           existingByTitle.setSubscribed(true)
           existingByTitle.applyPodcastInfo(podcastInfo)
-          existingByTitle.lastUpdated = Date()
+          existingByTitle.lastUpdated = Date.now
           try context.save()
           subscriptionSuccess = true
           isSubscribing = false
@@ -80,7 +80,7 @@ final class PodcastSubscriptionViewModel {
         }
 
         // Create new subscription
-        let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date(), isSubscribed: true)
+        let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now, isSubscribed: true)
         context.insert(model)
         try context.save()
         SubscriptionSyncCoordinator.shared.sync(from: model)

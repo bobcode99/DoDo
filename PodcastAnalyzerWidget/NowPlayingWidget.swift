@@ -41,7 +41,7 @@ struct NowPlayingEntry: TimelineEntry {
 
   static var placeholder: NowPlayingEntry {
     NowPlayingEntry(
-      date: Date(),
+      date: Date.now,
       playbackData: WidgetPlaybackData(
         episodeTitle: "Episode Title",
         podcastTitle: "Podcast Name",
@@ -50,14 +50,14 @@ struct NowPlayingEntry: TimelineEntry {
         currentTime: 300,
         duration: 1800,
         isPlaying: true,
-        lastUpdated: Date()
+        lastUpdated: Date.now
       ),
       artworkData: nil
     )
   }
 
   static var empty: NowPlayingEntry {
-    NowPlayingEntry(date: Date(), playbackData: nil, artworkData: nil)
+    NowPlayingEntry(date: Date.now, playbackData: nil, artworkData: nil)
   }
 }
 
@@ -93,7 +93,7 @@ struct NowPlayingProvider: AppIntentTimelineProvider {
     // slow fallback refresh is enough (frequent .after() just burns the
     // ~40-70/day WidgetKit reload budget and gets throttled anyway).
     guard let data = entry.playbackData, data.isPlaying else {
-      return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60)))
+      return Timeline(entries: [entry], policy: .after(Date.now.addingTimeInterval(30 * 60)))
     }
 
     // Playing: pre-render one entry per minute with an extrapolated playhead so
@@ -101,7 +101,7 @@ struct NowPlayingProvider: AppIntentTimelineProvider {
     // swaps entries from a single timeline for free.
     // ponytail: extrapolates at 1× — playbackRate isn't in the shared payload;
     // add it there if 1.5×/2× listeners notice the bar lagging.
-    let now = Date()
+    let now = Date.now
     let remainingMinutes = max(Int((data.duration - data.currentTime) / 60), 0)
     let horizon = min(remainingMinutes + 1, 30)
     let entries = (0...horizon).map { minute -> NowPlayingEntry in
@@ -131,7 +131,7 @@ struct NowPlayingProvider: AppIntentTimelineProvider {
       return .empty
     }
     let artworkData = WidgetDataManager.readArtworkData(for: data.imageURL)
-    return NowPlayingEntry(date: Date(), playbackData: data, artworkData: artworkData)
+    return NowPlayingEntry(date: Date.now, playbackData: data, artworkData: artworkData)
   }
 }
 

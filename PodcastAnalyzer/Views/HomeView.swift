@@ -251,7 +251,7 @@ private func mockScoredEpisode(
     episodeInfo: PodcastEpisodeInfo(
       title: title,
       podcastEpisodeDescription: "A deep dive into the topic of the week.",
-      pubDate: Date(),
+      pubDate: Date.now,
       audioURL: "https://example.com/\(title).mp3",
       duration: 1800
     ),
@@ -338,7 +338,7 @@ private let mockTrending: [ApplePodcastService.TrendingEpisode] = [
       upNext: mockUpNext,
       popularShows: mockPopularShows,
       trending: mockTrending,
-      popularShowsFetchedAt: Date()
+      popularShowsFetchedAt: Date.now
     ))
   }
   .modelContainer(for: PodcastInfoModel.self, inMemory: true)
@@ -349,7 +349,7 @@ private let mockTrending: [ApplePodcastService.TrendingEpisode] = [
     HomeView(viewModel: mockHomeViewModel(
       popularShows: mockPopularShows,
       trending: mockTrending,
-      popularShowsFetchedAt: Date()
+      popularShowsFetchedAt: Date.now
     ))
   }
   .modelContainer(for: PodcastInfoModel.self, inMemory: true)

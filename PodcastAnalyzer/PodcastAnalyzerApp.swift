@@ -100,7 +100,7 @@ struct PodcastAnalyzerApp: App {
       // user reports losing data, which a deleted one cannot.
       logger.error("ModelContainer init failed, rebuilding store: \(error.localizedDescription, privacy: .public)")
       let fm = FileManager.default
-      let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+      let stamp = ISO8601DateFormatter().string(from: Date.now).replacingOccurrences(of: ":", with: "-")
       for configuration in [localConfiguration, cloudConfiguration] {
         let storeURL = configuration.url
         for path in [storeURL.path, storeURL.path + "-wal", storeURL.path + "-shm"] {

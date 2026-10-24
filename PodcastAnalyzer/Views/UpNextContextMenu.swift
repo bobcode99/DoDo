@@ -194,7 +194,7 @@ struct UpNextContextMenu: View {
     episodeInfo: PodcastEpisodeInfo(
       title: "Understanding Swift Concurrency",
       podcastEpisodeDescription: "A deep dive into async/await",
-      pubDate: Date(),
+      pubDate: Date.now,
       audioURL: "https://example.com/episode.mp3",
       duration: 1800
     ),

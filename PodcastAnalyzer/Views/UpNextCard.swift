@@ -121,7 +121,7 @@ private func mockUpNextEpisode(
     episodeInfo: PodcastEpisodeInfo(
       title: title,
       podcastEpisodeDescription: "A deep dive into async/await patterns",
-      pubDate: Date(),
+      pubDate: Date.now,
       audioURL: "https://example.com/episode.mp3",
       duration: 1800
     ),

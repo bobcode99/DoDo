@@ -144,7 +144,7 @@ struct PodcastContextMenu: ViewModifier {
     do {
       let updatedPodcast = try await rssService.fetchPodcast(from: podcast.rssUrl)
       podcast.applyPodcastInfo(updatedPodcast)
-      podcast.lastUpdated = Date()
+      podcast.lastUpdated = Date.now
       try modelContext.save()
     } catch {
       onError?("Failed to refresh: \(error.localizedDescription)")

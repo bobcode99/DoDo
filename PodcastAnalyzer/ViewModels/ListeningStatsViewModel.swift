@@ -26,11 +26,11 @@ enum TimePeriod: String, CaseIterable, Identifiable {
     let calendar = Calendar.current
     switch self {
     case .oneMonth:
-      return calendar.date(byAdding: .month, value: -1, to: Date())
+      return calendar.date(byAdding: .month, value: -1, to: Date.now)
     case .threeMonths:
-      return calendar.date(byAdding: .month, value: -3, to: Date())
+      return calendar.date(byAdding: .month, value: -3, to: Date.now)
     case .oneYear:
-      return calendar.date(byAdding: .year, value: -1, to: Date())
+      return calendar.date(byAdding: .year, value: -1, to: Date.now)
     case .allTime:
       return nil
     }

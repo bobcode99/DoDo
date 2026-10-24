@@ -27,7 +27,7 @@ final class WatchDownloadModel {
   /// stale; the directory is recomputed at read time instead.
   var fileName: String = ""
 
-  var downloadedDate: Date = Date()
+  var downloadedDate: Date = Date.now
   var fileSize: Int64 = 0
 
   init(
@@ -37,7 +37,7 @@ final class WatchDownloadModel {
     audioURL: String,
     imageURL: String? = nil,
     fileName: String,
-    downloadedDate: Date = Date(),
+    downloadedDate: Date = Date.now,
     fileSize: Int64 = 0
   ) {
     self.id = id

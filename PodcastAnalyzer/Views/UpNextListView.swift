@@ -106,7 +106,7 @@ struct UpNextListView: View {
       episodeInfo: PodcastEpisodeInfo(
         title: "Understanding Swift Concurrency",
         podcastEpisodeDescription: "A deep dive into async/await",
-        pubDate: Date(),
+        pubDate: Date.now,
         audioURL: "https://example.com/ep1.mp3",
         duration: 1800
       ),
@@ -124,7 +124,7 @@ struct UpNextListView: View {
       episodeInfo: PodcastEpisodeInfo(
         title: "M5 MacBook Pro Review",
         podcastEpisodeDescription: "We review the latest hardware",
-        pubDate: Date().addingTimeInterval(-86400),
+        pubDate: Date.now.addingTimeInterval(-86400),
         audioURL: "https://example.com/ep2.mp3",
         duration: 5400
       ),

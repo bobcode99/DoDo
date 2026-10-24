@@ -299,7 +299,7 @@ struct EpisodeTranscriptView: View {
                 guard autoScrollEnabled,
                       let id = newID,
                       viewModel.transcript.transcriptSearchQuery.isEmpty,
-                      Date() >= suppressAutoScrollUntil else { return }
+                      Date.now >= suppressAutoScrollUntil else { return }
                 withAnimation(.easeInOut(duration: 0.35)) {
                     proxy.scrollTo(id, anchor: .center)
                 }
@@ -307,7 +307,7 @@ struct EpisodeTranscriptView: View {
             .onChange(of: viewModel.transcript.currentMatchIndex) { _, _ in
                 guard !viewModel.transcript.searchMatchIds.isEmpty else { return }
                 let matchId = viewModel.transcript.searchMatchIds[viewModel.transcript.currentMatchIndex]
-                suppressAutoScrollUntil = Date().addingTimeInterval(0.4)
+                suppressAutoScrollUntil = Date.now.addingTimeInterval(0.4)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     proxy.scrollTo(matchId, anchor: .center)
                 }
@@ -315,7 +315,7 @@ struct EpisodeTranscriptView: View {
             .onChange(of: pendingSearchScrollTarget) { _, target in
                 guard let target else { return }
                 pendingSearchScrollTarget = nil
-                suppressAutoScrollUntil = Date().addingTimeInterval(0.45)
+                suppressAutoScrollUntil = Date.now.addingTimeInterval(0.45)
                 withAnimation(.easeInOut(duration: 0.35)) {
                     proxy.scrollTo(target, anchor: .center)
                 }
@@ -323,7 +323,7 @@ struct EpisodeTranscriptView: View {
             .overlay(alignment: .bottomTrailing) {
                 JumpToPlayingPill(isVisible: showJumpToPlaying) {
                     autoScrollEnabled = true
-                    suppressAutoScrollUntil = Date().addingTimeInterval(0.45)
+                    suppressAutoScrollUntil = Date.now.addingTimeInterval(0.45)
                     if let id = activeSentenceID {
                         withAnimation(.easeInOut(duration: 0.4)) {
                             proxy.scrollTo(id, anchor: .center)
