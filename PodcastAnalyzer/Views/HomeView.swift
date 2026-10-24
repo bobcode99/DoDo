@@ -76,18 +76,25 @@ struct TrendingEpisodeDetailDestination: Hashable, Identifiable {
 }
 
 struct HomeView: View {
-  @State private var viewModel: HomeViewModel
+  /// Owned here, apart from `HomeScreen`, so the `@State` initial expression runs
+  /// once: `HomeView()` is rebuilt on every `ContentView` update, and a model
+  /// built in `init` did its disk reads each time before SwiftUI discarded it.
+  @State private var viewModel = HomeViewModel()
+
+  var body: some View {
+    HomeScreen(viewModel: viewModel)
+  }
+}
+
+/// `viewModel` is a parameter so previews can seed Up Next / Popular Shows /
+/// Top Episodes into their populated, empty, and loading states without a
+/// network or model context.
+struct HomeScreen: View {
+  @Bindable var viewModel: HomeViewModel
   @Environment(\.modelContext) private var modelContext
   @State private var showRegionPicker = false
   @State private var showNotificationInbox = false
   @Environment(\.zoomNamespace) private var zoomNamespace
-
-  /// `viewModel` is injectable so previews can seed Up Next / Popular Shows /
-  /// Top Episodes into their populated, empty, and loading states without a
-  /// network or model context — production call sites all use the default.
-  init(viewModel: HomeViewModel = HomeViewModel()) {
-    _viewModel = State(initialValue: viewModel)
-  }
 
   var body: some View {
     ScrollView {
@@ -334,7 +341,7 @@ private let mockTrending: [ApplePodcastService.TrendingEpisode] = [
 
 #Preview("Populated") {
   NavigationStack {
-    HomeView(viewModel: mockHomeViewModel(
+    HomeScreen(viewModel: mockHomeViewModel(
       upNext: mockUpNext,
       popularShows: mockPopularShows,
       trending: mockTrending,
@@ -346,7 +353,7 @@ private let mockTrending: [ApplePodcastService.TrendingEpisode] = [
 
 #Preview("Up Next Empty") {
   NavigationStack {
-    HomeView(viewModel: mockHomeViewModel(
+    HomeScreen(viewModel: mockHomeViewModel(
       popularShows: mockPopularShows,
       trending: mockTrending,
       popularShowsFetchedAt: Date.now
@@ -357,14 +364,14 @@ private let mockTrending: [ApplePodcastService.TrendingEpisode] = [
 
 #Preview("Popular Shows Empty") {
   NavigationStack {
-    HomeView(viewModel: mockHomeViewModel(upNext: mockUpNext))
+    HomeScreen(viewModel: mockHomeViewModel(upNext: mockUpNext))
   }
   .modelContainer(for: PodcastInfoModel.self, inMemory: true)
 }
 
 #Preview("Loading") {
   NavigationStack {
-    HomeView(viewModel: mockHomeViewModel(
+    HomeScreen(viewModel: mockHomeViewModel(
       upNext: mockUpNext,
       isLoadingPopularShows: true,
       isLoadingTrending: true
@@ -375,7 +382,7 @@ private let mockTrending: [ApplePodcastService.TrendingEpisode] = [
 
 #Preview("New User — Nothing Yet") {
   NavigationStack {
-    HomeView(viewModel: mockHomeViewModel())
+    HomeScreen(viewModel: mockHomeViewModel())
   }
   .modelContainer(for: PodcastInfoModel.self, inMemory: true)
 }
