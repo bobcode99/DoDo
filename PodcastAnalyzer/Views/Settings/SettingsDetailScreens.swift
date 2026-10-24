@@ -586,9 +586,7 @@ struct SubscriptionsSettingsScreen: View {
       manager.setModelContext(modelContext)
       Task {
         await manager.importPodcasts(from: feedURLs)
-        await MainActor.run {
-          opmlImportMessage = "Imported \(feedURLs.count) podcast\(feedURLs.count == 1 ? "" : "s")"
-        }
+        opmlImportMessage = "Imported \(feedURLs.count) podcast\(feedURLs.count == 1 ? "" : "s")"
       }
     }
   }

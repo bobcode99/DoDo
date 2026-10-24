@@ -10,13 +10,8 @@
 import AppIntents
 import SwiftUI
 
-#if os(iOS)
-import UIKit
-#else
-import AppKit
-#endif
-
 struct ShortcutsDebugView: View {
+  @Environment(\.openURL) private var openURL
   @State private var service = ShortcutsAIService.shared
   @State private var events: [DebugEvent] = []
   @State private var testPayload: String = "Test analysis result from ShortcutsDebugView at \(Date.now.formatted(date: .omitted, time: .standard))."
@@ -216,35 +211,27 @@ struct ShortcutsDebugView: View {
         intent.analysisResult = payload
         intent.analysisType = AnalysisTypeEntity(type: .summary)
         _ = try await intent.perform()
-        await MainActor.run {
-          events.insert(
-            DebugEvent(
-              title: "perform() completed",
-              preview: "Fired with \(payload.count)-char payload. Notification should appear above this entry.",
-              timestamp: Date.now,
-              icon: "checkmark.circle.fill",
-              color: .blue
-            ),
-            at: 0
-          )
-          isFiring = false
-        }
+        events.insert(
+          DebugEvent(
+            title: "perform() completed",
+            preview: "Fired with \(payload.count)-char payload. Notification should appear above this entry.",
+            timestamp: Date.now,
+            icon: "checkmark.circle.fill",
+            color: .blue
+          ),
+          at: 0
+        )
+        isFiring = false
       } catch {
-        await MainActor.run {
-          lastError = error.localizedDescription
-          isFiring = false
-        }
+        lastError = error.localizedDescription
+        isFiring = false
       }
     }
   }
 
   private func openShortcutsApp() {
     guard let url = URL(string: "shortcuts://") else { return }
-    #if os(iOS)
-    UIApplication.shared.open(url)
-    #else
-    NSWorkspace.shared.open(url)
-    #endif
+    openURL(url)
   }
 }
 

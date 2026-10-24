@@ -378,7 +378,7 @@ final class SettingsViewModel {
         // Hide success message after 2 seconds
         successMessageTask?.cancel()
         successMessageTask = Task { @MainActor in
-          try? await Task.sleep(nanoseconds: 2_000_000_000)
+          try? await Task.sleep(for: .seconds(2))
           if !Task.isCancelled {
             self.successMessage = ""
           }
