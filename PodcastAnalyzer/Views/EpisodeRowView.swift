@@ -320,6 +320,7 @@ struct EpisodeRowView: View {
         .font(.caption)
         .foregroundStyle(.secondary)
         .lineLimit(2, reservesSpace: true)
+        .accessibilityHidden(true)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -352,18 +353,21 @@ struct EpisodeRowView: View {
           Image(systemName: "star.fill")
             .font(.system(size: badgeIconSize))
             .foregroundStyle(.yellow)
+            .accessibilityLabel("Starred")
         }
 
         if isDownloaded {
           Image(systemName: "arrow.down.circle.fill")
             .font(.system(size: badgeIconSize))
             .foregroundStyle(.green)
+            .accessibilityLabel("Downloaded")
         }
 
         if hasCaptions {
           Image(systemName: "captions.bubble.fill")
             .font(.system(size: badgeIconSize))
             .foregroundStyle(.purple)
+            .accessibilityLabel("Transcript")
         } else {
           // Transcript-manager observation is isolated in this subview so
           // the row body doesn't re-render on every transcript progress tick.
@@ -374,12 +378,14 @@ struct EpisodeRowView: View {
           Image(systemName: "sparkles")
             .font(.system(size: badgeIconSize))
             .foregroundStyle(.orange)
+            .accessibilityLabel("AI Analysis")
         }
 
         if isCompleted {
           Image(systemName: "checkmark.circle.fill")
             .font(.system(size: badgeIconSize))
             .foregroundStyle(.green)
+            .accessibilityLabel("Played")
         }
       }
 
