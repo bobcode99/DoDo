@@ -443,14 +443,20 @@ struct TranscriptSettingsScreen: View {
         Button {
           viewModel.cancelTranscriptDownload()
         } label: {
-          Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+          Label("Cancel Download", systemImage: "xmark.circle.fill")
+            .labelStyle(.iconOnly)
+            .foregroundStyle(.secondary)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
       }
     case .ready:
       Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        .accessibilityHidden(true)
     case .simulatorNotSupported:
       Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
+        .accessibilityHidden(true)
     }
   }
 }
@@ -639,8 +645,13 @@ struct AppearanceSettingsScreen: View {
     Section {
       // Swatches first: one tap covers almost everyone, and the full picker
       // stays available underneath for anything else.
-      HStack(spacing: 12) {
+      LazyVGrid(
+        columns: [GridItem(.adaptive(minimum: 44, maximum: 44), spacing: 0)],
+        alignment: .leading,
+        spacing: 0
+      ) {
         ForEach(AccentPreset.allCases) { preset in
+          let isSelected = accentRaw == AppAccentColorDefaults.encode(preset.color)
           Button {
             accentRaw = AppAccentColorDefaults.encode(preset.color)
           } label: {
@@ -648,18 +659,20 @@ struct AppearanceSettingsScreen: View {
               .fill(preset.color)
               .frame(width: 28, height: 28)
               .overlay {
-                if accentRaw == AppAccentColorDefaults.encode(preset.color) {
+                if isSelected {
                   Image(systemName: "checkmark")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
                 }
               }
+              .frame(width: 44, height: 44)
+              .contentShape(.rect)
           }
           .buttonStyle(.plain)
           .accessibilityLabel(preset.titleKey)
+          .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
       }
-      .padding(.vertical, 4)
 
       ColorPicker("Custom Colour", selection: Binding(
         get: { accentColor },
@@ -809,6 +822,7 @@ struct GeneralSettingsScreen: View {
             Image(systemName: "chevron.right")
               .font(.caption.weight(.semibold))
               .foregroundStyle(.tertiary)
+              .accessibilityHidden(true)
           }
         }
       } footer: {

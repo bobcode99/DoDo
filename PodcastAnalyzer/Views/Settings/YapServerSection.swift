@@ -31,12 +31,14 @@ struct YapServerSection: View {
                     Image(systemName: "book")
                         .foregroundStyle(.purple)
                         .frame(width: 24)
+                        .accessibilityHidden(true)
                     Text("Setup Guide")
                         .foregroundStyle(.primary)
                     Spacer()
                     Image(systemName: "arrow.up.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
             }
 
@@ -44,6 +46,7 @@ struct YapServerSection: View {
                 Image(systemName: "network")
                     .foregroundStyle(.blue)
                     .frame(width: 24)
+                    .accessibilityHidden(true)
                 TextField("Server URL", text: $settings.serverURL)
                     .autocorrectionDisabled()
                     #if os(iOS)
@@ -60,6 +63,7 @@ struct YapServerSection: View {
                 Image(systemName: "key.horizontal")
                     .foregroundStyle(.orange)
                     .frame(width: 24)
+                    .accessibilityHidden(true)
                 SecureField("API Key (optional)", text: $settings.apiKey)
                     .autocorrectionDisabled()
                     #if os(iOS)
@@ -76,6 +80,7 @@ struct YapServerSection: View {
                     Image(systemName: "bolt.horizontal.circle")
                         .foregroundStyle(.green)
                         .frame(width: 24)
+                        .accessibilityHidden(true)
                     Text("Test Connection")
                     Spacer()
                     if case .testing = testState {

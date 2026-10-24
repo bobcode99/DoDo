@@ -39,9 +39,9 @@ struct AutoTranscribeManagementView: View {
   }
 
   private func filtered(_ podcasts: [PodcastInfoModel]) -> [PodcastInfoModel] {
-    let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !needle.isEmpty else { return podcasts }
-    return podcasts.filter { $0.title.lowercased().contains(needle) }
+    return podcasts.filter { $0.title.localizedStandardContains(needle) }
   }
 
   var body: some View {
@@ -98,7 +98,7 @@ struct AutoTranscribeManagementView: View {
 
         if enabledPodcasts.isEmpty && otherPodcasts.isEmpty {
           Section {
-            ContentUnavailableView.search(text: searchText)
+            ContentUnavailableView.search
           }
         }
       }
@@ -111,23 +111,23 @@ struct AutoTranscribeManagementView: View {
           Button("Stop All", role: .destructive) {
             showDisableAllConfirmation = true
           }
+          .confirmationDialog(
+            "Stop following \(subscribedPodcasts.count(where: \.autoTranscribeNewEpisodes)) podcasts?",
+            isPresented: $showDisableAllConfirmation,
+            titleVisibility: .visible
+          ) {
+            Button("Disable All", role: .destructive) {
+              for podcast in subscribedPodcasts where podcast.autoTranscribeNewEpisodes {
+                podcast.autoTranscribeNewEpisodes = false
+              }
+              modelContext.saveOrLog()
+            }
+            Button("Cancel", role: .cancel) { }
+          } message: {
+            Text("In-flight transcript jobs continue. Open the progress sheet to cancel them.")
+          }
         }
       }
-    }
-    .confirmationDialog(
-      "Stop following \(subscribedPodcasts.filter({ $0.autoTranscribeNewEpisodes }).count) podcasts?",
-      isPresented: $showDisableAllConfirmation,
-      titleVisibility: .visible
-    ) {
-      Button("Disable All", role: .destructive) {
-        for podcast in subscribedPodcasts where podcast.autoTranscribeNewEpisodes {
-          podcast.autoTranscribeNewEpisodes = false
-        }
-        modelContext.saveOrLog()
-      }
-      Button("Cancel", role: .cancel) { }
-    } message: {
-      Text("In-flight transcript jobs continue. Open the progress sheet to cancel them.")
     }
   }
 
@@ -141,6 +141,7 @@ struct AutoTranscribeManagementView: View {
       Image(systemName: enabled ? "waveform.badge.plus" : "waveform")
         .foregroundStyle(enabled ? .blue : .secondary)
         .frame(width: 28)
+        .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
@@ -153,7 +154,7 @@ struct AutoTranscribeManagementView: View {
       }
       Spacer()
 
-      Toggle("", isOn: Binding(
+      Toggle(title, isOn: Binding(
         get: { podcast.autoTranscribeNewEpisodes },
         set: { newValue in
           podcast.autoTranscribeNewEpisodes = newValue

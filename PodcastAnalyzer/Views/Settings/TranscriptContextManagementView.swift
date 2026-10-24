@@ -137,6 +137,7 @@ struct TranscriptContextManagementView: View {
         if count > 0 {
           Image(systemName: "checkmark.circle.fill")
             .foregroundStyle(.green)
+            .accessibilityHidden(true)
         }
       }
     }

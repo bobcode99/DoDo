@@ -45,12 +45,12 @@ struct DiscoveryRegionsView: View {
         $0.localizedName(in: locale)
           .localizedStandardCompare($1.localizedName(in: locale)) == .orderedAscending
       }
-    let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+    let query = search.trimmingCharacters(in: .whitespaces)
     guard !query.isEmpty else { return pool }
     return pool.filter {
-      $0.localizedName(in: locale).lowercased().contains(query)
-        || $0.name.lowercased().contains(query)
-        || $0.code.contains(query)
+      $0.localizedName(in: locale).localizedStandardContains(query)
+        || $0.name.localizedStandardContains(query)
+        || $0.code.localizedStandardContains(query)
     }
   }
 
@@ -82,6 +82,7 @@ struct DiscoveryRegionsView: View {
       ForEach(regions.enabledStorefronts) { region in
         HStack {
           Text(region.flag).font(.title2)
+            .accessibilityHidden(true)
           Text(region.localizedName(in: locale))
           Spacer()
           if !Storefront.isKnown(region.code) {
@@ -94,8 +95,11 @@ struct DiscoveryRegionsView: View {
           Button {
             regions.toggle(region.code)
           } label: {
-            Image(systemName: "minus.circle.fill")
+            Label("Remove \(region.localizedName(in: locale))", systemImage: "minus.circle.fill")
+              .labelStyle(.iconOnly)
               .foregroundStyle(regions.enabled.count > 1 ? .red : .secondary)
+              .frame(minWidth: 44, minHeight: 44)
+              .contentShape(.rect)
           }
           .buttonStyle(.plain)
           .disabled(regions.enabled.count <= 1)
@@ -179,10 +183,12 @@ struct DiscoveryRegionsView: View {
         } label: {
           HStack {
             Text(region.flag).font(.title2)
+              .accessibilityHidden(true)
             Text(region.localizedName(in: locale)).foregroundStyle(.primary)
             Spacer()
             Image(systemName: "plus.circle")
               .foregroundStyle(.tint)
+              .accessibilityHidden(true)
           }
         }
       }

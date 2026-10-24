@@ -12,8 +12,6 @@ import SwiftUI
 /// Settings section for downloading / managing WhisperKit models.
 /// Shown inline inside the List when the user selects the Whisper engine.
 struct WhisperModelsSection: View {
-  private var manager: WhisperModelManager { .shared }
-
   var body: some View {
     Section {
       ForEach(WhisperModelVariant.allCases.filter { $0.isSuitableForCurrentPlatform }) { variant in
@@ -35,48 +33,61 @@ struct WhisperModelRow: View {
     let status = manager.status(for: variant)
     let isSelected = manager.selectedModel == variant
 
-    Button {
-      if status.isReady {
-        manager.setSelectedModel(variant)
-      }
-    } label: {
-      HStack(spacing: 12) {
-        // Selected indicator
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-          .foregroundStyle(isSelected ? .blue : .secondary)
-          .frame(width: 20)
+    // The row's select button and its download / cancel / delete button are
+    // siblings: a Button nested inside another Button's label is folded into
+    // it for VoiceOver, so the inner action could not be focused.
+    HStack(spacing: 12) {
+      Button {
+        if status.isReady {
+          manager.setSelectedModel(variant)
+        }
+      } label: {
+        HStack(spacing: 12) {
+          // Selected indicator
+          Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .foregroundStyle(isSelected ? .blue : .secondary)
+            .frame(width: 20)
+            .accessibilityHidden(true)
 
-        VStack(alignment: .leading, spacing: 2) {
-          HStack(spacing: 6) {
-            Text(variant.displayName)
-              .fontWeight(isSelected ? .semibold : .regular)
-            Text(variant.approximateSize)
-              .font(.caption)
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Text(variant.displayName)
+                .fontWeight(isSelected ? .semibold : .regular)
+              Text(variant.approximateSize)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+              if variant == .platformDefault {
+                Text("Recommended")
+                  .font(.caption2)
+                  .padding(.horizontal, 5)
+                  .padding(.vertical, 2)
+                  .background(Color.blue.opacity(0.15))
+                  .foregroundStyle(.blue)
+                  .clipShape(.capsule)
+              }
+            }
+            Text(variant.accuracyNote)
+              .font(.caption2)
               .foregroundStyle(.secondary)
-            if variant == .platformDefault {
-              Text("Recommended")
-                .font(.caption2)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Color.blue.opacity(0.15))
-                .foregroundStyle(.blue)
-                .clipShape(.capsule)
+            if case .error(let message) = status {
+              Text(message)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(2)
             }
           }
-          Text(variant.accuracyNote)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+
+          Spacer()
         }
-
-        Spacer()
-
-        // Status / action
-        whisperModelAction(for: variant, status: status)
+        .contentShape(.rect)
       }
-      .padding(.vertical, 2)
-      .contentShape(.rect)
+      .buttonStyle(.plain)
+      .accessibilityAddTraits(isSelected ? .isSelected : [])
+
+      // Status / action
+      whisperModelAction(for: variant, status: status)
     }
-    .buttonStyle(.plain)
+    .padding(.vertical, 2)
   }
 
   @ViewBuilder
@@ -104,26 +115,31 @@ struct WhisperModelRow: View {
         Button {
           manager.cancelDownload(variant)
         } label: {
-          Image(systemName: "xmark.circle.fill")
+          Label("Cancel download", systemImage: "xmark.circle.fill")
+            .labelStyle(.iconOnly)
             .foregroundStyle(.secondary)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Cancel download")
       }
 
     case .ready:
       HStack(spacing: 8) {
         Image(systemName: "checkmark.circle.fill")
           .foregroundStyle(.green)
+          .accessibilityHidden(true)
         Button {
           manager.deleteModel(variant)
         } label: {
-          Image(systemName: "trash")
+          Label("Delete \(variant.displayName)", systemImage: "trash")
+            .labelStyle(.iconOnly)
             .foregroundStyle(.red)
             .font(.caption)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Delete \(variant.displayName)")
       }
 
     case .error(let message):
