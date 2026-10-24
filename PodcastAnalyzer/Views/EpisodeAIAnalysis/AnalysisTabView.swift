@@ -76,6 +76,7 @@ struct AnalysisTabView: View {
           Image(systemName: "exclamationmark.triangle.fill")
             .foregroundStyle(.orange)
             .font(.subheadline)
+            .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 3) {
             Text("Analysis failed — showing previous result")
               .font(.caption)
@@ -167,7 +168,8 @@ struct AnalysisTabView: View {
               .font(.caption)
               .fontWeight(.medium)
             Image(systemName: "chevron.up.chevron.down")
-              .font(.system(size: 10))
+              .imageScale(.small)
+              .accessibilityHidden(true)
           }
           .padding(.horizontal, 10)
           .padding(.vertical, 6)
@@ -225,7 +227,8 @@ struct AnalysisTabView: View {
           Button {
             isFormatFieldFocused = false
           } label: {
-            Image(systemName: "keyboard.chevron.compact.down")
+            Label("Dismiss", systemImage: "keyboard.chevron.compact.down")
+              .labelStyle(.iconOnly)
               .font(.caption)
               .foregroundStyle(.secondary)
               .padding(4)
@@ -252,6 +255,7 @@ struct AnalysisTabView: View {
       Button(action: action) {
         HStack {
           Image(systemName: "sparkles")
+            .accessibilityHidden(true)
           Text(title)
         }
         .frame(maxWidth: .infinity)
@@ -277,6 +281,7 @@ struct AnalysisTabView: View {
     } label: {
       HStack(spacing: 6) {
         Image(systemName: uiState.promptCopied ? "checkmark.circle.fill" : "doc.on.doc")
+          .accessibilityHidden(true)
         Text(uiState.promptCopied ? "Copied — paste into your LLM" : "Copy prompt for external LLM")
       }
       .font(.subheadline)
@@ -329,6 +334,7 @@ struct AnalysisTabView: View {
         Image(systemName: "sparkles")
           .foregroundStyle(.blue)
           .symbolEffect(.pulse)
+          .accessibilityHidden(true)
         Text("Generating...")
           .font(.subheadline)
           .fontWeight(.medium)
@@ -399,6 +405,7 @@ struct AnalysisTabView: View {
       Image(systemName: "questionmark.circle.fill")
         .foregroundStyle(.orange)
         .font(.subheadline)
+        .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 3) {
         Text("Finished, but the model returned nothing")
           .font(.caption)
@@ -423,6 +430,7 @@ struct AnalysisTabView: View {
         Image(systemName: "xmark.circle.fill")
           .foregroundStyle(.red)
           .font(.subheadline)
+          .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: 3) {
           Text(isRetry ? "Analysis failed" : "Regeneration failed")
@@ -476,6 +484,7 @@ struct AnalysisTabView: View {
               Image(systemName: "sparkles")
                 .foregroundStyle(.blue)
                 .symbolEffect(.pulse)
+                .accessibilityHidden(true)
 
               Text(message)
                 .font(.subheadline)
@@ -502,6 +511,7 @@ struct AnalysisTabView: View {
         HStack {
           Image(systemName: "exclamationmark.triangle.fill")
             .foregroundStyle(.red)
+            .accessibilityHidden(true)
           Text(message)
             .font(.caption)
             .foregroundStyle(.red)
