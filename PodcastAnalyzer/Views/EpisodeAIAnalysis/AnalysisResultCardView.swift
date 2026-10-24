@@ -8,16 +8,12 @@
 
 import SwiftUI
 
-#if os(iOS)
-import UIKit
-#else
-import AppKit
-#endif
-
 struct AnalysisResultCardView: View {
   let result: CloudAnalysisResult
   let viewModel: EpisodeDetailViewModel
   let uiState: AIAnalysisUIState
+
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -417,11 +413,7 @@ struct AnalysisResultCardView: View {
             withAllowedCharacters: .urlQueryAllowed),
             let url = URL(string: "https://www.google.com/search?q=\(query)")
           {
-            #if os(iOS)
-            UIApplication.shared.open(url)
-            #else
-            NSWorkspace.shared.open(url)
-            #endif
+            openURL(url)
           }
         } label: {
           Label("Search Web", systemImage: "magnifyingglass")
