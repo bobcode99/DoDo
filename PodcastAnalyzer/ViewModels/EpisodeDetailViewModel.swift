@@ -665,7 +665,7 @@ final class EpisodeDetailViewModel {
         try await operation()
       }
       group.addTask {
-        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        try await Task.sleep(for: .seconds(seconds))
         throw CancellationError()
       }
       let result = try await group.next()!
@@ -675,7 +675,7 @@ final class EpisodeDetailViewModel {
   }
 
   private func shareWithURL(_ urlString: String?) {
-    guard let urlString = urlString, let url = URL(string: urlString) else {
+    guard let urlString, let url = URL(string: urlString) else {
       logger.warning("No URL available for sharing")
       return
     }
