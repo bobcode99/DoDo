@@ -141,23 +141,13 @@ struct PodcastSearchView: View {
     // MARK: - Empty Search View
 
     private var emptySearchView: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 50))
-                .foregroundStyle(.secondary)
-            Text("Search for podcasts")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Text(selectedTab == .applePodcasts
-                 ? "Find new podcasts to subscribe"
-                 : "Search your subscribed podcasts and episodes")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-            Spacer()
-        }
+        ContentUnavailableView(
+            "Search for podcasts",
+            systemImage: "magnifyingglass",
+            description: Text(selectedTab == .applePodcasts
+                ? "Find new podcasts to subscribe"
+                : "Search your subscribed podcasts and episodes")
+        )
     }
 
     // MARK: - Apple Podcasts Results
@@ -224,12 +214,7 @@ struct PodcastSearchView: View {
     private var libraryResultsView: some View {
         Group {
             if filteredPodcasts.isEmpty && filteredEpisodes.isEmpty {
-                VStack {
-                    Spacer()
-                    Text("No results in your library")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
+                ContentUnavailableView.search
             } else {
                 List {
                     // Podcasts section
@@ -292,24 +277,16 @@ struct PodcastSearchView: View {
             .padding(.vertical, 8)
 
             if searchText.isEmpty {
-                Spacer()
-                Image(systemName: "text.magnifyingglass")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.secondary)
-                Text("Search episode transcripts")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
-                Spacer()
+                ContentUnavailableView(
+                    "Search episode transcripts",
+                    systemImage: "text.magnifyingglass"
+                )
             } else if transcriptSearchVM.isSearching {
                 Spacer()
                 ProgressView()
                 Spacer()
             } else if transcriptSearchVM.results.isEmpty {
-                Spacer()
-                Text("No transcript matches found")
-                    .foregroundStyle(.secondary)
-                Spacer()
+                ContentUnavailableView.search
             } else {
                 List {
                     ForEach(transcriptSearchVM.results) { result in
