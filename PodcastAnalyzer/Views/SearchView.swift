@@ -363,7 +363,8 @@ struct PodcastSearchView: View {
         #if os(iOS)
         if searchPresented {
             dismissKeyboard()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            Task {
+                try? await Task.sleep(for: .milliseconds(800))
                 tabCoordinator?.searchRouter.push(route)
             }
         } else {
