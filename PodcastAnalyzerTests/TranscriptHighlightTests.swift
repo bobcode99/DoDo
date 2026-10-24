@@ -190,6 +190,45 @@ struct TranscriptHighlightTests {
         }
     }
 
+    // MARK: - Sentence identity
+
+    /// Cue numbers come from the file, so a concatenated or hand-edited SRT can
+    /// repeat them. Everything keyed by sentence id (lookups, scroll targets,
+    /// row identity) must still see distinct ids.
+    @Test("Sentence ids stay unique when the SRT repeats cue numbers")
+    func sentenceIDsAreUniqueWhenCueNumbersRepeat() throws {
+        let srt = """
+        1
+        00:00:00,000 --> 00:00:02,000
+        First part.
+
+        1
+        00:00:10,000 --> 00:00:12,000
+        Second part.
+
+        2
+        00:00:20,000 --> 00:00:22,000
+        Third part.
+
+        """
+        let segments = SRTParser.parseSegments(from: srt)
+        try #require(segments.count == 3)
+        let sentences = TranscriptGrouping.groupIntoSentences(segments)
+        try #require(sentences.count == 3)
+        #expect(Set(sentences.map(\.id)).count == 3)
+        #expect(sentences.map(\.text) == ["First part.", "Second part.", "Third part."])
+    }
+
+    @Test("Sentence ids are the first segment's id when cue numbers are unique")
+    func sentenceIDsFollowFirstSegmentWhenUnique() {
+        let segments = [
+            seg(4, start: 0, end: 1, text: "One."),
+            seg(7, start: 1, end: 2, text: "Two."),
+        ]
+        let sentences = TranscriptGrouping.groupIntoSentences(segments)
+        #expect(sentences.map(\.id) == [4, 7])
+    }
+
     // MARK: - Music marker isolation
 
     /// A `[♪ Music]` segment between speech segments must form its own

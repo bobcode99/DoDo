@@ -18,7 +18,8 @@ import SwiftUI
 
 /// A sentence-block composed of one or more SRT segments.
 struct TranscriptSentence: Identifiable {
-    /// Stable id = first segment's id. Survives regrouping.
+    /// Unique within a grouping. The first segment's id, unless an earlier
+    /// sentence already took it. Survives regrouping.
     let id: Int
     let segments: [TranscriptSegment]
 
@@ -84,10 +85,20 @@ enum TranscriptGrouping {
         var group: [TranscriptSegment] = []
         var charCount = 0
         var groupIsCJK = false
+        // Segment ids are the cue numbers from the SRT file, so an imported or
+        // concatenated file can repeat them. Sentence ids key lookups and scroll
+        // targets, so a repeat gets an id past every segment id instead.
+        var usedIDs = Set<Int>()
+        var nextSpareID = (segments.map(\.id).max() ?? 0) + 1
 
         func flush() {
             guard let first = group.first else { return }
-            sentences.append(TranscriptSentence(id: first.id, segments: group))
+            var id = first.id
+            if !usedIDs.insert(id).inserted {
+                id = nextSpareID
+                nextSpareID += 1
+            }
+            sentences.append(TranscriptSentence(id: id, segments: group))
             group = []
             charCount = 0
             groupIsCJK = false
