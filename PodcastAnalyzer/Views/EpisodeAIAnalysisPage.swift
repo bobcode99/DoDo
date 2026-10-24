@@ -38,9 +38,6 @@ struct EpisodeAIAnalysisPage: View {
 
     var body: some View {
         EpisodeAIAnalysisView(viewModel: viewModel)
-            .safeAreaInset(edge: .bottom) {
-                Color.clear.frame(height: 80)
-            }
             .navigationTitle("AI Analysis")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

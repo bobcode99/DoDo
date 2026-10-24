@@ -86,9 +86,6 @@ struct EpisodeDetailView: View {
             tapX: timestampTapX,
             tapY: timestampTapY
         )
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: 80)
-        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             EpisodeDetailToolbarItems(
