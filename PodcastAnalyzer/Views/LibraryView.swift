@@ -37,6 +37,9 @@ struct LibraryView: View {
   /// sub-page re-fires onAppear, and running SwiftData fetches during the nav
   /// transition is what makes the pop animation hitch.
   @State private var lastAppearRefresh = Date.distantPast
+  /// The delayed work `onAppear` schedules after a pop-back. Cancelled on
+  /// disappear so it can't reopen the `@Query` gate behind a pushed screen.
+  @State private var popBackTask: Task<Void, Never>?
   /// Built grid items keyed by podcast id, tagged with the `lastUpdated` stamp
   /// they were derived from. Lets `applyPodcastsIfChanged` reuse items for
   /// podcasts that haven't changed and decode the (expensive) `podcastInfo`
@@ -162,17 +165,18 @@ struct LibraryView: View {
       // Holding `isVisible` false until the transition lands keeps the query
       // parked for the whole animation. The grid then re-sorts a frame later,
       // animated by LibraryPodcastsGrid's own `.animation(.smooth,)`.
-      let now = Date.now
-      let shouldRefreshSections = now.timeIntervalSince(lastAppearRefresh) > 2
-      if shouldRefreshSections { lastAppearRefresh = now }
-      Task {
+      let shouldRefreshSections = Date.now.timeIntervalSince(lastAppearRefresh) > 2
+      popBackTask?.cancel()
+      popBackTask = Task {
         try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled else { return }
         isVisible = true
         applyPodcastsIfChanged(subscribedPodcasts)
         // Re-fetch saved/starred episodes so stars set from Home/Search/Trending
         // (outside the Library tab) surface on return. Throttled because a
         // quick out-and-back would otherwise refetch both sections twice.
         guard shouldRefreshSections else { return }
+        lastAppearRefresh = .now
         await viewModel.refreshSavedEpisodes()
         await viewModel.refreshDownloadedEpisodes()
       }
@@ -209,7 +213,10 @@ struct LibraryView: View {
     // Pushing a NavigationLink fires this, which is exactly what we want: it
     // parks the @Query for as long as a sub-page is on top. `onAppear` re-syncs
     // on the way back.
-    .onDisappear { isVisible = false }
+    .onDisappear {
+      popBackTask?.cancel()
+      isVisible = false
+    }
 
     // Note: Do NOT call viewModel.cleanup() here — LibraryView is a tab root,
     // and pushing a NavigationLink fires onDisappear.  Cleaning up would cancel
