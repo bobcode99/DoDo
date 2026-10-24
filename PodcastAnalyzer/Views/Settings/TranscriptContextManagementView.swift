@@ -92,6 +92,9 @@ struct TranscriptContextManagementView: View {
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
     #endif
+    .navigationDestination(for: PodcastInfoModel.self) { podcast in
+      TranscriptContextEditorView(podcast: podcast)
+    }
     .overlay {
       if displayed.isEmpty {
         ContentUnavailableView(
@@ -122,9 +125,7 @@ struct TranscriptContextManagementView: View {
 
   @ViewBuilder
   private func podcastRow(_ podcast: PodcastInfoModel) -> some View {
-    NavigationLink {
-      TranscriptContextEditorView(podcast: podcast)
-    } label: {
+    NavigationLink(value: podcast) {
       let count = podcast.transcriptionTerms.count
       HStack {
         VStack(alignment: .leading, spacing: 2) {

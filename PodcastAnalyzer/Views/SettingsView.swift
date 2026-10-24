@@ -22,9 +22,7 @@ struct SettingsView: View {
     List {
       // Automation: the things the app does on its own.
       Section {
-        NavigationLink {
-          SyncSettingsScreen()
-        } label: {
+        NavigationLink(value: SettingsRoute.syncNotifications) {
           SettingsRowLabel(
             title: "Sync & Notifications",
             systemImage: "arrow.triangle.2.circlepath",
@@ -33,9 +31,7 @@ struct SettingsView: View {
           )
         }
 
-        NavigationLink {
-          DownloadSettingsScreen(viewModel: viewModel)
-        } label: {
+        NavigationLink(value: SettingsRoute.downloads) {
           SettingsRowLabel(
             title: "Downloads",
             systemImage: "arrow.down.circle.fill",
@@ -44,9 +40,7 @@ struct SettingsView: View {
           )
         }
 
-        NavigationLink {
-          PlaybackSettingsScreen(viewModel: viewModel)
-        } label: {
+        NavigationLink(value: SettingsRoute.playback) {
           SettingsRowLabel(
             title: "Playback",
             systemImage: "play.fill",
@@ -58,9 +52,7 @@ struct SettingsView: View {
 
       // Understanding an episode: transcript in, analysis out.
       Section {
-        NavigationLink {
-          TranscriptSettingsScreen(viewModel: viewModel)
-        } label: {
+        NavigationLink(value: SettingsRoute.transcripts) {
           SettingsRowLabel(
             title: "Transcripts",
             systemImage: "text.quote",
@@ -69,9 +61,7 @@ struct SettingsView: View {
           )
         }
 
-        NavigationLink {
-          AISettingsView()
-        } label: {
+        NavigationLink(value: SettingsRoute.aiAnalysis) {
           SettingsRowLabel(
             title: "AI Analysis",
             systemImage: "sparkles",
@@ -83,9 +73,7 @@ struct SettingsView: View {
           )
         }
 
-        NavigationLink {
-          TranslationSettingsScreen()
-        } label: {
+        NavigationLink(value: SettingsRoute.translation) {
           SettingsRowLabel(
             title: "Translation",
             systemImage: "translate",
@@ -97,35 +85,25 @@ struct SettingsView: View {
 
       // The library itself.
       Section {
-        NavigationLink {
-          SubscriptionsSettingsScreen(viewModel: viewModel)
-        } label: {
+        NavigationLink(value: SettingsRoute.subscriptions) {
           SettingsRowLabel(title: "Subscriptions", systemImage: "square.stack.3d.up.fill", tint: .green)
         }
 
-        NavigationLink {
-          ListeningStatsView()
-        } label: {
+        NavigationLink(value: SettingsRoute.listeningStats) {
           SettingsRowLabel(title: "Listening Stats", systemImage: "chart.bar.fill", tint: .pink)
         }
 
-        NavigationLink {
-          DataManagementView()
-        } label: {
+        NavigationLink(value: SettingsRoute.storage) {
           SettingsRowLabel(title: "Storage", systemImage: "externaldrive.fill", tint: .gray)
         }
       }
 
       Section {
-        NavigationLink {
-          AppearanceSettingsScreen(viewModel: viewModel)
-        } label: {
+        NavigationLink(value: SettingsRoute.appearance) {
           SettingsRowLabel(title: "Appearance", systemImage: "paintbrush.fill", tint: .brown)
         }
 
-        NavigationLink {
-          GeneralSettingsScreen(viewModel: viewModel)
-        } label: {
+        NavigationLink(value: SettingsRoute.general) {
           SettingsRowLabel(title: "General", systemImage: "gear", tint: .secondary)
         }
       }
@@ -137,10 +115,38 @@ struct SettingsView: View {
     #endif
     .navigationTitle("Settings")
     .platformToolbarTitleDisplayMode()
+    .navigationDestination(for: SettingsRoute.self) { route in
+      destination(for: route)
+    }
     .onAppear {
       viewModel.loadFeeds(modelContext: modelContext)
       viewModel.checkTranscriptModelStatus()
       WhisperModelManager.shared.checkAllModelStatuses()
+    }
+  }
+}
+
+extension SettingsView {
+  @ViewBuilder
+  fileprivate func destination(for route: SettingsRoute) -> some View {
+    switch route {
+    case .syncNotifications: SyncSettingsScreen()
+    case .downloads: DownloadSettingsScreen(viewModel: viewModel)
+    case .playback: PlaybackSettingsScreen(viewModel: viewModel)
+    case .transcripts: TranscriptSettingsScreen(viewModel: viewModel)
+    case .aiAnalysis: AISettingsView()
+    case .translation: TranslationSettingsScreen()
+    case .subscriptions: SubscriptionsSettingsScreen(viewModel: viewModel)
+    case .listeningStats: ListeningStatsView()
+    case .storage: DataManagementView()
+    case .appearance: AppearanceSettingsScreen(viewModel: viewModel)
+    case .general: GeneralSettingsScreen(viewModel: viewModel)
+    case .autoDownloadShows: AutoDownloadShowsView()
+    case .autoTranscription: AutoTranscribeManagementView()
+    case .transcriptContext: TranscriptContextManagementView()
+    #if DEBUG
+    case .shortcutsDebug: ShortcutsDebugView()
+    #endif
     }
   }
 }

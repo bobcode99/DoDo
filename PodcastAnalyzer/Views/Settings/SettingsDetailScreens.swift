@@ -200,9 +200,7 @@ struct DownloadSettingsScreen: View {
         }
         .disabled(!syncManager.isBackgroundSyncEnabled)
 
-        NavigationLink("Per Show") {
-          AutoDownloadShowsView()
-        }
+        NavigationLink("Per Show", value: SettingsRoute.autoDownloadShows)
       } footer: {
         if syncManager.isBackgroundSyncEnabled {
           Text("New episodes from your subscriptions download automatically. Set Always or Never for individual shows under Per Show.")
@@ -358,17 +356,9 @@ struct TranscriptSettingsScreen: View {
       }
 
       Section {
-        NavigationLink {
-          AutoTranscribeManagementView()
-        } label: {
-          Text("Automatic Transcription")
-        }
+        NavigationLink("Automatic Transcription", value: SettingsRoute.autoTranscription)
 
-        NavigationLink {
-          TranscriptContextManagementView()
-        } label: {
-          Text("Names & Jargon")
-        }
+        NavigationLink("Names & Jargon", value: SettingsRoute.transcriptContext)
       } footer: {
         Text("Names & jargon per podcast bias recognition toward each show's vocabulary, and feed the same terms to AI analysis.")
       }
@@ -841,7 +831,7 @@ struct GeneralSettingsScreen: View {
 
       #if DEBUG
       Section {
-        NavigationLink("Shortcuts Debug") { ShortcutsDebugView() }
+        NavigationLink("Shortcuts Debug", value: SettingsRoute.shortcutsDebug)
       } header: {
         Text("Debug")
       } footer: {
