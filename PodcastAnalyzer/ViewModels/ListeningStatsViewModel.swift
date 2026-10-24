@@ -20,8 +20,6 @@ enum TimePeriod: String, CaseIterable, Identifiable {
 
   var id: String { rawValue }
 
-  var displayName: String { rawValue }
-
   var cutoffDate: Date? {
     let calendar = Calendar.current
     switch self {
@@ -167,7 +165,7 @@ final class ListeningStatsViewModel {
       // Longest consecutive listening streak (days)
       longestStreakDays = computeLongestStreak(from: filtered)
 
-      logger.info("Stats loaded: \(self.totalEpisodesPlayed) episodes, \(String(format: "%.1f", self.totalHoursListened))h, \(self.topPodcasts.count) top podcasts")
+      logger.info("Stats loaded: \(self.totalEpisodesPlayed) episodes, \(self.totalHoursListened, format: .fixed(precision: 1))h, \(self.topPodcasts.count) top podcasts")
     } catch {
       logger.error("Failed to load listening stats: \(error.localizedDescription, privacy: .public)")
     }

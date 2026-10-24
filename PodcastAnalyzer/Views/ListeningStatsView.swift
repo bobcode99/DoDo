@@ -66,7 +66,7 @@ struct ListeningStatsView: View {
   private var timePeriodPicker: some View {
     Picker("Time Period", selection: $viewModel.selectedTimePeriod) {
       ForEach(TimePeriod.allCases) { period in
-        Text(period.displayName).tag(period)
+        Text(period.titleKey).tag(period)
       }
     }
     .pickerStyle(.segmented)
@@ -78,14 +78,14 @@ struct ListeningStatsView: View {
     HStack(spacing: 12) {
       StatCard(
         title: "Hours Listened",
-        value: String(format: "%.1f", viewModel.totalHoursListened),
+        value: Text(viewModel.totalHoursListened, format: .number.precision(.fractionLength(1))),
         icon: "headphones",
         color: .indigo
       )
 
       StatCard(
         title: "Episodes Played",
-        value: "\(viewModel.totalEpisodesPlayed)",
+        value: Text(viewModel.totalEpisodesPlayed, format: .number),
         icon: "play.circle.fill",
         color: .blue
       )
@@ -95,15 +95,16 @@ struct ListeningStatsView: View {
   // MARK: - Streak Card
 
   private var streakCard: some View {
-    HStack {
-      Image(systemName: "flame.fill")
-        .foregroundStyle(.orange)
+    Label {
       Text("Longest streak: **\(viewModel.longestStreakDays) days**")
         .font(.subheadline)
-      Spacer()
+    } icon: {
+      Image(systemName: "flame.fill")
+        .foregroundStyle(.orange)
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(12)
-    .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+    .background(.orange.opacity(0.1), in: .rect(cornerRadius: 10))
   }
 
   // MARK: - Weekly Chart
@@ -130,13 +131,17 @@ struct ListeningStatsView: View {
       .chartYAxis {
         AxisMarks { value in
           AxisGridLine()
-          AxisValueLabel("\(value.as(Double.self).map { String(format: "%.0fh", $0) } ?? "")")
+          AxisValueLabel {
+            if let hours = value.as(Double.self) {
+              hoursText(hours, fractionDigits: 0)
+            }
+          }
         }
       }
       .frame(height: 160)
     }
     .padding()
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    .background(.regularMaterial, in: .rect(cornerRadius: 12))
   }
 
   // MARK: - Top Shows Chart
@@ -154,7 +159,7 @@ struct ListeningStatsView: View {
         .foregroundStyle(.indigo.gradient)
         .cornerRadius(4)
         .annotation(position: .trailing, spacing: 4) {
-          Text(String(format: "%.1fh", stat.totalHours))
+          hoursText(stat.totalHours, fractionDigits: 1)
             .font(.caption2)
             .foregroundStyle(.secondary)
         }
@@ -175,7 +180,7 @@ struct ListeningStatsView: View {
           AxisGridLine()
           AxisValueLabel {
             if let hours = value.as(Double.self) {
-              Text(String(format: "%.0fh", hours))
+              hoursText(hours, fractionDigits: 0)
                 .font(.caption2)
             }
           }
@@ -191,7 +196,7 @@ struct ListeningStatsView: View {
 
   private var topShowsList: some View {
     VStack(alignment: .leading, spacing: 12) {
-      ForEach(Array(viewModel.topPodcasts.enumerated()), id: \.element.id) { index, stat in
+      ForEach(viewModel.topPodcasts.enumerated(), id: \.element.id) { index, stat in
         HStack(spacing: 12) {
           // Rank
           Text("\(index + 1)")
@@ -215,9 +220,13 @@ struct ListeningStatsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-              Label(String(format: "%.1fh", stat.totalHours), systemImage: "clock")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+              Label {
+                hoursText(stat.totalHours, fractionDigits: 1)
+              } icon: {
+                Image(systemName: "clock")
+              }
+              .font(.caption)
+              .foregroundStyle(.secondary)
             }
           }
 
@@ -237,41 +246,54 @@ struct ListeningStatsView: View {
   // MARK: - Empty State
 
   private var emptyState: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "chart.bar")
-        .font(.system(size: 48))
-        .foregroundStyle(.secondary)
+    ContentUnavailableView(
+      "No Listening Data",
+      systemImage: "chart.bar",
+      description: Text("Start listening to episodes to see your stats here")
+    )
+    .padding(.vertical, 40)
+  }
 
-      Text("No Listening Data")
-        .font(.headline)
+  /// Hours in the user's locale, narrow ("3.5h", "3.5小时"), rather than a
+  /// hand-built "%.1fh" that only reads right in English.
+  private func hoursText(_ hours: Double, fractionDigits: Int) -> Text {
+    Text(
+      Measurement(value: hours, unit: UnitDuration.hours),
+      format: .measurement(
+        width: .narrow,
+        usage: .asProvided,
+        numberFormatStyle: .number.precision(.fractionLength(fractionDigits))
+      )
+    )
+  }
+}
 
-      Text("Start listening to episodes to see your stats here")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
+private extension TimePeriod {
+  var titleKey: LocalizedStringKey {
+    switch self {
+    case .oneMonth: "1M"
+    case .threeMonths: "3M"
+    case .oneYear: "1Y"
+    case .allTime: "All"
     }
-    .frame(maxWidth: .infinity)
-    .padding(.vertical, 60)
   }
 }
 
 // MARK: - Stat Card
 
 private struct StatCard: View {
-  let title: String
-  let value: String
+  let title: LocalizedStringKey
+  let value: Text
   let icon: String
   let color: Color
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Image(systemName: icon)
-          .foregroundStyle(color)
-        Spacer()
-      }
+      Image(systemName: icon)
+        .foregroundStyle(color)
+        .accessibilityHidden(true)
 
-      Text(value)
+      value
         .font(.title)
         .bold()
 
@@ -282,5 +304,6 @@ private struct StatCard: View {
     .padding(16)
     .frame(maxWidth: .infinity, alignment: .leading)
     .glassEffect(.regular, in: .rect(cornerRadius: 12))
+    .accessibilityElement(children: .combine)
   }
 }
