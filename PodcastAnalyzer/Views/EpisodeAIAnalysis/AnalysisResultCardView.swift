@@ -236,7 +236,7 @@ struct AnalysisResultCardView: View {
           .fontWeight(.semibold)
           .foregroundStyle(tint)
 
-        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+        ForEach(items.enumerated(), id: \.offset) { _, item in
           HStack(alignment: .top, spacing: 8) {
             Image(systemName: bullet)
               .foregroundStyle(bulletTint)
@@ -284,7 +284,7 @@ struct AnalysisResultCardView: View {
         .fontWeight(.semibold)
         .foregroundStyle(.purple)
 
-      ForEach(Array(topics.enumerated()), id: \.offset) { _, topic in
+      ForEach(topics.enumerated(), id: \.offset) { _, topic in
         VStack(alignment: .leading, spacing: 6) {
           Text(topic.topic)
             .font(.subheadline)
@@ -320,7 +320,7 @@ struct AnalysisResultCardView: View {
         .fontWeight(.semibold)
         .foregroundStyle(.green)
 
-      ForEach(Array(quotes.enumerated()), id: \.offset) { _, quote in
+      ForEach(quotes.enumerated(), id: \.offset) { _, quote in
         VStack(alignment: .leading, spacing: 6) {
           selectableText("\"\(quote.text)\"")
             .font(.subheadline)
@@ -353,7 +353,7 @@ struct AnalysisResultCardView: View {
         .fontWeight(.semibold)
         .foregroundStyle(.cyan)
 
-      ForEach(Array(qaItems.enumerated()), id: \.offset) { _, item in
+      ForEach(qaItems.enumerated(), id: \.offset) { _, item in
         VStack(alignment: .leading, spacing: 6) {
           HStack(alignment: .top, spacing: 8) {
             Image(systemName: "questionmark.circle.fill")
