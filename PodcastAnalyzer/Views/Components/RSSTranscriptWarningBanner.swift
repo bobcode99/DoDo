@@ -29,6 +29,8 @@ struct RSSTranscriptWarningBanner: View {
                 } label: {
                     Text("Regenerate")
                         .font(.caption.weight(.semibold))
+                        .frame(minHeight: 44)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.blue)
@@ -36,7 +38,7 @@ struct RSSTranscriptWarningBanner: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, hasLocalAudio ? 0 : 8)
         .background(Color.orange.opacity(0.1))
     }
 }

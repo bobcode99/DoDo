@@ -510,29 +510,29 @@ struct TranscriptSearchNavigationBar: View {
     let onNext: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 4) {
             Text("\(currentIndex + 1) of \(matchCount)")
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .foregroundStyle(.primary)
+                .padding(.trailing, 8)
 
             Divider()
                 .frame(height: 20)
 
-            Button(action: onPrevious) {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .disabled(matchCount == 0)
+            Button("Previous match", systemImage: "chevron.up", action: onPrevious)
+                .labelStyle(.iconOnly)
+                .font(.subheadline.weight(.semibold))
+                .frame(minWidth: 44, minHeight: 44)
+                .disabled(matchCount == 0)
 
-            Button(action: onNext) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .disabled(matchCount == 0)
+            Button("Next match", systemImage: "chevron.down", action: onNext)
+                .labelStyle(.iconOnly)
+                .font(.subheadline.weight(.semibold))
+                .frame(minWidth: 44, minHeight: 44)
+                .disabled(matchCount == 0)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
         .glassEffect(.regular, in: .capsule)
     }
 }
@@ -618,20 +618,26 @@ struct FullTranscriptContent: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                    .font(.system(size: 14))
+                    .font(.subheadline)
+                    .accessibilityHidden(true)
                 TextField("Search transcript...", text: $searchQuery)
                     .textFieldStyle(.plain)
                     .font(.subheadline)
                 if !searchQuery.isEmpty {
-                    Button(action: { searchQuery = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 14))
+                    Button("Clear", systemImage: "xmark.circle.fill") {
+                        searchQuery = ""
                     }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    // 44pt target; the negative inset keeps the glyph where it was.
+                    .frame(width: 44, height: 44)
+                    .padding(.trailing, -12)
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .frame(minHeight: 44)
             .background(Color.platformSystemGray6)
             .clipShape(.rect(cornerRadius: 10))
             .padding(.horizontal, 16)

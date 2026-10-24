@@ -32,7 +32,6 @@ struct TranscriptStatusStrip: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
         .animation(.snappy(duration: 0.2), value: autoScrollEnabled)
         .animation(.snappy(duration: 0.2), value: viewModel.transcript.transcriptSearchQuery)
         .animation(.snappy(duration: 0.2), value: viewModel.translation.hasExistingTranslation)
@@ -121,6 +120,8 @@ struct TranscriptStatusStrip: View {
         .padding(.vertical, 6)
         .background(languageChipBackground, in: .capsule)
         .foregroundStyle(languageChipForeground)
+        .frame(minHeight: 44)
+        .contentShape(.rect)
     }
 
     @ViewBuilder
@@ -181,6 +182,8 @@ struct TranscriptStatusStrip: View {
                 in: .capsule
             )
             .foregroundStyle(autoScrollEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+            .frame(minHeight: 44)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(autoScrollEnabled ? "Pause auto-scroll" : "Resume auto-scroll")

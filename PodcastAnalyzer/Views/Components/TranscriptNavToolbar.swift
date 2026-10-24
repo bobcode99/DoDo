@@ -33,14 +33,14 @@ struct TranscriptNavToolbar: ToolbarContent {
     // MARK: - Items
 
     private var searchButton: some View {
-        Button {
+        Button(
+            "Search transcript",
+            systemImage: viewModel.transcript.transcriptSearchQuery.isEmpty
+                ? "magnifyingglass"
+                : "magnifyingglass.circle.fill"
+        ) {
             showSearchSheet = true
-        } label: {
-            Image(systemName: viewModel.transcript.transcriptSearchQuery.isEmpty
-                  ? "magnifyingglass"
-                  : "magnifyingglass.circle.fill")
         }
-        .accessibilityLabel("Search transcript")
     }
 
     /// Nothing has been transcribed yet. Every action below except importing
@@ -51,7 +51,7 @@ struct TranscriptNavToolbar: ToolbarContent {
     private var isEmpty: Bool { viewModel.transcript.transcriptSegments.isEmpty }
 
     private var transcriptActionsMenu: some View {
-        Menu {
+        Menu("Transcript actions", systemImage: "doc.text") {
             Section {
                 // A stale date beside no segments describes a transcript that
                 // is not there.
@@ -123,10 +123,7 @@ struct TranscriptNavToolbar: ToolbarContent {
                     Label("Regenerate", systemImage: "arrow.clockwise")
                 }
             }
-        } label: {
-            Image(systemName: "doc.text")
         }
-        .accessibilityLabel("Transcript actions")
     }
 }
 
