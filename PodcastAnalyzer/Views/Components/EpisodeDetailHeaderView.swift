@@ -20,7 +20,7 @@ struct EpisodeDetailHeaderView: View {
     private let titleFont: Font = .title3
     private let podcastTitleFont: Font = .subheadline
     private let metadataFont: Font = .footnote
-    private let statusIconSize: CGFloat = 14
+    private let statusIconSize: Double = 14
     #else
     private let artworkSize: CGFloat = 80
     private let artworkCornerRadius: CGFloat = 10
@@ -28,7 +28,7 @@ struct EpisodeDetailHeaderView: View {
     private let titleFont: Font = .subheadline
     private let podcastTitleFont: Font = .footnote
     private let metadataFont: Font = .caption
-    private let statusIconSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var statusIconSize: Double = 12
     #endif
 
     /// Value-based navigation route built lazily.
@@ -170,7 +170,8 @@ struct EpisodeDetailHeaderView: View {
                         .foregroundStyle(.blue)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(podcastTitleFont.weight(.semibold))
+                    .imageScale(.small)
                     .foregroundStyle(.blue)
             }
         }
@@ -197,12 +198,14 @@ struct EpisodeDetailHeaderView: View {
                 Image(systemName: "star.fill")
                     .font(.system(size: statusIconSize))
                     .foregroundStyle(.yellow)
+                    .accessibilityLabel("Starred")
             }
 
             if viewModel.hasLocalAudio {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.system(size: statusIconSize))
                     .foregroundStyle(.green)
+                    .accessibilityLabel("Downloaded")
             }
 
             switch viewModel.transcript.transcriptState {
@@ -211,6 +214,7 @@ struct EpisodeDetailHeaderView: View {
                     Image(systemName: "captions.bubble.fill")
                         .font(.system(size: statusIconSize))
                         .foregroundStyle(.purple)
+                        .accessibilityLabel("Transcript Available")
                 }
             case .downloadingModel, .transcribing:
                 HStack(spacing: 2) { ProgressView().scaleEffect(0.5) }
@@ -218,18 +222,21 @@ struct EpisodeDetailHeaderView: View {
                 Image(systemName: "captions.bubble.fill")
                     .font(.system(size: statusIconSize))
                     .foregroundStyle(.purple)
+                    .accessibilityLabel("Transcript Available")
             }
 
             if viewModel.aiAnalysis.hasAIAnalysis {
                 Image(systemName: "sparkles")
                     .font(.system(size: statusIconSize))
                     .foregroundStyle(.orange)
+                    .accessibilityLabel("AI Analysis")
             }
 
             if viewModel.isCompleted {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: statusIconSize))
                     .foregroundStyle(.green)
+                    .accessibilityLabel("Played")
             }
         }
     }
