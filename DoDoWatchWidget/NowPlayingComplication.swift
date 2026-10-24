@@ -52,7 +52,7 @@ struct NowPlayingComplicationView: View {
           .font(.system(size: 14))
       }
     case .accessoryInline:
-      Label(inlineText, systemImage: icon)
+      Label { episodeLine } icon: { Image(systemName: icon) }
     case .accessoryCorner:
       Image(systemName: icon)
         .font(.title3)
@@ -65,7 +65,7 @@ struct NowPlayingComplicationView: View {
           .font(.caption2)
           .foregroundStyle(.secondary)
           .lineLimit(1)
-        Text(entry.state.hasEpisode ? entry.state.episodeTitle : "Nothing playing")
+        episodeLine
           .font(.caption)
           .lineLimit(2)
         if entry.state.hasEpisode {
@@ -80,8 +80,10 @@ struct NowPlayingComplicationView: View {
     return entry.state.isPlaying ? "play.fill" : "pause.fill"
   }
 
-  private var inlineText: String {
-    entry.state.hasEpisode ? entry.state.episodeTitle : "Nothing playing"
+  /// Two `Text` values rather than a ternary over strings: the ternary makes the
+  /// fallback a `String`, which `Text` shows verbatim instead of localizing.
+  private var episodeLine: Text {
+    entry.state.hasEpisode ? Text(entry.state.episodeTitle) : Text("Nothing playing")
   }
 }
 
