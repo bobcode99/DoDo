@@ -206,15 +206,15 @@ private struct TranscriptJobRow: View {
   private func trailingControl(for job: TranscriptJob) -> some View {
     switch action {
     case .cancel:
-      Button {
+      Button("Cancel", systemImage: "xmark.circle.fill") {
         manager.cancelJob(episodeTitle: job.episodeTitle, podcastTitle: job.podcastTitle)
-      } label: {
-        Image(systemName: "xmark.circle.fill")
-          .foregroundStyle(.red)
       }
+      .labelStyle(.iconOnly)
       .buttonStyle(.plain)
+      .foregroundStyle(.red)
+      .frame(minWidth: 44, minHeight: 44)
     case .retry:
-      Button {
+      Button("Retry", systemImage: "arrow.clockwise.circle.fill") {
         manager.queueTranscript(
           episodeTitle: job.episodeTitle,
           podcastTitle: job.podcastTitle,
@@ -223,14 +223,15 @@ private struct TranscriptJobRow: View {
           language: job.language,
           engine: job.engine
         )
-      } label: {
-        Image(systemName: "arrow.clockwise.circle.fill")
-          .foregroundStyle(.blue)
       }
+      .labelStyle(.iconOnly)
       .buttonStyle(.plain)
+      .foregroundStyle(.blue)
+      .frame(minWidth: 44, minHeight: 44)
     case .none:
       Image(systemName: "checkmark.circle.fill")
         .foregroundStyle(.green)
+        .accessibilityHidden(true)
     }
   }
 

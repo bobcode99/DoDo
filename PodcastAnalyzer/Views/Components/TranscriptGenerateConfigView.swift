@@ -143,6 +143,7 @@ struct TranscriptGenerateConfigView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(selected ? .blue : .secondary)
                     .frame(width: 28)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(engine.displayName)
@@ -165,6 +166,7 @@ struct TranscriptGenerateConfigView: View {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20))
                     .foregroundStyle(selected ? .blue : Color.secondary.opacity(0.4))
+                    .accessibilityHidden(true)
             }
             .padding(12)
             .frame(maxWidth: .infinity)
@@ -175,6 +177,7 @@ struct TranscriptGenerateConfigView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func engineTagline(_ engine: TranscriptEngine) -> LocalizedStringResource {

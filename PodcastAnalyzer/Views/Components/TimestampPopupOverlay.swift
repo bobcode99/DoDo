@@ -37,10 +37,15 @@ private struct TimestampPopupOverlay: View {
 
     var body: some View {
         if let seconds = tappedSeconds {
-            Color.clear
-                .contentShape(.rect)
-                .onTapGesture { tappedSeconds = nil }
-                .overlay {
+            Button {
+                tappedSeconds = nil
+            } label: {
+                Color.clear
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
+            .overlay {
                     GeometryReader { geo in
                         let popupWidth: CGFloat = 240
                         let popupHeight: CGFloat = 110

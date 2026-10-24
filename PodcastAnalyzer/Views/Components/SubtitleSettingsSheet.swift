@@ -38,9 +38,11 @@ struct SubtitleSettingsSheet: View {
                 if effectiveMode == mode {
                   Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
                 }
               }
             }
+            .accessibilityAddTraits(effectiveMode == mode ? .isSelected : [])
             .disabled(mode.requiresTranslation && !hasTranslation)
           }
         } header: {

@@ -61,11 +61,13 @@ struct TranscribeBackfillSheet: View {
                 if selectedRange == range {
                   Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
                 }
               }
               .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .accessibilityAddTraits(selectedRange == range ? .isSelected : [])
           }
         }
 

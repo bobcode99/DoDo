@@ -47,6 +47,7 @@ struct TranslationLanguagePickerSheet: View {
 
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.blue)
+                                    .accessibilityHidden(true)
                             }
                             .contentShape(.rect)
                         }
@@ -118,6 +119,7 @@ struct TranslationLanguagePickerSheet: View {
                 } else if hasTranslation {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                 }
             }
         }
