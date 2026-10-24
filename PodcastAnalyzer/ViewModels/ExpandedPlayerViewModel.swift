@@ -10,12 +10,6 @@ import Observation
 import SwiftData
 import OSLog
 
-#if os(iOS)
-import UIKit
-#else
-import AppKit
-#endif
-
 private let logger = Logger(subsystem: "com.podcast.analyzer", category: "ExpandedPlayerViewModel")
 
 @MainActor
@@ -205,18 +199,18 @@ final class ExpandedPlayerViewModel {
   }
 
   var currentTimeString: String {
-    formatTime(currentTime)
+    Formatters.formatPlaybackTime(currentTime)
   }
 
   var remainingTimeString: String {
     guard duration > 0 else { return "--:--" }
     let remaining = duration - currentTime
-    return "-" + formatTime(remaining)
+    return "-" + Formatters.formatPlaybackTime(remaining)
   }
 
   var durationString: String {
     guard duration > 0 else { return "--:--" }
-    return formatTime(duration)
+    return Formatters.formatPlaybackTime(duration)
   }
 
   // MARK: - Playback Actions
@@ -254,7 +248,7 @@ final class ExpandedPlayerViewModel {
     // Persist to SwiftData
     guard let model = getOrCreateEpisodeModel() else { return }
     model.isStarred = isStarred
-    try? modelContext?.save()
+    modelContext?.saveOrLog()
   }
 
   func togglePlayed() {
@@ -323,17 +317,17 @@ final class ExpandedPlayerViewModel {
         try await operation()
       }
       group.addTask {
-        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        try await Task.sleep(for: .seconds(seconds))
         throw CancellationError()
       }
-      let result = try await group.next()!
+      guard let result = try await group.next() else { throw CancellationError() }
       group.cancelAll()
       return result
     }
   }
 
   private func shareWithURL(_ urlString: String?) {
-    guard let urlString = urlString, let url = URL(string: urlString) else { return }
+    guard let urlString, let url = URL(string: urlString) else { return }
     PlatformShareSheet.share(url: url)
   }
 
@@ -447,22 +441,6 @@ final class ExpandedPlayerViewModel {
     audioManager.seek(to: segment.startTime)
     if !isPlaying {
       audioManager.resume()
-    }
-  }
-
-  // MARK: - Helpers
-
-  private func formatTime(_ time: TimeInterval) -> String {
-    guard time.isFinite && time >= 0 else { return "0:00" }
-
-    let hours = Int(time) / 3600
-    let minutes = Int(time) / 60 % 60
-    let seconds = Int(time) % 60
-
-    if hours > 0 {
-      return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-      return String(format: "%d:%02d", minutes, seconds)
     }
   }
 
