@@ -113,7 +113,7 @@ struct QuestionAnswerTabView: View {
               .font(.headline)
           }
 
-          ForEach(Array(conversation.enumerated()), id: \.offset) { _, qa in
+          ForEach(conversation, id: \.timestamp) { qa in
             userQuestionBubble(qa.question)
             aiAnswerBubble(qa)
           }
@@ -244,7 +244,7 @@ struct QuestionAnswerTabView: View {
         .font(.caption)
         .foregroundStyle(.secondary)
 
-      ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
+      ForEach(sources.enumerated(), id: \.offset) { _, source in
         Text("\"\(source)\"")
           .font(.caption)
           .italic()
