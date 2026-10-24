@@ -55,8 +55,11 @@ struct ActiveDownloadRow: View {
           )
         } label: {
           LiveDownloadProgressRing(episodeKey: episode.id, size: 22, lineWidth: 2.5, symbol: "stop.fill")
+            .frame(width: 44, height: 44, alignment: .trailing)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Cancel Download")
       }
     }
     .padding(.vertical, 4)
