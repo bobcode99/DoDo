@@ -199,9 +199,6 @@ struct EpisodeTranscriptView: View {
                 showRegenerateConfirmation = false
             }
         }
-        .onChange(of: viewModel.transcript.transcriptSearchQuery) { _, newQuery in
-            viewModel.transcript.updateSearchMatches(query: newQuery)
-        }
         .onChange(of: viewModel.transcript.transcriptSentences.count) { _, _ in
             // If the underlying sentence list changes (regroup after
             // translation toggle, transcript regenerated, etc.) the sticky
@@ -305,8 +302,8 @@ struct EpisodeTranscriptView: View {
                 }
             }
             .onChange(of: viewModel.transcript.currentMatchIndex) { _, _ in
-                guard !viewModel.transcript.searchMatchIds.isEmpty else { return }
-                let matchId = viewModel.transcript.searchMatchIds[viewModel.transcript.currentMatchIndex]
+                guard !viewModel.transcript.searchMatches.isEmpty else { return }
+                let matchId = viewModel.transcript.searchMatches[viewModel.transcript.currentMatchIndex].id
                 suppressAutoScrollUntil = Date.now.addingTimeInterval(0.4)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     proxy.scrollTo(matchId, anchor: .center)

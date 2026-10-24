@@ -190,7 +190,7 @@ struct TranscriptStatusStrip: View {
     // MARK: - Search Match Chip
 
     private var searchMatchChip: some View {
-        let total = viewModel.transcript.searchMatchIds.count
+        let total = viewModel.transcript.searchMatches.count
         let position = total == 0 ? 0 : viewModel.transcript.currentMatchIndex + 1
         return HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")

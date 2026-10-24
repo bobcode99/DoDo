@@ -29,7 +29,7 @@ struct TranscriptSearchSheet: View {
 
                 if localQuery.isEmpty {
                     emptyState
-                } else if viewModel.transcript.searchMatchIds.isEmpty {
+                } else if viewModel.transcript.searchMatches.isEmpty {
                     noResults
                 } else {
                     resultsHeader
@@ -58,7 +58,6 @@ struct TranscriptSearchSheet: View {
         }
         .onChange(of: localQuery) { _, newValue in
             viewModel.transcript.transcriptSearchQuery = newValue
-            viewModel.transcript.updateSearchMatches(query: newValue)
         }
     }
 
@@ -139,7 +138,7 @@ struct TranscriptSearchSheet: View {
     private var resultsHeader: some View {
         // Inflected, not a hand-rolled "s": the suffix was passed to every language
         // as an argument, so zh-Hant read "顯示 64 個結果s".
-        Text("Showing ^[\(viewModel.transcript.searchMatchIds.count) result](inflect: true)")
+        Text("Showing ^[\(viewModel.transcript.searchMatches.count) result](inflect: true)")
             .font(.subheadline)
             .foregroundStyle(.tint)
             .frame(maxWidth: .infinity)
@@ -150,27 +149,20 @@ struct TranscriptSearchSheet: View {
     private var resultsList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                let lookup = sentenceLookup
-                ForEach(Array(viewModel.transcript.searchMatchIds.enumerated()), id: \.element) { index, sentenceID in
-                    if let sentence = lookup[sentenceID] {
-                        TranscriptSearchResultRow(
-                            sentence: sentence,
-                            query: localQuery
-                        )
-                        .contentShape(.rect)
-                        .onTapGesture {
-                            handleSelect(matchIndex: index, sentenceID: sentenceID)
-                        }
-                        Divider().padding(.leading, 16)
+                ForEach(viewModel.transcript.searchMatches.enumerated(), id: \.element.id) { index, sentence in
+                    TranscriptSearchResultRow(
+                        sentence: sentence,
+                        query: localQuery
+                    )
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        handleSelect(matchIndex: index, sentenceID: sentence.id)
                     }
+                    Divider().padding(.leading, 16)
                 }
             }
             .padding(.vertical, 4)
         }
-    }
-
-    private var sentenceLookup: [TranscriptSentence.ID: TranscriptSentence] {
-        Dictionary(uniqueKeysWithValues: viewModel.transcript.groupedSentences.map { ($0.id, $0) })
     }
 
     private func handleSelect(matchIndex: Int, sentenceID: TranscriptSentence.ID) {

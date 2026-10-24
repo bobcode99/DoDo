@@ -79,14 +79,19 @@ final class TranscriptCoordinator {
   var transcriptSegments: [TranscriptSegment] = []
 
   /// In-transcript search query — does not filter rendered rows; drives
-  /// in-place highlighting and the navigation match list.
-  var transcriptSearchQuery: String = ""
+  /// in-place highlighting and the navigation match list. Setting it refreshes
+  /// `searchMatches`, so no view needs to.
+  var transcriptSearchQuery: String = "" {
+    didSet {
+      if transcriptSearchQuery != oldValue { updateSearchMatches(query: transcriptSearchQuery) }
+    }
+  }
 
   /// Precomputed sentence grouping consumed via `transcriptSentences`.
   var groupedSentences: [TranscriptSentence] = []
 
-  /// Search match navigation
-  var searchMatchIds: [TranscriptSentence.ID] = []
+  /// Sentences matching `transcriptSearchQuery`, in transcript order.
+  var searchMatches: [TranscriptSentence] = []
   var currentMatchIndex: Int = 0
 
   // MARK: - RSS Transcript
@@ -491,31 +496,12 @@ final class TranscriptCoordinator {
     }
   }
 
-  func updateSearchMatches(query: String) {
+  private func updateSearchMatches(query: String) {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty else {
-      searchMatchIds = []
-      currentMatchIndex = 0
-      return
-    }
-    var ordered: [TranscriptSentence.ID] = []
-    for sentence in groupedSentences where sentence.text.localizedStandardContains(trimmed) {
-      ordered.append(sentence.id)
-    }
-    searchMatchIds = ordered
+    searchMatches = trimmed.isEmpty
+      ? []
+      : groupedSentences.filter { $0.text.localizedStandardContains(trimmed) }
     currentMatchIndex = 0
-  }
-
-  func nextMatch() -> TranscriptSentence.ID? {
-    guard !searchMatchIds.isEmpty else { return nil }
-    currentMatchIndex = (currentMatchIndex + 1) % searchMatchIds.count
-    return searchMatchIds[currentMatchIndex]
-  }
-
-  func previousMatch() -> TranscriptSentence.ID? {
-    guard !searchMatchIds.isEmpty else { return nil }
-    currentMatchIndex = (currentMatchIndex - 1 + searchMatchIds.count) % searchMatchIds.count
-    return searchMatchIds[currentMatchIndex]
   }
 
   // MARK: - Translation handshake
