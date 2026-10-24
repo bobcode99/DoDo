@@ -161,22 +161,22 @@ final class AIAnalysisCoordinator {
     let settings = AISettingsManager.shared
 
     guard settings.hasConfiguredProvider else {
-      cloudAnalysisState = .error("No API key configured. Go to Settings > AI Settings.")
+      cloudAnalysisState = .error(String(localized: "No API key configured. Go to Settings > AI Settings."))
       return
     }
 
     guard transcriptSource?.hasTranscript ?? false else {
-      cloudAnalysisState = .error("No transcript available. Generate transcript first.")
+      cloudAnalysisState = .error(String(localized: "No transcript available. Generate transcript first."))
       return
     }
 
     guard let audioURL = episode.audioURL, !audioURL.isEmpty else {
-      cloudAnalysisState = .error("Episode has no audio URL — cannot key the analysis job.")
+      cloudAnalysisState = .error(String(localized: "Episode has no audio URL — cannot key the analysis job."))
       return
     }
 
     guard let context = modelContext else {
-      cloudAnalysisState = .error("Model context not available.")
+      cloudAnalysisState = .error(String(localized: "Model context not available."))
       return
     }
 
@@ -209,12 +209,12 @@ final class AIAnalysisCoordinator {
     }
 
     guard settings.hasConfiguredProvider else {
-      cloudQuestionState = .error("No API key configured. Go to Settings > AI Settings.")
+      cloudQuestionState = .error(String(localized: "No API key configured. Go to Settings > AI Settings."))
       return
     }
 
     guard transcriptSource?.hasTranscript ?? false else {
-      cloudQuestionState = .error("No transcript available. Generate transcript first.")
+      cloudQuestionState = .error(String(localized: "No transcript available. Generate transcript first."))
       return
     }
 
@@ -242,7 +242,7 @@ final class AIAnalysisCoordinator {
       #endif
 
       do {
-        self.cloudQuestionState = .analyzing(progress: 0, message: "Processing question...")
+        self.cloudQuestionState = .analyzing(progress: 0, message: String(localized: "Processing question..."))
 
         let service = CloudAIService.shared
 
