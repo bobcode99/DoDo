@@ -88,6 +88,23 @@ struct ExpandedPlayerStoredState {
             #expect(viewModel.podcastModel?.title == "Daily Tech")
         }
     }
+
+    @Test("Downloading from the player uses the show's language")
+    func downloadLanguageFollowsShow() throws {
+        try withStoredEpisode(language: "zh-tw") { context in
+            let viewModel = ExpandedPlayerViewModel()
+            viewModel.setModelContext(context)
+
+            #expect(viewModel.podcastLanguage == "zh-tw")
+        }
+    }
+
+    @Test("Without a stored show the download language falls back to English")
+    func downloadLanguageFallback() {
+        let viewModel = ExpandedPlayerViewModel()
+
+        #expect(viewModel.podcastLanguage == "en")
+    }
 }
 
 }

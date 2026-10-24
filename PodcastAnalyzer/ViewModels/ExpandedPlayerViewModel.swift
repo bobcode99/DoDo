@@ -353,6 +353,13 @@ final class ExpandedPlayerViewModel {
     audioManager.currentEpisode?.audioURL
   }
 
+  /// Feed language of the show behind the current episode; it picks the
+  /// transcript language when a download finishes.
+  var podcastLanguage: String {
+    guard let language = podcastModel?.feedLanguage, !language.isEmpty else { return "en" }
+    return language
+  }
+
   func startDownload() {
     guard let episode = audioManager.currentEpisode else { return }
     // Create a PodcastEpisodeInfo to pass to download manager
@@ -368,7 +375,7 @@ final class ExpandedPlayerViewModel {
     downloadManager.downloadEpisode(
       episode: episodeInfo,
       podcastTitle: episode.podcastTitle,
-      language: "en"  // Default language
+      language: podcastLanguage
     )
   }
 
