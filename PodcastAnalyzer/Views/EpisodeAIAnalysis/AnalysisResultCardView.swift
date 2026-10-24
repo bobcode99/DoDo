@@ -325,8 +325,8 @@ struct AnalysisResultCardView: View {
             .font(.subheadline)
             .italic()
 
-          if let seconds = quote.timeInSeconds {
-            timestampBadge(quote.timestamp!, seconds: seconds)
+          if let timestamp = quote.timestamp, let seconds = quote.timeInSeconds {
+            timestampBadge(timestamp, seconds: seconds)
           }
         }
         .padding()
