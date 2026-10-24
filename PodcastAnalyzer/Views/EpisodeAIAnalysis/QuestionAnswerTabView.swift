@@ -8,13 +8,11 @@
 
 import SwiftUI
 
-#if os(iOS)
-import UIKit
-#endif
-
 struct QuestionAnswerTabView: View {
   let viewModel: EpisodeDetailViewModel
   @Bindable var uiState: AIAnalysisUIState
+  @FocusState private var isQuestionFocused: Bool
+  @Environment(\.openURL) private var openURL
 
   private let settings = AISettingsManager.shared
 
@@ -39,6 +37,7 @@ struct QuestionAnswerTabView: View {
             text: $uiState.questionInput
           )
           .textFieldStyle(.plain)
+          .focused($isQuestionFocused)
           .disabled(!viewModel.hasTranscript)
           .onSubmit {
             submitQuestion()
@@ -48,10 +47,7 @@ struct QuestionAnswerTabView: View {
           if !uiState.questionInput.isEmpty {
             Button(action: {
               uiState.questionInput = ""
-              #if os(iOS)
-              // Hide keyboard when clearing
-              UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-              #endif
+              isQuestionFocused = false
             }) {
               Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(.secondary)
@@ -141,10 +137,7 @@ struct QuestionAnswerTabView: View {
     guard !trimmed.isEmpty, canAnalyze else { return }
     viewModel.aiAnalysis.askCloudQuestion(uiState.questionInput)
     uiState.questionInput = ""
-    #if os(iOS)
-    // Hide keyboard after submitting
-    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    #endif
+    isQuestionFocused = false
   }
 
   /// Right-aligned user question bubble.
@@ -187,11 +180,7 @@ struct QuestionAnswerTabView: View {
             withAllowedCharacters: .urlQueryAllowed),
             let url = URL(string: "https://www.google.com/search?q=\(query)")
           {
-            #if os(iOS)
-            UIApplication.shared.open(url)
-            #else
-            NSWorkspace.shared.open(url)
-            #endif
+            openURL(url)
           }
         } label: {
           Label("Search Web", systemImage: "safari")
