@@ -646,28 +646,26 @@ struct FullTranscriptContent: View {
             Divider()
 
             ScrollViewReader { proxy in
-                ZStack(alignment: .bottom) {
-                    ScrollView {
-                        SentenceBasedTranscriptView(
-                            sentences: sentences,
-                            currentTime: currentTime,
-                            searchQuery: searchQuery,
-                            onSegmentTap: onSegmentTap,
-                            showTimestamps: false,
-                            subtitleMode: effectiveDisplayMode
-                        )
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 16)
-                        .padding(.bottom, !searchQuery.isEmpty && !searchMatchIdsList.isEmpty ? 60 : 0)
-                    }
-                    .onChange(of: activeSentenceID) { _, newId in
-                        if let id = newId, searchQuery.isEmpty {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(id, anchor: .center)
-                            }
+                ScrollView {
+                    SentenceBasedTranscriptView(
+                        sentences: sentences,
+                        currentTime: currentTime,
+                        searchQuery: searchQuery,
+                        onSegmentTap: onSegmentTap,
+                        showTimestamps: false,
+                        subtitleMode: effectiveDisplayMode
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                }
+                .onChange(of: activeSentenceID) { _, newId in
+                    if let id = newId, searchQuery.isEmpty {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(id, anchor: .center)
                         }
                     }
-
+                }
+                .safeAreaInset(edge: .bottom) {
                     if !searchQuery.isEmpty && !searchMatchIdsList.isEmpty {
                         TranscriptSearchNavigationBar(
                             matchCount: searchMatchIdsList.count,
