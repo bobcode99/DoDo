@@ -36,6 +36,7 @@ struct LibraryPodcastRow: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
+                    .accessibilityLabel("Subscribed")
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -84,12 +85,15 @@ struct LibraryEpisodeRow: View {
 
                 if episode.audioURL != nil {
                     Button(action: onPlay) {
-                        Image(systemName: "play.fill")
+                        Label("Play", systemImage: "play.fill")
+                            .labelStyle(.iconOnly)
                             .font(.title3)
                             .foregroundStyle(.white)
                             .frame(width: 32, height: 32)
                             .background(Color.purple)
                             .clipShape(.circle)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
                 }

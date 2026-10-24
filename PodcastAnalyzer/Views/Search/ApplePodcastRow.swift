@@ -40,26 +40,33 @@ struct ApplePodcastRow: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.green)
+                    .accessibilityLabel("Subscribed")
             } else if isSubscribing {
                 ProgressView()
                     .scaleEffect(0.8)
             } else {
-                Button("Subscribe", systemImage: "plus") {
-                    isSubscribing = true
-                    onSubscribe()
-                    // Reset after a delay (subscription will update via @Query)
-                    Task {
-                        try? await Task.sleep(for: .seconds(2))
-                        isSubscribing = false
-                    }
+                Button(action: subscribe) {
+                    Label("Subscribe", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                        .font(.title3)
+                        .foregroundStyle(.blue)
+                        .frame(width: 44, height: 44, alignment: .trailing)
+                        .contentShape(.rect)
                 }
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .foregroundStyle(.blue)
                 .buttonStyle(.plain)
             }
         }
         .padding(.vertical, 4)
         .contentShape(.rect)
+    }
+
+    private func subscribe() {
+        isSubscribing = true
+        onSubscribe()
+        // Reset after a delay (subscription will update via @Query)
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            isSubscribing = false
+        }
     }
 }
