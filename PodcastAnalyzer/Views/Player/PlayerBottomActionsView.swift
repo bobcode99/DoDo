@@ -19,6 +19,8 @@ struct PlayerBottomActionsView: View {
                 }
                 .font(.subheadline)
                 .foregroundStyle(.primary)
+                .frame(minHeight: 44)
+                .contentShape(.rect)
             }
 
             Spacer()
@@ -34,6 +36,8 @@ struct PlayerBottomActionsView: View {
                 }
                 .font(.title3)
                 .foregroundStyle(.secondary)
+                .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                .contentShape(.rect)
             }
             .accessibilityLabel(queueCount > 0 ? "Queue, \(queueCount) items" : "Queue")
         }

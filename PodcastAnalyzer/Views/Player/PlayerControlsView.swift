@@ -65,6 +65,10 @@ struct PlayerControlsView: View {
 
     // MARK: - Pieces
 
+    /// The glyph alone is about 30pt tall; the iOS layout gives each skip button a 44pt target.
+    /// The compact style belongs to the macOS mini bar, which keeps its glyph-sized rows.
+    private var skipHeight: CGFloat? { style == .expanded ? 44 : nil }
+
     private var speedMenu: some View {
         @Bindable var viewModel = viewModel
         return Menu {
@@ -101,9 +105,10 @@ struct PlayerControlsView: View {
                 Image(systemName: "gobackward.\(skipBackwardInterval)")
                     .font(.system(size: skipSize))
                     .foregroundStyle(.primary)
+                    .frame(width: skipFrame, height: skipHeight)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .frame(width: skipFrame)
             .accessibilityLabel("Skip back \(skipBackwardInterval) seconds")
 
             Button(action: viewModel.togglePlayPause) {
@@ -128,9 +133,10 @@ struct PlayerControlsView: View {
                 Image(systemName: "goforward.\(skipForwardInterval)")
                     .font(.system(size: skipSize))
                     .foregroundStyle(.primary)
+                    .frame(width: skipFrame, height: skipHeight)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .frame(width: skipFrame)
             .accessibilityLabel("Skip forward \(skipForwardInterval) seconds")
         }
     }
