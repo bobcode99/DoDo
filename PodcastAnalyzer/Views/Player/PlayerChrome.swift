@@ -26,13 +26,13 @@ struct PlayerVolumeRow: View {
         #if os(iOS)
         HStack(spacing: 12) {
             Image(systemName: "speaker.fill")
-                .font(.system(size: 14))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             SystemVolumeSlider()
                 .frame(height: 44)
             Image(systemName: "speaker.wave.3.fill")
-                .font(.system(size: 14))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
         }
