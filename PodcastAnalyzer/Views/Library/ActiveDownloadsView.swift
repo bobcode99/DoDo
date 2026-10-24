@@ -14,17 +14,11 @@ struct ActiveDownloadsView: View {
   var body: some View {
     Group {
       if viewModel.downloadingEpisodes.isEmpty {
-        VStack(spacing: 16) {
-          Image(systemName: "arrow.down.circle")
-            .font(.system(size: 50))
-            .foregroundStyle(.secondary)
-          Text("No Active Downloads")
-            .font(.headline)
-          Text("Downloads in progress will appear here")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ContentUnavailableView(
+          "No Active Downloads",
+          systemImage: "arrow.down.circle",
+          description: Text("Downloads in progress will appear here")
+        )
       } else {
         List {
           ForEach(viewModel.downloadingEpisodes) { episode in

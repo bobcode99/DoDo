@@ -21,17 +21,11 @@ struct DownloadedPodcastsGridView: View {
   var body: some View {
     Group {
       if viewModel.podcastsWithDownloads.isEmpty && viewModel.downloadingEpisodes.isEmpty {
-        VStack(spacing: 16) {
-          Image(systemName: "arrow.down.circle")
-            .font(.system(size: 50))
-            .foregroundStyle(.secondary)
-          Text("No Downloads")
-            .font(.headline)
-          Text("Downloaded episodes will appear here")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ContentUnavailableView(
+          "No Downloads",
+          systemImage: "arrow.down.circle",
+          description: Text("Downloaded episodes will appear here")
+        )
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 20) {

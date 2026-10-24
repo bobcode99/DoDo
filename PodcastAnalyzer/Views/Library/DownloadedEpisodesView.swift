@@ -115,19 +115,16 @@ struct DownloadedEpisodesView: View {
     return viewModel.downloadingEpisodes.filter { $0.podcastTitle == podcastTitleFilter }
   }
 
+  @ViewBuilder
   private var emptyStateView: some View {
-    VStack(spacing: 16) {
-      Image(systemName: "arrow.down.circle")
-        .font(.system(size: 50))
-        .foregroundStyle(.secondary)
-      Text("No Downloads")
-        .font(.headline)
-      Text("Downloaded episodes will appear here for offline listening")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
+    if viewModel.downloadedSearchText.isEmpty {
+      ContentUnavailableView(
+        "No Downloads",
+        systemImage: "arrow.down.circle",
+        description: Text("Downloaded episodes will appear here for offline listening")
+      )
+    } else {
+      ContentUnavailableView.search
     }
-    .padding()
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

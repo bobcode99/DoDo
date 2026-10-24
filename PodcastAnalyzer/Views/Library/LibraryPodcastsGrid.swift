@@ -68,18 +68,11 @@ struct LibraryPodcastsGrid: View {
   }
 
   private var emptyView: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "square.stack.3d.up")
-        .font(.system(size: 40))
-        .foregroundStyle(.secondary)
-      Text("No Subscriptions")
-        .font(.headline)
-      Text("Search and subscribe to podcasts to build your library")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity)
+    ContentUnavailableView(
+      "No Subscriptions",
+      systemImage: "square.stack.3d.up",
+      description: Text("Search and subscribe to podcasts to build your library")
+    )
     .padding(.vertical, 40)
   }
 }

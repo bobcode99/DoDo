@@ -16,11 +16,12 @@ struct LatestEpisodesView: View {
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
 
   var body: some View {
+    let episodes = viewModel.filteredLatestEpisodes
     Group {
-      if viewModel.latestEpisodes.isEmpty {
+      if episodes.isEmpty {
         emptyStateView
       } else {
-        List(viewModel.filteredLatestEpisodes) { episode in
+        List(episodes) { episode in
           EpisodeRowView(
             libraryEpisode: episode,
             episodeModel: episodeModels[episode.id],
@@ -64,19 +65,16 @@ struct LatestEpisodesView: View {
     }
   }
 
+  @ViewBuilder
   private var emptyStateView: some View {
-    VStack(spacing: 16) {
-      Image(systemName: "clock")
-        .font(.system(size: 50))
-        .foregroundStyle(.secondary)
-      Text("No Episodes")
-        .font(.headline)
-      Text("Subscribe to podcasts to see latest episodes")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
+    if viewModel.latestSearchText.isEmpty {
+      ContentUnavailableView(
+        "No Episodes",
+        systemImage: "clock",
+        description: Text("Subscribe to podcasts to see latest episodes")
+      )
+    } else {
+      ContentUnavailableView.search
     }
-    .padding()
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

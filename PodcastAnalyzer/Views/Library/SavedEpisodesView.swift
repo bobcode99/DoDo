@@ -17,11 +17,12 @@ struct SavedEpisodesView: View {
   @State private var refreshTask: Task<Void, Never>?
 
   var body: some View {
+    let episodes = viewModel.filteredSavedEpisodes
     Group {
-      if viewModel.savedEpisodes.isEmpty {
+      if episodes.isEmpty {
         emptyStateView
       } else {
-        List(viewModel.filteredSavedEpisodes) { episode in
+        List(episodes) { episode in
           EpisodeRowView(
             libraryEpisode: episode,
             episodeModel: episodeModels[episode.id],
@@ -78,19 +79,16 @@ struct SavedEpisodesView: View {
     }
   }
 
+  @ViewBuilder
   private var emptyStateView: some View {
-    VStack(spacing: 16) {
-      Image(systemName: "star")
-        .font(.system(size: 50))
-        .foregroundStyle(.secondary)
-      Text("No Saved Episodes")
-        .font(.headline)
-      Text("Star episodes to save them here for later")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
+    if viewModel.savedSearchText.isEmpty {
+      ContentUnavailableView(
+        "No Saved Episodes",
+        systemImage: "star",
+        description: Text("Star episodes to save them here for later")
+      )
+    } else {
+      ContentUnavailableView.search
     }
-    .padding()
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
