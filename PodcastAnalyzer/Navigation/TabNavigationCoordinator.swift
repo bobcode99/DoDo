@@ -45,15 +45,6 @@ final class TabNavigationCoordinator {
   }
 }
 
-// MARK: - Environment Key
-
-private struct TabNavigationCoordinatorKey: EnvironmentKey {
-  static let defaultValue: TabNavigationCoordinator? = nil
-}
-
 extension EnvironmentValues {
-  var tabNavigationCoordinator: TabNavigationCoordinator? {
-    get { self[TabNavigationCoordinatorKey.self] }
-    set { self[TabNavigationCoordinatorKey.self] = newValue }
-  }
+  @Entry var tabNavigationCoordinator: TabNavigationCoordinator?
 }
