@@ -19,6 +19,7 @@ struct TranscriptionOnboardingPage: View {
           Image(systemName: "text.bubble.fill")
             .font(.system(size: 52))
             .foregroundStyle(.purple.gradient)
+            .accessibilityHidden(true)
           Text("Transcription")
             .font(.largeTitle)
             .bold()

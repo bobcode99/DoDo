@@ -28,54 +28,57 @@ struct RegionOnboardingPage: View {
   }
 
   var body: some View {
-    VStack(spacing: 0) {
-      Spacer()
+    OnboardingPageScaffold {
+      VStack(spacing: 0) {
+        Spacer()
 
-      Image(systemName: "globe")
-        .font(.system(size: 64))
-        .foregroundStyle(.tint)
-        .padding(.bottom, 24)
+        Image(systemName: "globe")
+          .font(.system(size: 64))
+          .foregroundStyle(.tint)
+          .padding(.bottom, 24)
+          .accessibilityHidden(true)
 
-      Text("Where do you listen?")
-        .font(.title)
-        .bold()
-        .multilineTextAlignment(.center)
+        Text("Where do you listen?")
+          .font(.title)
+          .bold()
+          .multilineTextAlignment(.center)
 
-      Text("Pick the countries or regions whose charts you want on Home. You can change this any time in Settings.")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 32)
-        .padding(.top, 8)
+        Text("Pick the countries or regions whose charts you want on Home. You can change this any time in Settings.")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 32)
+          .padding(.top, 8)
 
-      ScrollView {
-        VStack(spacing: 8) {
-          ForEach(suggestions) { region in
-            RegionToggleRow(
-              region: region,
-              isOn: regions.enabled.contains(region.code),
-              // The last one can't be unticked — Home needs somewhere to look.
-              isLocked: regions.enabled.contains(region.code) && regions.enabled.count <= 1,
-              onToggle: { regions.toggle(region.code) }
-            )
+        ScrollView {
+          VStack(spacing: 8) {
+            ForEach(suggestions) { region in
+              RegionToggleRow(
+                region: region,
+                isOn: regions.enabled.contains(region.code),
+                // The last one can't be unticked — Home needs somewhere to look.
+                isLocked: regions.enabled.contains(region.code) && regions.enabled.count <= 1,
+                onToggle: { regions.toggle(region.code) }
+              )
+            }
           }
+          .padding(.horizontal, 24)
+          .padding(.top, 20)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 20)
-      }
-      .frame(maxHeight: 320)
+        .frame(maxHeight: 320)
 
-      Spacer()
+        Spacer()
 
-      Button(action: onNext) {
-        Text("Continue")
-          .font(.headline)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 14)
+        Button(action: onNext) {
+          Text("Continue")
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+        }
+        .buttonStyle(.accentProminent)
+        .padding(.horizontal, 32)
+        .padding(.bottom, 60)
       }
-      .buttonStyle(.accentProminent)
-      .padding(.horizontal, 32)
-      .padding(.bottom, 60)
     }
   }
 }

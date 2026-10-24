@@ -13,82 +13,84 @@ struct WelcomeOnboardingPage: View {
   @State private var languageManager = LanguageManager.shared
 
   var body: some View {
-    VStack(spacing: 0) {
-      Spacer()
+    OnboardingPageScaffold {
+      VStack(spacing: 0) {
+        Spacer()
 
-      Image("dodo-real")
-        .resizable()
-        .scaledToFill()
-        .frame(width: 116, height: 116)
-        .clipShape(.rect(cornerRadius: 26))
-        .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
-        .padding(.bottom, 28)
-        .accessibilityHidden(true)
+        Image("dodo-real")
+          .resizable()
+          .scaledToFill()
+          .frame(width: 116, height: 116)
+          .clipShape(.rect(cornerRadius: 26))
+          .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
+          .padding(.bottom, 28)
+          .accessibilityHidden(true)
 
-      VStack(spacing: 6) {
-        Text("Welcome to\nDoDo")
-          .font(.largeTitle)
-          .bold()
-          .multilineTextAlignment(.center)
+        VStack(spacing: 6) {
+          Text("Welcome to\nDoDo")
+            .font(.largeTitle)
+            .bold()
+            .multilineTextAlignment(.center)
 
-        Text("a Podcast Analyzer")
-          .font(.callout)
-          .italic()
-          .foregroundStyle(.secondary)
+          Text("a Podcast Analyzer")
+            .font(.callout)
+            .italic()
+            .foregroundStyle(.secondary)
 
-        Text("Turn hours of podcasts\ninto minutes of insight.")
-          .font(.body)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
-          .padding(.top, 6)
-      }
-
-      Spacer()
-
-      VStack(spacing: 16) {
-        FeatureRow(
-          icon: "arrow.down.circle.fill",
-          color: .green,
-          title: "Listen Anywhere",
-          description: "Download once, play offline — no signal needed"
-        )
-        FeatureRow(
-          icon: "text.bubble.fill",
-          color: .purple,
-          title: "Every Word, Searchable",
-          description: "Transcripts made on your device. Free and private."
-        )
-        FeatureRow(
-          icon: "sparkles",
-          color: .orange,
-          title: "Skip the Filler",
-          description: "AI summaries and key quotes — get the point in a minute"
-        )
-      }
-      .padding(.horizontal, 28)
-
-      Spacer()
-
-      VStack(spacing: 12) {
-        // Styling lives on the label so the whole pill is tappable — modifiers
-        // outside Button only decorate; the hit target would stay text-sized.
-        Button(action: onNext) {
-          Text("Get Started")
-            .font(.headline)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(.blue, in: .rect(cornerRadius: 14))
+          Text("Turn hours of podcasts\ninto minutes of insight.")
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.top, 6)
         }
-        .buttonStyle(.plain)
 
-        Text("Named after 兜 (Dōu), the Sand Dollar Cactus.")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
+        Spacer()
+
+        VStack(spacing: 16) {
+          FeatureRow(
+            icon: "arrow.down.circle.fill",
+            color: .green,
+            title: "Listen Anywhere",
+            description: "Download once, play offline — no signal needed"
+          )
+          FeatureRow(
+            icon: "text.bubble.fill",
+            color: .purple,
+            title: "Every Word, Searchable",
+            description: "Transcripts made on your device. Free and private."
+          )
+          FeatureRow(
+            icon: "sparkles",
+            color: .orange,
+            title: "Skip the Filler",
+            description: "AI summaries and key quotes — get the point in a minute"
+          )
+        }
+        .padding(.horizontal, 28)
+
+        Spacer()
+
+        VStack(spacing: 12) {
+          // Styling lives on the label so the whole pill is tappable — modifiers
+          // outside Button only decorate; the hit target would stay text-sized.
+          Button(action: onNext) {
+            Text("Get Started")
+              .font(.headline)
+              .foregroundStyle(.white)
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 16)
+              .background(.blue, in: .rect(cornerRadius: 14))
+          }
+          .buttonStyle(.plain)
+
+          Text("Named after 兜 (Dōu), the Sand Dollar Cactus.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 40)
       }
-      .padding(.horizontal, 24)
-      .padding(.bottom, 40)
     }
     // First screen anyone sees, so the language can be fixed before reading
     // the rest; the same setting as Settings › App Language.
@@ -106,7 +108,7 @@ struct WelcomeOnboardingPage: View {
         Label("Language", systemImage: "globe")
           .font(.subheadline)
           .padding(.horizontal, 12)
-          .padding(.vertical, 8)
+          .padding(.vertical, 12)
           .background(.fill.tertiary, in: .capsule)
       }
       .padding(.trailing, 20)

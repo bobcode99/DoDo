@@ -27,6 +27,7 @@ struct PermissionsOnboardingPage: View {
           .foregroundStyle(.blue.gradient)
           .padding(.top, 64)
           .padding(.bottom, 16)
+          .accessibilityHidden(true)
 
         VStack(spacing: 10) {
           Text("Enable Full Experience")
@@ -85,6 +86,7 @@ struct PermissionsOnboardingPage: View {
         .padding(.top, 28)
         .padding(.bottom, 52)
       }
+      .onboardingColumn()
     }
     .task { await sync.checkNotificationPermission() }
     .onChange(of: scenePhase) { _, phase in

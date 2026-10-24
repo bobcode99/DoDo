@@ -23,6 +23,7 @@ struct ImportOnboardingPage: View {
           .foregroundStyle(.blue.gradient)
           .padding(.top, 72)
           .padding(.bottom, 18)
+          .accessibilityHidden(true)
 
         VStack(spacing: 10) {
           Text("Bring Your Podcasts")
@@ -47,6 +48,7 @@ struct ImportOnboardingPage: View {
           .padding(.top, 28)
           .padding(.bottom, 52)
       }
+      .onboardingColumn()
     }
     // Safety net for the shortcut-driven import: when it finishes on this
     // page, setup is done — dismiss onboarding instead of making the user
