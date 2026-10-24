@@ -108,9 +108,12 @@ final class ExpandedPlayerViewModel {
     checkEpisodeChange()
   }
 
+  /// `init` has already recorded the current episode, so `checkEpisodeChange()`
+  /// would find nothing new here and leave the star flag and show unloaded.
   func setModelContext(_ context: ModelContext) {
     self.modelContext = context
-    checkEpisodeChange()
+    loadEpisodeState()
+    loadPodcastModel()
   }
 
   /// Check if the current episode changed and reload stored state if needed.
