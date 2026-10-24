@@ -437,6 +437,7 @@ struct SentenceView: View, Equatable {
             .padding(.horizontal, 10)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
