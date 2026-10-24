@@ -33,34 +33,24 @@ struct TranscriptGenerationProgressOverallView: View {
   @Environment(\.dismiss) private var dismiss
   @State private var manager = TranscriptManager.shared
 
-  private var active: [TranscriptJob] {
-    manager.activeJobs.values.filter {
-      switch $0.status {
-      case .transcribing, .downloadingModel: return true
-      default: return false
+  /// The jobs by section, each in title order. Built once per body: the list
+  /// re-renders on every progress tick, and a backfill can queue hundreds of jobs.
+  private struct JobGroups {
+    var active: [TranscriptJob] = []
+    var queued: [TranscriptJob] = []
+    var failed: [TranscriptJob] = []
+    var completed: [TranscriptJob] = []
+
+    init(_ jobs: some Sequence<TranscriptJob>) {
+      for job in jobs.sorted(by: { $0.episodeTitle < $1.episodeTitle }) {
+        switch job.status {
+        case .transcribing, .downloadingModel: active.append(job)
+        case .queued: queued.append(job)
+        case .failed: failed.append(job)
+        case .completed: completed.append(job)
+        }
       }
-    }.sorted(by: { $0.episodeTitle < $1.episodeTitle })
-  }
-
-  private var queued: [TranscriptJob] {
-    manager.activeJobs.values.filter {
-      if case .queued = $0.status { return true }
-      return false
-    }.sorted(by: { $0.episodeTitle < $1.episodeTitle })
-  }
-
-  private var failed: [TranscriptJob] {
-    manager.activeJobs.values.filter {
-      if case .failed = $0.status { return true }
-      return false
-    }.sorted(by: { $0.episodeTitle < $1.episodeTitle })
-  }
-
-  private var completed: [TranscriptJob] {
-    manager.activeJobs.values.filter {
-      if case .completed = $0.status { return true }
-      return false
-    }.sorted(by: { $0.episodeTitle < $1.episodeTitle })
+    }
   }
 
   var body: some View {
@@ -83,36 +73,37 @@ struct TranscriptGenerationProgressOverallView: View {
 
   @ViewBuilder
   private var listContent: some View {
+    let groups = JobGroups(manager.activeJobs.values)
     List {
-      if !active.isEmpty || !queued.isEmpty {
+      if !groups.active.isEmpty || !groups.queued.isEmpty {
         Section("Configuration") {
           TranscriptConfigBanner()
         }
       }
-      if !active.isEmpty {
+      if !groups.active.isEmpty {
         Section("Active") {
-          ForEach(active) { job in
+          ForEach(groups.active) { job in
             TranscriptJobRow(jobID: job.id, action: .cancel, onSelect: rowSelection)
           }
         }
       }
-      if !queued.isEmpty {
+      if !groups.queued.isEmpty {
         Section("Queued") {
-          ForEach(queued) { job in
+          ForEach(groups.queued) { job in
             TranscriptJobRow(jobID: job.id, action: .cancel, onSelect: rowSelection)
           }
         }
       }
-      if !failed.isEmpty {
+      if !groups.failed.isEmpty {
         Section("Failed") {
-          ForEach(failed) { job in
+          ForEach(groups.failed) { job in
             TranscriptJobRow(jobID: job.id, action: .retry, onSelect: rowSelection)
           }
         }
       }
-      if !completed.isEmpty {
+      if !groups.completed.isEmpty {
         Section("Completed") {
-          ForEach(completed) { job in
+          ForEach(groups.completed) { job in
             TranscriptJobRow(jobID: job.id, action: .none, onSelect: rowSelection)
           }
         }
@@ -132,7 +123,7 @@ struct TranscriptGenerationProgressOverallView: View {
           Button("Done") { dismiss() }
         }
       }
-      if !active.isEmpty || !queued.isEmpty {
+      if !groups.active.isEmpty || !groups.queued.isEmpty {
         ToolbarItem(placement: .primaryAction) {
           Button("Cancel All", role: .destructive) {
             manager.cancelAll()
