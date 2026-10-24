@@ -279,7 +279,7 @@ struct SearchHighlightedText: View {
             }
             var highlighted = AttributedString(String(text[range]))
             highlighted.backgroundColor = .orange.opacity(0.35)
-            highlighted.font = .system(size: 17, weight: .semibold)
+            highlighted.font = .body.weight(.semibold)
             result.append(highlighted)
             currentIndex = range.upperBound
         }
@@ -451,20 +451,20 @@ struct SentenceView: View, Equatable {
     private var primaryTextView: some View {
         if !searchQuery.isEmpty {
             SearchHighlightedText(text: primaryText, query: searchQuery)
-                .font(.system(size: 17))
+                .font(.body)
                 .lineSpacing(4)
                 .foregroundStyle(isActive ? Color.blue : Color.primary)
         } else if primaryShowsOriginal {
             // Always render via AttributedString so flipping isActive doesn't
             // swap between Text(String) and Text(AttributedString) variants.
             Text(karaokeAttributedString())
-                .font(.system(size: 17))
+                .font(.body)
                 .lineSpacing(4)
                 .foregroundStyle(Color.primary)
         } else {
             // Translation mode: no per-segment timing, so no karaoke.
             Text(primaryText)
-                .font(.system(size: 17))
+                .font(.body)
                 .lineSpacing(4)
                 .foregroundStyle(isActive ? Color.blue : Color.primary)
         }
