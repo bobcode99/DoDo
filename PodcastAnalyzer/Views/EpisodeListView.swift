@@ -693,6 +693,8 @@ extension EpisodeListView {
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundStyle(.blue)
+                .frame(minWidth: 44, minHeight: 44, alignment: .topLeading)
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
           }
@@ -903,6 +905,7 @@ extension EpisodeListView {
             Image(systemName: viewModel.sortOldestFirst ? "arrow.up" : "arrow.down")
               .font(.caption.weight(.semibold))
           }
+          .frame(minHeight: 44)
           .contentShape(.rect)
         }
         .buttonStyle(.plain)
