@@ -266,6 +266,7 @@ final class AIAnalysisCoordinator {
 
         logger.info("Cloud Q&A completed successfully - Provider: \(result.provider.displayName), Model: \(result.model)")
       } catch {
+        guard !Task.isCancelled else { return }
         self.cloudQuestionState = .error(error.localizedDescription)
         logger.error("Cloud Q&A failed: \(error.localizedDescription, privacy: .public)")
       }
