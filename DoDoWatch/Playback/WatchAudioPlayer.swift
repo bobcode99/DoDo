@@ -51,6 +51,9 @@ final class WatchAudioPlayer {
   }()
 
   private var player: AVPlayer?
+  /// Bumped by every `play(_:)`. A call that resumes from the session
+  /// activation await after a newer one started must not build its player.
+  private var playRequest = 0
   private var timeObserver: Any?
   /// Set when the caller wants playback to resume from a saved position; the
   /// seek only lands once the item reports a usable duration.
@@ -90,6 +93,8 @@ final class WatchAudioPlayer {
     }
 
     teardown()
+    playRequest += 1
+    let request = playRequest
 
     // Up Next and Shows hand over the remote URL; a copy already on the watch
     // must still win, or a downloaded episode streams (or fails off-network).
@@ -126,6 +131,9 @@ final class WatchAudioPlayer {
       // failing loudly here would block an otherwise usable session.
       logger.error("Audio session activation failed: \(error.localizedDescription, privacy: .public)")
     }
+    // Teardown above ran before any player existed for a call still waiting
+    // here, so without this both calls build one and the older keeps playing.
+    guard request == playRequest else { return }
 
     let item = AVPlayerItem(url: url)
     // KVO rather than a check inside the periodic observer: a failed item never
