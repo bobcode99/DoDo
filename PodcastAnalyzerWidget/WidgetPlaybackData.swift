@@ -39,35 +39,6 @@ nonisolated struct WidgetPlaybackData: Codable, Sendable {
     guard let audioURL, !audioURL.isEmpty else { return nil }
     return URL(string: "podcastanalyzer://nowplaying")
   }
-
-  /// Formatted current time string
-  var formattedCurrentTime: String {
-    formatTime(currentTime)
-  }
-
-  /// Formatted duration string
-  var formattedDuration: String {
-    formatTime(duration)
-  }
-
-  /// Formatted remaining time string
-  var formattedRemainingTime: String {
-    let remaining = max(0, duration - currentTime)
-    return "-" + formatTime(remaining)
-  }
-
-  private func formatTime(_ time: TimeInterval) -> String {
-    let totalSeconds = Int(time)
-    let hours = totalSeconds / 3600
-    let minutes = (totalSeconds % 3600) / 60
-    let seconds = totalSeconds % 60
-
-    if hours > 0 {
-      return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-      return String(format: "%d:%02d", minutes, seconds)
-    }
-  }
 }
 
 // MARK: - Widget Data Manager
