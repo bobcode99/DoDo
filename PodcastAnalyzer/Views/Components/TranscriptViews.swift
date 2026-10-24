@@ -242,18 +242,26 @@ struct SearchHighlightedText: View {
     let query: String
 
     var body: some View {
-        Text(buildHighlightedAttributedString())
+        Text(Self.highlighted(text, matching: query))
     }
 
-    private func buildHighlightedAttributedString() -> AttributedString {
-        guard !query.isEmpty else { return AttributedString(text) }
+    /// Matches the way the search itself does (`localizedStandardContains`: case,
+    /// diacritic and width insensitive, surrounding spaces ignored). Ranges come
+    /// from `text` itself; lowercasing first changes string length for characters
+    /// like "İ", so indices from the lowercased copy fall outside the original.
+    static func highlighted(_ text: String, matching query: String) -> AttributedString {
+        let needle = query.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return AttributedString(text) }
 
         var result = AttributedString()
-        let lowercasedText = text.lowercased()
-        let lowercasedQuery = query.lowercased()
         var currentIndex = text.startIndex
 
-        while let range = lowercasedText[currentIndex...].range(of: lowercasedQuery) {
+        while let range = text.range(
+            of: needle,
+            options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+            range: currentIndex..<text.endIndex,
+            locale: .current
+        ), !range.isEmpty {
             let beforeRange = currentIndex..<range.lowerBound
             if !beforeRange.isEmpty {
                 result.append(AttributedString(String(text[beforeRange])))
