@@ -449,7 +449,7 @@ struct EpisodeListView: View {
     .listSectionSpacing(0)
     // Let the hero gradient run behind the back/••• row instead of stopping at
     // an opaque system bar just below it.
-    .toolbarBackground(.hidden, for: .navigationBar)
+    .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
     #endif
     .toolbar {
       #if os(iOS)
