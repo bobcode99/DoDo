@@ -130,6 +130,7 @@ struct EpisodeAIAnalysisView: View {
       HStack {
         Image(systemName: "key.fill")
           .foregroundStyle(.orange)
+          .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: 2) {
           Text("API Key Required")
@@ -157,6 +158,7 @@ struct EpisodeAIAnalysisView: View {
       HStack {
         Image(systemName: "doc.text")
           .foregroundStyle(.blue)
+          .accessibilityHidden(true)
 
         Text("Generate a transcript first to enable AI analysis")
           .font(.caption)
