@@ -29,7 +29,6 @@ enum ExpandedPlayerNavigation: Equatable {
 }
 
 struct MiniPlayerBar: View {
-  @Environment(\.tabViewBottomAccessoryPlacement) var placement
   @Environment(\.modelContext) private var modelContext
   @Environment(\.tabNavigationCoordinator) private var coordinator
   // Access singleton directly without @State to avoid unnecessary observation overhead
@@ -68,7 +67,7 @@ struct MiniPlayerBar: View {
               }
             }
             .frame(width: 48, height: 48)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(.rect(cornerRadius: 8))
 
             // Episode info
             VStack(alignment: .leading, spacing: 2) {
