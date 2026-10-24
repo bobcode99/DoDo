@@ -165,12 +165,12 @@ struct AutoTranscribeManagementView: View {
     }
   }
 
-  private func subtitle(enabled: Bool, pending: Int, episodes: Int) -> String {
+  private func subtitle(enabled: Bool, pending: Int, episodes: Int) -> LocalizedStringKey {
     if enabled {
       if pending > 0 { return "\(pending) in progress" }
       return "Listening for new episodes"
     }
-    return "\(episodes) episode\(episodes == 1 ? "" : "s")"
+    return "\(episodes) episodes"
   }
 
   private func activeCount(for podcastTitle: String) -> Int {

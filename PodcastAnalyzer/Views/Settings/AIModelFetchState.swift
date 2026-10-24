@@ -12,11 +12,11 @@ import Foundation
 final class AIModelFetchState {
     var fetchedModels: [CloudAIProvider: [String]] = [:]
     var isFetchingModels = false
-    var modelFetchError: String?
+    var modelFetchError: LocalizedStringResource?
 
     var isTesting = false
     var showingTestResult = false
-    var testResultMessage = ""
+    var testResultMessage: LocalizedStringResource = ""
     var testResultSuccess = false
 
     private let settings = AISettingsManager.shared
@@ -162,12 +162,10 @@ final class AIModelFetchState {
                 self.isTesting = false
                 self.testResultSuccess = true
                 let model = self.settings.currentModel
-                self.testResultMessage = """
-                    Connection successful!
-
-                    Provider: \(self.settings.selectedProvider.displayName)
-                    Model: \(model.isEmpty ? "none selected yet" : model)
-                    """
+                let providerName = self.settings.selectedProvider.displayName
+                self.testResultMessage = model.isEmpty
+                    ? "Connection successful!\n\nProvider: \(providerName)\nModel: none selected yet"
+                    : "Connection successful!\n\nProvider: \(providerName)\nModel: \(model)"
                 self.showingTestResult = true
             } catch {
                 guard !Task.isCancelled else { return }

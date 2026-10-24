@@ -67,20 +67,22 @@ struct AddFeedView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
-          } else if !viewModel.successMessage.isEmpty {
-            HStack(spacing: 6) {
+          } else if let successMessage = viewModel.successMessage {
+            Label {
+              Text(successMessage)
+                .font(.caption)
+                .foregroundStyle(.green)
+            } icon: {
               Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-              Text(viewModel.successMessage)
-                .font(.caption)
-                .foregroundStyle(.green)
             }
-          } else if !viewModel.errorMessage.isEmpty {
-            HStack(spacing: 6) {
-              Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-              Text(viewModel.errorMessage)
+          } else if let errorMessage = viewModel.errorMessage {
+            Label {
+              Text(errorMessage)
                 .font(.caption)
+                .foregroundStyle(.red)
+            } icon: {
+              Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
             }
           }

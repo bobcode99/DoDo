@@ -111,7 +111,7 @@ struct TranscriptContextManagementView: View {
     .alert("Import Complete", item: $importSummary) { _ in
       Button("OK", role: .cancel) {}
     } message: { summary in
-      Text(summary.message)
+      summary.message
     }
     .alert("Import Failed", item: $importError) { _ in
       Button("OK", role: .cancel) {}
@@ -206,16 +206,13 @@ enum TranscriptContextIO {
     let applied: Int
     let unmatched: [String]
 
-    var message: String {
-      var text = applied == 0
-        ? "No matching shows were updated."
-        : "Updated \(applied) show\(applied == 1 ? "" : "s")."
-      if !unmatched.isEmpty {
-        let shown = unmatched.prefix(8).joined(separator: ", ")
-        text += "\n\nNo match for: \(shown)"
-        if unmatched.count > 8 { text += " …" }
-      }
-      return text
+    var message: Text {
+      let summary = applied == 0
+        ? Text("No matching shows were updated.")
+        : Text("Updated ^[\(applied) show](inflect: true).")
+      guard !unmatched.isEmpty else { return summary }
+      let shown = unmatched.prefix(8).joined(separator: ", ") + (unmatched.count > 8 ? " …" : "")
+      return Text("\(summary)\n\nNo match for: \(shown)")
     }
   }
 

@@ -20,7 +20,7 @@ struct YapServerSection: View {
     enum TestState: Equatable {
         case idle
         case testing
-        case success(String)
+        case success(status: String, backendCount: Int, defaultBackend: String)
         case failure(String)
     }
 
@@ -95,10 +95,18 @@ struct YapServerSection: View {
                 EmptyView()
             case .testing:
                 EmptyView()
-            case .success(let summary):
-                Label(summary, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.caption)
+            case .success(let status, let backendCount, let defaultBackend):
+                Label {
+                    if backendCount == 0 {
+                        Text("Connected (\(status)) · no backends")
+                    } else {
+                        Text("Connected (\(status)) · ^[\(backendCount) backend](inflect: true) · default: \(defaultBackend)")
+                    }
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                }
+                .foregroundStyle(.green)
+                .font(.caption)
             case .failure(let message):
                 Label(message, systemImage: "xmark.circle.fill")
                     .foregroundStyle(.red)
@@ -120,10 +128,11 @@ struct YapServerSection: View {
             let service = YapTranscriptService()
             do {
                 let result = try await service.checkHealth(serverURL: serverURL, apiKey: apiKey)
-                let backendList = result.backends.isEmpty
-                    ? "no backends"
-                    : "\(result.backends.count) backend\(result.backends.count == 1 ? "" : "s") · default: \(result.defaultBackend)"
-                testState = .success("Connected (\(result.healthStatus)) · \(backendList)")
+                testState = .success(
+                    status: result.healthStatus,
+                    backendCount: result.backends.count,
+                    defaultBackend: result.defaultBackend
+                )
             } catch {
                 testState = .failure(error.localizedDescription)
             }

@@ -60,7 +60,7 @@ struct AISettingsLanguageSection: View {
                         .foregroundStyle(.secondary)
 
                     // Show resolved language
-                    Text(resolvedLanguageText)
+                    resolvedLanguageText
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -85,22 +85,22 @@ struct AISettingsLanguageSection: View {
     }
 
     /// Computed property to show the resolved language based on the current setting
-    private var resolvedLanguageText: String {
+    private var resolvedLanguageText: Text {
         switch settings.analysisLanguage {
         case .deviceLanguage:
             let preferredLanguage = Locale.preferredLanguages.first ?? "en"
             let languageName = Locale.current.localizedString(forLanguageCode: preferredLanguage) ?? "English"
-            return "Will respond in: \(languageName)"
+            return Text("Will respond in: \(languageName)")
         case .matchPodcast:
-            return "Will respond in: Same as podcast language"
+            return Text("Will respond in: Same as podcast language")
         case .custom:
             let trimmed = settings.customAnalysisLanguageName.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                return "Will respond in: (no custom language set — no instruction sent)"
+                return Text("Will respond in: (no custom language set — no instruction sent)")
             }
-            return "Will respond in: \(trimmed)"
+            return Text("Will respond in: \(trimmed)")
         default:
-            return "Will respond in: \(settings.analysisLanguage.rawValue)"
+            return Text("Will respond in: \(settings.analysisLanguage.rawValue)")
         }
     }
 }

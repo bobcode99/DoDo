@@ -187,13 +187,7 @@ struct DownloadSettingsScreen: View {
   @AppStorage("episodeCacheLimit") private var episodeCacheLimit = 0
   @AppStorage("autoDeletePlayedEnabled") private var autoDeletePlayedEnabled = false
 
-  private let cacheLimitOptions: [(label: String, value: Int)] = [
-    ("Unlimited", 0),
-    ("5 episodes", 5),
-    ("10 episodes", 10),
-    ("25 episodes", 25),
-    ("50 episodes", 50)
-  ]
+  private let cacheLimitOptions = [0, 5, 10, 25, 50]
 
   var body: some View {
     List {
@@ -228,8 +222,12 @@ struct DownloadSettingsScreen: View {
 
       Section {
         Picker("Keep at Most", selection: $episodeCacheLimit) {
-          ForEach(cacheLimitOptions, id: \.value) { option in
-            Text(option.label).tag(option.value)
+          ForEach(cacheLimitOptions, id: \.self) { limit in
+            if limit == 0 {
+              Text("Unlimited").tag(limit)
+            } else {
+              Text("\(limit) episodes").tag(limit)
+            }
           }
         }
 
@@ -500,7 +498,7 @@ struct SubscriptionsSettingsScreen: View {
   @State private var showAddFeedSheet = false
   @State private var showOPMLImporter = false
   @State private var showImportInstructions = false
-  @State private var opmlImportMessage: String?
+  @State private var opmlImportMessage: Text?
 
   var body: some View {
     List {
@@ -517,7 +515,7 @@ struct SubscriptionsSettingsScreen: View {
           VStack(alignment: .leading, spacing: 2) {
             Text("Import OPML File")
             if let opmlImportMessage {
-              Text(opmlImportMessage)
+              opmlImportMessage
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
@@ -566,27 +564,32 @@ struct SubscriptionsSettingsScreen: View {
 
   private func handleOPMLImport(_ result: Result<[URL], Error>) {
     switch result {
-    case .failure:
-      opmlImportMessage = "Import cancelled"
+    case .failure(let error):
+      opmlImportMessage = (error as NSError).code == NSUserCancelledError
+        ? Text("Import cancelled")
+        : Text(verbatim: error.localizedDescription)
     case .success(let urls):
       guard let fileURL = urls.first else { return }
       let accessing = fileURL.startAccessingSecurityScopedResource()
       defer { if accessing { fileURL.stopAccessingSecurityScopedResource() } }
-      guard let data = try? Data(contentsOf: fileURL) else {
-        opmlImportMessage = "Could not read file"
+      let data: Data
+      do {
+        data = try Data(contentsOf: fileURL)
+      } catch {
+        opmlImportMessage = Text(verbatim: error.localizedDescription)
         return
       }
       let feedURLs = OPMLParser.parse(data: data)
       guard !feedURLs.isEmpty else {
-        opmlImportMessage = "No feeds found in file"
+        opmlImportMessage = Text("No feeds found in file")
         return
       }
-      opmlImportMessage = "Importing \(feedURLs.count) podcast\(feedURLs.count == 1 ? "" : "s")…"
+      opmlImportMessage = Text("Importing ^[\(feedURLs.count) podcast](inflect: true)…")
       let manager = PodcastImportManager.shared
       manager.setModelContext(modelContext)
       Task {
         await manager.importPodcasts(from: feedURLs)
-        opmlImportMessage = "Imported \(feedURLs.count) podcast\(feedURLs.count == 1 ? "" : "s")"
+        opmlImportMessage = Text("Imported ^[\(feedURLs.count) podcast](inflect: true)")
       }
     }
   }
@@ -785,9 +788,11 @@ struct GeneralSettingsScreen: View {
 
   /// Flags of the ticked regions, or a count once there are too many to read
   /// at a glance in a settings row.
-  private var regionSummary: String {
+  private var regionSummary: Text {
     let flags = regions.enabledStorefronts.map(\.flag)
-    return flags.count <= 4 ? flags.joined() : "\(flags.count) regions"
+    return flags.count <= 4
+      ? Text(verbatim: flags.joined())
+      : Text("^[\(flags.count) region](inflect: true)")
   }
 
   var body: some View {
@@ -815,7 +820,7 @@ struct GeneralSettingsScreen: View {
             Text("Discovery Regions")
               .foregroundStyle(.primary)
             Spacer()
-            Text(regionSummary)
+            regionSummary
               .foregroundStyle(.secondary)
             Image(systemName: "chevron.right")
               .font(.caption.weight(.semibold))

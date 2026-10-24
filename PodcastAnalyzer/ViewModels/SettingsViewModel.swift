@@ -35,8 +35,8 @@ enum TranscriptModelStatus: Equatable {
 @Observable
 final class SettingsViewModel {
   var rssUrlInput: String = ""
-  var successMessage: String = ""
-  var errorMessage: String = ""
+  var successMessage: LocalizedStringResource?
+  var errorMessage: LocalizedStringResource?
   var podcastInfoModelList: [PodcastInfoModel] = []
   var isValidating: Bool = false
   var defaultPlaybackSpeed: Float = 1.0
@@ -323,21 +323,21 @@ final class SettingsViewModel {
     // Validate URL format
     guard isValidURL(trimmedLink) else {
       errorMessage = "Please enter a valid URL"
-      successMessage = ""
+      successMessage = nil
       return
     }
 
     // Check for duplicates
     guard !podcastInfoModelList.contains(where: { $0.rssUrl == trimmedLink }) else {
       errorMessage = "This feed is already added"
-      successMessage = ""
+      successMessage = nil
       return
     }
 
     // Start validation
     isValidating = true
-    errorMessage = ""
-    successMessage = ""
+    errorMessage = nil
+    successMessage = nil
 
     // Fetch and validate RSS feed
     Task { [weak self] in
@@ -366,7 +366,7 @@ final class SettingsViewModel {
 
         podcastInfoModelList.append(podcastInfoModel)
         rssUrlInput = ""
-        errorMessage = ""
+        errorMessage = nil
         successMessage = "Feed added successfully!"
         logger.info("Feed saved to database: \(podcastInfo.title)")
 
@@ -380,18 +380,18 @@ final class SettingsViewModel {
         successMessageTask = Task { @MainActor in
           try? await Task.sleep(for: .seconds(2))
           if !Task.isCancelled {
-            self.successMessage = ""
+            self.successMessage = nil
           }
         }
       } catch let error as PodcastServiceError {
         logger.error("RSS validation failed: \(error.localizedDescription, privacy: .public)")
         errorMessage = "Invalid RSS feed: \(error.localizedDescription)"
-        successMessage = ""
+        successMessage = nil
         isValidating = false
       } catch {
         logger.error("Unexpected error: \(error.localizedDescription, privacy: .public)")
         errorMessage = "Error: \(error.localizedDescription)"
-        successMessage = ""
+        successMessage = nil
         isValidating = false
       }
     }
@@ -402,7 +402,7 @@ final class SettingsViewModel {
       modelContext.delete(podcastInfoModel)
       try modelContext.save()
       podcastInfoModelList.removeAll { $0.id == podcastInfoModel.id }
-      errorMessage = ""
+      errorMessage = nil
       self.logger.info("Feed deleted: \(podcastInfoModel.title)")
     } catch {
       errorMessage = "Failed to delete feed: \(error.localizedDescription)"
@@ -417,7 +417,7 @@ final class SettingsViewModel {
 
     do {
       podcastInfoModelList = try modelContext.fetch(descriptor)
-      errorMessage = ""
+      errorMessage = nil
       self.logger.info("Loaded \(self.podcastInfoModelList.count) feeds")
     } catch {
       errorMessage = "Failed to load feeds: \(error.localizedDescription)"
@@ -426,8 +426,8 @@ final class SettingsViewModel {
   }
 
   func clearMessages() {
-    successMessage = ""
-    errorMessage = ""
+    successMessage = nil
+    errorMessage = nil
     rssUrlInput = ""
   }
 
