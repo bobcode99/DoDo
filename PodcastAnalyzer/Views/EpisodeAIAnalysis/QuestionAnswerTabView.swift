@@ -84,6 +84,7 @@ struct QuestionAnswerTabView: View {
           Image(systemName: "xmark.circle.fill")
             .foregroundStyle(.red)
             .font(.subheadline)
+            .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 3) {
             Text("Question failed")
               .font(.subheadline)
@@ -167,6 +168,7 @@ struct QuestionAnswerTabView: View {
           .font(.system(size: 13))
           .foregroundStyle(.tint)
       }
+      .accessibilityHidden(true)
     }
   }
 
@@ -202,6 +204,7 @@ struct QuestionAnswerTabView: View {
     HStack(spacing: 6) {
       Image(systemName: confidenceIcon(confidence))
         .foregroundStyle(confidenceColor(confidence))
+        .accessibilityHidden(true)
       Text("Confidence: \(confidence.capitalized)")
         .font(.caption)
         .fontWeight(.medium)
@@ -263,12 +266,14 @@ struct QuestionAnswerTabView: View {
           .font(.system(size: 13))
           .foregroundStyle(.green)
       }
+      .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 10) {
         if let warning = result.jsonParseWarning {
           HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
               .foregroundStyle(.orange)
+              .accessibilityHidden(true)
             Text(warning)
               .font(.caption)
               .foregroundStyle(.orange)
@@ -325,6 +330,7 @@ struct QuestionAnswerTabView: View {
           .font(.system(size: 13))
           .foregroundStyle(.green)
       }
+      .accessibilityHidden(true)
       TypingDotsView()
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
