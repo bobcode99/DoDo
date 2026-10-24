@@ -350,7 +350,10 @@ struct EpisodeTranscriptView: View {
 
         guard let content = try? String(contentsOf: url, encoding: .utf8),
               !SRTParser.parseSegments(from: content).isEmpty else {
-            srtImportError = "Couldn't read subtitles from “\(url.lastPathComponent)”. Make sure it's a valid SRT file."
+            srtImportError = String(
+                format: String.appLocalized("Couldn't read subtitles from “%@”. Make sure it's a valid SRT file."),
+                url.lastPathComponent
+            )
             return
         }
         do {
