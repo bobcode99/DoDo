@@ -71,7 +71,10 @@ final class ExpandedPlayerViewModel {
     return TimeInterval(audioManager.currentEpisode?.duration ?? 0)
   }
   var playbackSpeed: Float { audioManager.playbackRate }
-  var sleepTimerOption: SleepTimerOption { audioManager.sleepTimerOption }
+  var sleepTimerOption: SleepTimerOption {
+    get { audioManager.sleepTimerOption }
+    set { audioManager.setSleepTimer(newValue) }
+  }
   var sleepTimerRemaining: TimeInterval { audioManager.sleepTimerRemaining }
   var queue: [PlaybackEpisode] { audioManager.queue }
   var displayMode: SubtitleDisplayMode { subtitleSettings.displayMode }
@@ -240,6 +243,12 @@ final class ExpandedPlayerViewModel {
     audioManager.setPlaybackRate(speed)
   }
 
+  /// The preset the playback rate matches, so the speed menu can show it as selected.
+  var selectedSpeed: Float? {
+    get { Formatters.playbackSpeeds.first { abs($0 - playbackSpeed) < 0.01 } }
+    set { if let newValue { setPlaybackSpeed(newValue) } }
+  }
+
   // MARK: - Episode Actions
 
   func toggleStar() {
@@ -271,10 +280,6 @@ final class ExpandedPlayerViewModel {
   }
 
   // MARK: - Sleep Timer
-
-  func setSleepTimer(_ option: SleepTimerOption) {
-    audioManager.setSleepTimer(option)
-  }
 
   var isSleepTimerActive: Bool {
     audioManager.isSleepTimerActive

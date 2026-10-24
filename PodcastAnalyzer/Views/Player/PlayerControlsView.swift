@@ -17,6 +17,7 @@ struct PlayerControlsView: View {
     let viewModel: ExpandedPlayerViewModel
     var style: Style = .expanded
 
+    @Environment(\.locale) private var locale
     @AppStorage("skipForwardInterval") private var skipForwardInterval: Int = 30
     @AppStorage("skipBackwardInterval") private var skipBackwardInterval: Int = 15
 
@@ -65,19 +66,14 @@ struct PlayerControlsView: View {
     // MARK: - Pieces
 
     private var speedMenu: some View {
-        Menu {
-            ForEach(Self.speedOptions, id: \.self) { speed in
-                Button {
-                    viewModel.setPlaybackSpeed(speed)
-                } label: {
-                    HStack {
-                        Text(Formatters.formatSpeed(speed))
-                        if abs(viewModel.playbackSpeed - speed) < 0.01 {
-                            Image(systemName: "checkmark")
-                        }
-                    }
+        @Bindable var viewModel = viewModel
+        return Menu {
+            Picker("Playback speed", selection: $viewModel.selectedSpeed) {
+                ForEach(Self.speedOptions, id: \.self) { speed in
+                    Text(Formatters.formatSpeed(speed)).tag(Float?.some(speed))
                 }
             }
+            .pickerStyle(.inline)
         } label: {
             Text(Formatters.formatSpeed(viewModel.playbackSpeed))
                 .font(.system(size: 16, weight: .medium))
@@ -140,15 +136,14 @@ struct PlayerControlsView: View {
     }
 
     private var sleepTimerMenu: some View {
-        Menu {
-            ForEach(SleepTimerOption.allCases, id: \.self) { option in
-                Button(action: { viewModel.setSleepTimer(option) }) {
-                    Label(option.displayName, systemImage: option.systemImage)
-                    if viewModel.sleepTimerOption == option {
-                        Image(systemName: "checkmark")
-                    }
+        @Bindable var viewModel = viewModel
+        return Menu {
+            Picker("Sleep timer", selection: $viewModel.sleepTimerOption) {
+                ForEach(SleepTimerOption.allCases, id: \.self) { option in
+                    Label(option.displayName, systemImage: option.systemImage).tag(option)
                 }
             }
+            .pickerStyle(.inline)
         } label: {
             Group {
                 if viewModel.isSleepTimerActive {
@@ -176,5 +171,13 @@ struct PlayerControlsView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .accessibilityLabel(viewModel.isSleepTimerActive ? "Sleep timer active" : "Sleep timer")
+        .accessibilityValue(sleepTimerRemainingSpoken)
+    }
+
+    /// The countdown as words ("4 minutes, 12 seconds"); the label's "4:12" would be read as a clock time.
+    private var sleepTimerRemainingSpoken: String {
+        guard viewModel.sleepTimerRemaining > 0 else { return "" }
+        return Duration.seconds(viewModel.sleepTimerRemaining)
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 2).locale(locale))
     }
 }
