@@ -387,6 +387,7 @@ struct EpisodeListView: View {
     do {
       try modelContext.save()
     } catch {
+      model.setSubscribed(false)
       actionError = error.localizedDescription
     }
   }
@@ -402,6 +403,7 @@ struct EpisodeListView: View {
       // Navigate back after unsubscribing
       dismiss()
     } catch {
+      model.setSubscribed(true)
       actionError = error.localizedDescription
     }
   }
