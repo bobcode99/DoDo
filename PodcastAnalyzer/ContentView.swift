@@ -96,6 +96,7 @@ struct iOSContentView: View { // "iOS" keeps Apple's casing
         }
       }
     }
+    .tabViewStyle(.sidebarAdaptable)
     .environment(\.tabNavigationCoordinator, coordinator)
     .environment(\.zoomNamespace, podcastZoom)
     .tabViewBottomAccessory {
