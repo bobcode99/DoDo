@@ -60,7 +60,7 @@ struct AISettingsShortcutsSections: View {
                         .buttonStyle(.borderless)
                     }
                 }
-                .contentShape(Rectangle())
+                .contentShape(.rect)
                 .onTapGesture {
                     shortcuts.shortcutName = name
                 }

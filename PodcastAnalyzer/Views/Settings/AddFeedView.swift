@@ -85,7 +85,7 @@ struct AddFeedView: View {
         VStack(spacing: 8) {
           Text("Add Podcast")
             .font(.title2)
-            .fontWeight(.bold)
+            .bold()
 
           Text("Enter the RSS feed URL to subscribe")
             .font(.subheadline)

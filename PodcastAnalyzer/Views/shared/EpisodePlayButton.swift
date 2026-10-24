@@ -259,7 +259,7 @@ struct EpisodePlayButton: View {
       .padding(.horizontal, 8)
       .padding(.vertical, 5)
       .background(Color.blue)
-      .clipShape(Capsule())
+      .clipShape(.capsule)
     }
     .buttonStyle(.borderless)
     .disabled(isDisabled)
@@ -307,7 +307,7 @@ struct EpisodePlayButton: View {
       .padding(.horizontal, 14)
       .padding(.vertical, 10)
       .background(Color.blue)
-      .clipShape(Capsule())
+      .clipShape(.capsule)
     }
     .buttonStyle(.plain)
     .disabled(isDisabled)

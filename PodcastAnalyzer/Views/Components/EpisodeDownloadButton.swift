@@ -15,7 +15,7 @@ struct EpisodeDownloadButton: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(Color.gray)
-                        .clipShape(Capsule())
+                        .clipShape(.capsule)
                 }
                 .buttonStyle(.plain)
 
@@ -34,7 +34,7 @@ struct EpisodeDownloadButton: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(Color.orange)
-                    .clipShape(Capsule())
+                    .clipShape(.capsule)
                 }
                 .buttonStyle(.plain)
 
@@ -47,7 +47,7 @@ struct EpisodeDownloadButton: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(Color.blue)
-                .clipShape(Capsule())
+                .clipShape(.capsule)
 
             case .downloaded:
                 Button(action: { showDeleteConfirmation = true }) {
@@ -57,7 +57,7 @@ struct EpisodeDownloadButton: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(Color.green)
-                        .clipShape(Capsule())
+                        .clipShape(.capsule)
                 }
                 .buttonStyle(.plain)
                 .confirmationDialog(
@@ -83,7 +83,7 @@ struct EpisodeDownloadButton: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(Color.red)
-                        .clipShape(Capsule())
+                        .clipShape(.capsule)
                 }
                 .buttonStyle(.plain)
             }

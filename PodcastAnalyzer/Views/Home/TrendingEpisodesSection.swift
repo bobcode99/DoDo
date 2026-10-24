@@ -39,7 +39,7 @@ struct TrendingEpisodesSection: View {
     HStack {
       Text("Top Episodes")
         .font(.title2)
-        .fontWeight(.bold)
+        .bold()
 
       Spacer()
 

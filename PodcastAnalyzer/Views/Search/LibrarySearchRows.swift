@@ -42,7 +42,7 @@ struct LibraryPodcastRow: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 4)
-            .contentShape(Rectangle())
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }
@@ -89,7 +89,7 @@ struct LibraryEpisodeRow: View {
                             .foregroundStyle(.white)
                             .frame(width: 32, height: 32)
                             .background(Color.purple)
-                            .clipShape(Circle())
+                            .clipShape(.circle)
                     }
                     .buttonStyle(.plain)
                 }
@@ -99,7 +99,7 @@ struct LibraryEpisodeRow: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 4)
-            .contentShape(Rectangle())
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }

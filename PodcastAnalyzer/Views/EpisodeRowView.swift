@@ -223,7 +223,7 @@ struct EpisodeRowView: View {
           }
           episodeInfo
         }
-        .contentShape(Rectangle())
+        .contentShape(.rect)
       }
       .buttonStyle(.plain)
 

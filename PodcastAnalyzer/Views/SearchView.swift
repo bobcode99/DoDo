@@ -208,7 +208,7 @@ struct PodcastSearchView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.tertiary)
                             }
-                            .contentShape(Rectangle())
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                     }

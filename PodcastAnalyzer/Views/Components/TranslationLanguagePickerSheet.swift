@@ -48,7 +48,7 @@ struct TranslationLanguagePickerSheet: View {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.blue)
                             }
-                            .contentShape(Rectangle())
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                     } header: {

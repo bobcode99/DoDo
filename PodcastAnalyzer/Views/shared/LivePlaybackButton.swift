@@ -189,8 +189,8 @@ struct LivePlaybackButton: View {
       .padding(.horizontal, 8 * scale)
       .padding(.vertical, 5 * scale)
       .background(Color.blue)
-      .clipShape(Capsule())
-      .contentShape(Capsule())
+      .clipShape(.capsule)
+      .contentShape(.capsule)
     }
     .buttonStyle(.borderless)
     .disabled(isDisabled)
@@ -257,7 +257,7 @@ struct LivePlaybackButton: View {
       .padding(.horizontal, 14)
       .padding(.vertical, 10)
       .background(Color.blue)
-      .clipShape(Capsule())
+      .clipShape(.capsule)
     }
     .buttonStyle(.plain)
     .disabled(isDisabled)

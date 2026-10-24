@@ -60,6 +60,6 @@ struct ApplePodcastRow: View {
             }
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
+        .contentShape(.rect)
     }
 }

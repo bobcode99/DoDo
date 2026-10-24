@@ -891,7 +891,7 @@ extension EpisodeListView {
             Image(systemName: viewModel.sortOldestFirst ? "arrow.up" : "arrow.down")
               .font(.caption.weight(.semibold))
           }
-          .contentShape(Rectangle())
+          .contentShape(.rect)
         }
         .buttonStyle(.plain)
       }

@@ -63,7 +63,7 @@ private struct TrendingEpisodeRowWithNav: View {
     HStack(spacing: 0) {
       NavigationLink(value: destination) {
         TrendingEpisodeRow(episode: episode, rank: rank)
-          .contentShape(Rectangle())
+          .contentShape(.rect)
       }
       .buttonStyle(.plain)
 
@@ -74,7 +74,7 @@ private struct TrendingEpisodeRowWithNav: View {
           .font(.caption)
           .foregroundStyle(.tertiary)
           .frame(width: 28, height: 28)
-          .contentShape(Rectangle())
+          .contentShape(.rect)
       }
     }
     .contextMenu {

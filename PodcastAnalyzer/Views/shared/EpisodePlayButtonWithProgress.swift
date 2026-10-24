@@ -106,7 +106,7 @@ struct EpisodePlayButtonWithProgress: View {
       .padding(.horizontal, 8)
       .padding(.vertical, 5)
       .background(Color.blue)
-      .clipShape(Capsule())
+      .clipShape(.capsule)
     }
     .buttonStyle(.borderless)
     .disabled(isDisabled)

@@ -54,7 +54,7 @@ struct SpeedPickerOverlay: View {
 
           Text(Formatters.formatSpeed(sliderValue))
             .font(.title2)
-            .fontWeight(.bold)
+            .bold()
             .foregroundStyle(.blue)
             .monospacedDigit()
         }

@@ -58,7 +58,7 @@ struct PermissionRow: View {
       }
       .padding(14)
       .background(.regularMaterial, in: .rect(cornerRadius: 14))
-      .contentShape(Rectangle())
+      .contentShape(.rect)
     }
     .buttonStyle(.plain)
     .disabled(isOn)

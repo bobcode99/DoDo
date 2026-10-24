@@ -34,7 +34,7 @@ struct UpNextSection: View {
       VStack(alignment: .leading, spacing: 2) {
         Text("Up Next")
           .font(.title2)
-          .fontWeight(.bold)
+          .bold()
         if viewModel.continueListeningCount > 0 {
           Text("\(viewModel.continueListeningCount) in progress")
             .font(.caption)

@@ -94,7 +94,7 @@ struct PlayerEpisodeInfoView: View {
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.secondary)
                         .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                        .contentShape(.rect)
                 }
                 .frame(width: 44, height: 44)
                 .accessibilityLabel("More options")

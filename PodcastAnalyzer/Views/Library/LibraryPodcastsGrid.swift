@@ -45,7 +45,7 @@ struct LibraryPodcastsGrid: View {
                 PodcastGridCell(item: item)
               }
               .buttonStyle(.plain)
-              .contentShape(Rectangle())
+              .contentShape(.rect)
               // The tile the episode list grows out of. Same id the destination
               // matches on — `PodcastBrowseRoute.id`.
               .zoomSource(id: route.id, in: zoomNamespace)

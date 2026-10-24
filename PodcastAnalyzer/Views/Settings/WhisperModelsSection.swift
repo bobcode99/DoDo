@@ -60,7 +60,7 @@ struct WhisperModelRow: View {
                 .padding(.vertical, 2)
                 .background(Color.blue.opacity(0.15))
                 .foregroundStyle(.blue)
-                .clipShape(Capsule())
+                .clipShape(.capsule)
             }
           }
           Text(variant.accuracyNote)
@@ -74,7 +74,7 @@ struct WhisperModelRow: View {
         whisperModelAction(for: variant, status: status)
       }
       .padding(.vertical, 2)
-      .contentShape(Rectangle())
+      .contentShape(.rect)
     }
     .buttonStyle(.plain)
   }

@@ -60,7 +60,7 @@ struct DownloadedPodcastsGridView: View {
                       )
                     }
                     .buttonStyle(.plain)
-                    .contentShape(Rectangle())
+                    .contentShape(.rect)
                     .modifier(
                       DownloadedPodcastContextMenuModifier(
                         podcast: item.podcast,

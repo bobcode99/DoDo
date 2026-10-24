@@ -56,7 +56,7 @@ struct TrendingEpisodeRow: View {
     HStack(spacing: 10) {
       Text("\(rank)")
         .font(.footnote)
-        .fontWeight(.bold)
+        .bold()
         .foregroundStyle(.secondary)
         .frame(width: 18, alignment: .trailing)
         .monospacedDigit()

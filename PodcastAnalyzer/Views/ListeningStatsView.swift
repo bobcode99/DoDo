@@ -196,7 +196,7 @@ struct ListeningStatsView: View {
           // Rank
           Text("\(index + 1)")
             .font(.title2)
-            .fontWeight(.bold)
+            .bold()
             .foregroundStyle(.secondary)
             .frame(width: 28)
 
@@ -273,7 +273,7 @@ private struct StatCard: View {
 
       Text(value)
         .font(.title)
-        .fontWeight(.bold)
+        .bold()
 
       Text(title)
         .font(.caption)

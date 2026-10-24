@@ -48,7 +48,7 @@ struct PopularShowsSection: View {
     HStack {
       Text("Popular Shows")
         .font(.title2)
-        .fontWeight(.bold)
+        .bold()
 
       Spacer()
 

@@ -63,7 +63,7 @@ struct TopPodcastRow: View {
           .foregroundStyle(.secondary)
       }
       .padding(.vertical, 8)
-      .contentShape(Rectangle())
+      .contentShape(.rect)
     }
     .buttonStyle(.plain)
     .zoomSource(id: podcast.id, in: zoomNamespace)

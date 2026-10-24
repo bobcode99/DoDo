@@ -88,7 +88,7 @@ struct PlayerControlsView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .frame(width: 44, height: 44)
-        .contentShape(Rectangle())
+        .contentShape(.rect)
         .accessibilityLabel("Playback speed \(Formatters.formatSpeed(viewModel.playbackSpeed))")
     }
 
@@ -171,7 +171,7 @@ struct PlayerControlsView: View {
             .frame(width: 44, height: 44)
             .glassEffect(viewModel.isSleepTimerActive ? .regular.tint(.white.opacity(0.35)) : .regular, in: .circle)
             .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
+            .contentShape(.rect)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

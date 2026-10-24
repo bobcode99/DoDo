@@ -50,7 +50,7 @@ struct MiniPlayerBar: View {
       ZStack {
         Button(action: openExpandedPlayer) {
           Color.clear
-            .contentShape(Rectangle())
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open expanded player")

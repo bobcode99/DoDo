@@ -254,7 +254,7 @@ struct PodcastImportSheet: View {
 
             Text("Import Complete")
               .font(.title2)
-              .fontWeight(.bold)
+              .bold()
 
             VStack(alignment: .leading, spacing: 8) {
               HStack {

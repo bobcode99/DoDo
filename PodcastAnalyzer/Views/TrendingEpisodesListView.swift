@@ -23,7 +23,7 @@ struct TrendingEpisodesListView: View {
         HStack(spacing: 0) {
           NavigationLink(value: destination) {
             TrendingEpisodeRow(episode: episode, rank: index + 1)
-              .contentShape(Rectangle())
+              .contentShape(.rect)
           }
           .buttonStyle(.plain)
 
@@ -34,7 +34,7 @@ struct TrendingEpisodesListView: View {
               .font(.subheadline)
               .foregroundStyle(.secondary)
               .frame(width: 36, height: 36)
-              .contentShape(Rectangle())
+              .contentShape(.rect)
           }
         }
         .contextMenu {

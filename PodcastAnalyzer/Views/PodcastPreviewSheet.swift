@@ -66,7 +66,7 @@ struct PodcastPreviewSheet: View {
     VStack(spacing: 4) {
       Text(podcast.name)
         .font(.title2)
-        .fontWeight(.bold)
+        .bold()
         .multilineTextAlignment(.center)
 
       Text(podcast.artistName)

@@ -160,7 +160,7 @@ private struct ThumblessSlider: View {
             .animation(.easeOut(duration: 0.15), value: isTouching)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             // The whole 44pt row is the target, not just the 4pt track.
-            .contentShape(Rectangle())
+            .contentShape(.rect)
             .gesture(
                 // `minimumDistance: 0` so the bar can thicken the instant the
                 // finger lands, the way Apple Podcasts does. The value is still
