@@ -38,6 +38,9 @@ struct DownloadProgressRing: View {
       }
     }
     .frame(width: size, height: size)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Downloading")
+    .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
   }
 }
 

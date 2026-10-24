@@ -72,29 +72,29 @@ struct EpisodeStatusIcons: View {
   private var standardBody: some View {
     HStack(spacing: spacing) {
       if isStarred {
-        statusIcon("star.fill", color: .yellow)
+        statusIcon("star.fill", label: "Starred", color: .yellow)
       }
 
       // Download status: show progress if downloading, icon if downloaded
       if isDownloading {
         downloadProgressView
       } else if isDownloaded {
-        statusIcon("arrow.down.circle.fill", color: .green)
+        statusIcon("arrow.down.circle.fill", label: "Downloaded", color: .green)
       }
 
       // Transcript status: show progress if transcribing, icon if has transcript
       if isTranscribing {
         transcriptProgressView
       } else if hasTranscript {
-        statusIcon("captions.bubble.fill", color: .purple)
+        statusIcon("captions.bubble.fill", label: "Transcript", color: .purple)
       }
 
       if hasAIAnalysis {
-        statusIcon("sparkles", color: .orange)
+        statusIcon("sparkles", label: "AI Analysis", color: .orange)
       }
 
       if showCompleted && isCompleted {
-        statusIcon("checkmark.circle.fill", color: .green)
+        statusIcon("checkmark.circle.fill", label: "Played", color: .green)
       }
     }
   }
@@ -104,25 +104,25 @@ struct EpisodeStatusIcons: View {
     if hasAnyStatus {
       HStack(spacing: spacing) {
         if isStarred {
-          statusIcon("star.fill", color: .yellow)
+          statusIcon("star.fill", label: "Starred", color: .yellow)
         }
 
         // Download status: show progress if downloading, checkmark if downloaded
         if isDownloading {
           downloadProgressView
         } else if isDownloaded {
-          statusIcon("arrow.down.circle.fill", color: .green)
+          statusIcon("arrow.down.circle.fill", label: "Downloaded", color: .green)
         }
 
         // Transcript status: show progress if transcribing, icon if has transcript
         if isTranscribing {
           transcriptProgressView
         } else if hasTranscript {
-          statusIcon("captions.bubble.fill", color: .purple)
+          statusIcon("captions.bubble.fill", label: "Transcript", color: .purple)
         }
 
         if hasAIAnalysis {
-          statusIcon("sparkles", color: .orange)
+          statusIcon("sparkles", label: "AI Analysis", color: .orange)
         }
       }
       .padding(4)
@@ -132,10 +132,11 @@ struct EpisodeStatusIcons: View {
     }
   }
 
-  private func statusIcon(_ name: String, color: Color) -> some View {
+  private func statusIcon(_ name: String, label: LocalizedStringKey, color: Color) -> some View {
     Image(systemName: name)
       .font(.system(size: iconSize, weight: isCompact ? .bold : .regular))
       .foregroundStyle(color)
+      .accessibilityLabel(label)
   }
 
   @ViewBuilder
@@ -159,5 +160,7 @@ struct EpisodeStatusIcons: View {
         .font(.system(size: transcriptIconSize, weight: .bold))
         .foregroundStyle(.purple)
     }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Transcribing")
   }
 }
