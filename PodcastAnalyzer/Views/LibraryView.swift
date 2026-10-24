@@ -357,6 +357,8 @@ private struct TranscriptToolbarBadge: View {
             .font(.caption.monospacedDigit())
         }
       }
+      .accessibilityLabel("Transcribing")
+      .accessibilityValue(count.formatted())
       .transition(.opacity)
     }
   }
