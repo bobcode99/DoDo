@@ -20,9 +20,6 @@ struct HTMLTextView: View {
     /// whatever `OpenURLAction` the host installed — a UIKit/AppKit text view
     /// does not route them through SwiftUI on its own.
     @Environment(\.openURL) private var openURL
-    #if os(iOS)
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    #endif
 
     var body: some View {
         #if os(macOS)
@@ -63,15 +60,6 @@ struct HTMLTextView: View {
         result.addAttribute(.font, value: NSFont.systemFont(ofSize: NSFont.systemFontSize), range: fullRange)
         #else
         result.addAttribute(.foregroundColor, value: UIColor.label, range: fullRange)
-
-        // The parser bakes in a fixed point size. Scaling it here keeps the text at
-        // its authored size on the default setting and follows Dynamic Type from there.
-        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
-        result.enumerateAttribute(.font, in: fullRange) { value, range, _ in
-            guard let font = value as? UIFont else { return }
-            result.addAttribute(
-                .font, value: UIFontMetrics.default.scaledFont(for: font, compatibleWith: traits), range: range)
-        }
         #endif
 
         let paragraphStyle = NSMutableParagraphStyle()
