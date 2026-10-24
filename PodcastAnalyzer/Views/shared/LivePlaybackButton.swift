@@ -54,7 +54,6 @@ struct LivePlaybackButton: View {
 
   enum ButtonStyle {
     case compact      // For list rows (smaller, capsule shape)
-    case standard     // For detail views (larger, bordered prominent)
     case iconOnly     // Icon + duration only, capsule with semantic color
   }
 
@@ -132,8 +131,6 @@ struct LivePlaybackButton: View {
     switch style {
     case .compact:
       compactButton
-    case .standard:
-      standardButton
     case .iconOnly:
       iconOnlyButton
     }
@@ -196,36 +193,6 @@ struct LivePlaybackButton: View {
     .disabled(isDisabled)
   }
 
-  // MARK: - Standard Style (for detail views)
-
-  private var standardButton: some View {
-    Button(action: onPlay) {
-      HStack(spacing: 6) {
-        playIcon(size: 12)
-        Text(buttonLabel)
-          .font(.caption)
-          .fontWeight(.medium)
-
-        // Progress bar + remaining/total time so the prominent button still
-        // surfaces "how much is left", like the icon-only style does.
-        if showsPlaybackProgress {
-          progressBar(width: 28, height: 3)
-        }
-        if let duration = durationText {
-          Text(duration)
-            .font(.caption)
-            .fontWeight(.medium)
-            .contentTransition(.identity)
-        }
-      }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 8)
-    }
-    .buttonStyle(.accentProminent)
-    .disabled(isDisabled)
-    .transaction { $0.animation = nil }
-  }
-
   // MARK: - Icon Only Style (capsule with icon, progress bar, and duration)
   //
   // Tap responsiveness: every time `audioManager.currentTime` ticks, this
@@ -280,16 +247,6 @@ struct LivePlaybackButton: View {
     }
   }
 
-  private var buttonLabel: String {
-    if isPlayingThisEpisode {
-      return "Pause"
-    } else if isCompleted {
-      return "Replay"
-    } else {
-      return "Play"
-    }
-  }
-
   @ViewBuilder
   private func progressBar(width: CGFloat, height: CGFloat) -> some View {
     let clampedProgress = min(max(displayProgress, 0), 1)
@@ -320,7 +277,7 @@ struct LivePlaybackButton: View {
     } else if minutes > 0 {
       return usesChineseUnits ? "\(minutes)\(minuteUnit)" : "\(minutes)m"
     } else {
-      return String(format: "0:%02d", secs)
+      return Formatters.formatPlaybackTime(TimeInterval(secs))
     }
   }
 }
