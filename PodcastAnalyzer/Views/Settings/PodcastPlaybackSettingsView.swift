@@ -24,13 +24,19 @@ struct PodcastPlaybackSettingsView: View {
 
   private static let speedChoices: [Float] = [0, 0.8, 1.0, 1.2, 1.5, 1.75, 2.0]
 
+  /// A `Text` per branch: a ternary mixing the literal and a `String` is
+  /// a `String`, which `Text` shows verbatim without localizing "Use Default".
+  private func speedLabel(_ choice: Float) -> Text {
+    choice == 0 ? Text("Use Default") : Text(verbatim: Formatters.formatSpeed(choice))
+  }
+
   var body: some View {
     NavigationStack {
       Form {
         Section {
           Picker("Speed", selection: $speed) {
             ForEach(Self.speedChoices, id: \.self) { choice in
-              Text(choice == 0 ? "Use Default" : String(format: "%.2gx", choice))
+              speedLabel(choice)
                 .tag(choice)
             }
           }
