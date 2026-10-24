@@ -320,7 +320,7 @@ extension DataManagementView {
 
     do {
       let jsonData = try JSONSerialization.data(withJSONObject: report, options: .prettyPrinted)
-      var fullReport = "=== Diagnostic Report ===\n\n" + String(decoding: jsonData, as: UTF8.self)
+      var fullReport = "=== Diagnostic Report ===\n\n" + (String(data: jsonData, encoding: .utf8) ?? "")
 
       // Append recent log file if available
       let logURL = URL.documentsDirectory.appending(path: "app_logs.txt")
