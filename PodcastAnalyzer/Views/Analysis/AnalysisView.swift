@@ -86,7 +86,7 @@ struct AnalysisView: View {
             .labelsHidden()
 
             if visible.isEmpty {
-              ContentUnavailableView.search(text: searchText)
+              ContentUnavailableView.search
             }
             ForEach(AnalysisRow.make(for: visible, podcastByTitle: podcastByTitle)) { row(for: $0) }
           }

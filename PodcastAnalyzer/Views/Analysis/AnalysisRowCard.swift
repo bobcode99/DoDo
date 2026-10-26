@@ -90,6 +90,7 @@ struct AnalysisRowCard: View {
     }
     .frame(width: 64, height: 64)
     .clipShape(.rect(cornerRadius: 8))
+    .accessibilityHidden(true)
   }
 }
 
