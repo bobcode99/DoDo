@@ -63,7 +63,7 @@ enum SleepTimerOption: Equatable, CaseIterable {
   case minutes45
   case hour1
 
-  var displayName: String {
+  var displayName: LocalizedStringResource {
     switch self {
     case .off: return "Off"
     case .endOfEpisode: return "End of Episode"
