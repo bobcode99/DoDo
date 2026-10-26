@@ -26,10 +26,11 @@ struct TrendingEpisodeRowWithNav: View {
       Menu {
         TrendingEpisodeContextMenu(episode: episode)
       } label: {
-        Image(systemName: "ellipsis")
+        Label("More options", systemImage: "ellipsis")
+          .labelStyle(.iconOnly)
           .font(.caption)
           .foregroundStyle(.tertiary)
-          .frame(width: 28, height: 28)
+          .frame(width: 44, height: 44)
           .contentShape(.rect)
       }
     }
