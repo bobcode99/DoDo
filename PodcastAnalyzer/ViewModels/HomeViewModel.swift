@@ -207,13 +207,16 @@ final class HomeViewModel {
     DiscoveryRegions.shared.enabledStorefronts
   }
 
+  var selectedStorefront: Storefront {
+    DiscoveryRegions.shared.storefront(for: selectedRegion)
+  }
+
   var selectedRegionName: String {
-    let storefront = DiscoveryRegions.shared.storefront(for: selectedRegion)
-    return "\(storefront.flag) \(storefront.name)"
+    "\(selectedStorefront.flag) \(selectedStorefront.name)"
   }
 
   var selectedRegionFlag: String {
-    DiscoveryRegions.shared.storefront(for: selectedRegion).flag
+    selectedStorefront.flag
   }
 
   init() {

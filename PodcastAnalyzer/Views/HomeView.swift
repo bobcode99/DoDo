@@ -96,6 +96,8 @@ struct HomeScreen: View {
   @State private var showNotificationInbox = false
   @Environment(\.zoomNamespace) private var zoomNamespace
 
+  private var unreadCount: Int { NotificationInbox.shared.unreadCount }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
@@ -164,9 +166,10 @@ struct HomeScreen: View {
         Button {
           showNotificationInbox = true
         } label: {
-          Image(systemName: "bell")
+          Label("Notifications", systemImage: "bell")
+            .labelStyle(.iconOnly)
             .overlay(alignment: .topTrailing) {
-              if NotificationInbox.shared.unreadCount > 0 {
+              if unreadCount > 0 {
                 Circle()
                   .fill(.red)
                   .frame(width: 8, height: 8)
@@ -174,7 +177,7 @@ struct HomeScreen: View {
               }
             }
         }
-        .accessibilityLabel("Notifications")
+        .accessibilityValue(unreadCount > 0 ? Text("\(unreadCount) unread") : Text(verbatim: ""))
       }
       ToolbarItem(placement: .primaryAction) {
         Button(action: { showRegionPicker = true }) {
@@ -188,6 +191,8 @@ struct HomeScreen: View {
           .padding(.vertical, 4)
           .glassEffect(Glass.regular.interactive(), in: .rect(cornerRadius: 12))
         }
+        .accessibilityLabel("Change region")
+        .accessibilityValue(viewModel.selectedStorefront.name)
       }
     }
     .sheet(isPresented: $showNotificationInbox) {
