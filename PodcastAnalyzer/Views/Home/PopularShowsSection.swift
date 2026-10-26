@@ -54,8 +54,10 @@ struct PopularShowsSection: View {
       HStack(spacing: 4) {
         if viewModel.isOffline {
           Image(systemName: "wifi.slash")
+          Text("Offline · saved \(fetchedAt, format: .relative(presentation: .named))")
+        } else {
+          Text("Updated \(fetchedAt, format: .relative(presentation: .named))")
         }
-        Text("\(viewModel.isOffline ? "Offline · saved " : "Updated ")\(fetchedAt, format: .relative(presentation: .named))")
       }
       .font(.caption)
       .foregroundStyle(.secondary)
