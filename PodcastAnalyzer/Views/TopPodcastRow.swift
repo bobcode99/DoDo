@@ -7,9 +7,6 @@
 
 import SwiftData
 import SwiftUI
-#if os(iOS)
-import UIKit
-#endif
 
 struct TopPodcastRow: View {
   let podcast: AppleRSSPodcast

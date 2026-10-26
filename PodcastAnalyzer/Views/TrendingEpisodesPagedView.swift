@@ -7,9 +7,6 @@
 
 import SwiftData
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 /// Horizontal paged scroll: each page shows 3 compact episode rows stacked
 /// vertically. Apple Podcasts "Top Episodes" style with artwork, rank, title,

@@ -8,10 +8,6 @@
 import SwiftData
 import SwiftUI
 
-#if os(iOS)
-import UIKit
-#endif
-
 // Navigation destination types for See All pages
 struct TrendingEpisodesDestination: Hashable {}
 struct PopularShowsDestination: Hashable {}

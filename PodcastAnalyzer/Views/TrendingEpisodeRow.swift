@@ -7,9 +7,6 @@
 
 import SwiftData
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct TrendingEpisodeRow: View {
   let episode: ApplePodcastService.TrendingEpisode
