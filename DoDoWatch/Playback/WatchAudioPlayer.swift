@@ -51,8 +51,8 @@ final class WatchAudioPlayer {
   }()
 
   private var player: AVPlayer?
-  /// Bumped by every `play(_:)`. A call that resumes from the session
-  /// activation await after a newer one started must not build its player.
+  /// Bumped by every teardown. A `play(_:)` that resumes from the session
+  /// activation await after a newer play or a `stop()` must not build its player.
   private var playRequest = 0
   private var timeObserver: Any?
   /// Set when the caller wants playback to resume from a saved position; the
@@ -93,7 +93,6 @@ final class WatchAudioPlayer {
     }
 
     teardown()
-    playRequest += 1
     let request = playRequest
 
     // Up Next and Shows hand over the remote URL; a copy already on the watch
@@ -131,8 +130,8 @@ final class WatchAudioPlayer {
       // failing loudly here would block an otherwise usable session.
       logger.error("Audio session activation failed: \(error.localizedDescription, privacy: .public)")
     }
-    // Teardown above ran before any player existed for a call still waiting
-    // here, so without this both calls build one and the older keeps playing.
+    // A newer play() or a stop() tore down while this call waited; the
+    // player it would build now has nothing to stop it, so build none.
     guard request == playRequest else { return }
 
     let item = AVPlayerItem(url: url)
@@ -290,6 +289,7 @@ final class WatchAudioPlayer {
   }
 
   private func teardown() {
+    playRequest += 1
     persistProgress()
     endObserverTask?.cancel()
     endObserverTask = nil
