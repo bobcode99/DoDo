@@ -32,6 +32,7 @@ struct MacLibraryPodcastRow: View {
         .font(.subheadline)
         .fontWeight(.semibold)
         .foregroundStyle(.primary)
+        .accessibilityLabel("Subscribed")
     }
     .padding(.vertical, 4)
   }

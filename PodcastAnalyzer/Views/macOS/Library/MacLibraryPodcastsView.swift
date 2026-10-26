@@ -25,33 +25,32 @@ struct MacLibraryPodcastsView: View {
 
   var body: some View {
     ScrollView {
+      LazyVGrid(columns: columns, spacing: 20) {
+        ForEach(viewModel.podcastsSortedByLatestEpisode) { podcast in
+          NavigationLink(value: PodcastBrowseRoute(podcastModel: podcast)) {
+            MacPodcastGridCell(podcast: podcast)
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .padding(24)
+    }
+    .overlay {
       if viewModel.podcastsSortedByLatestEpisode.isEmpty {
         ContentUnavailableView(
           "No Subscriptions",
           systemImage: "square.stack.3d.up",
           description: Text("Search and subscribe to podcasts to build your library")
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else {
-        LazyVGrid(columns: columns, spacing: 20) {
-          ForEach(viewModel.podcastsSortedByLatestEpisode) { podcast in
-            NavigationLink(value: PodcastBrowseRoute(podcastModel: podcast)) {
-              MacPodcastGridCell(podcast: podcast)
-            }
-            .buttonStyle(.plain)
-          }
-        }
-        .padding(24)
       }
     }
     .navigationTitle("Your Podcasts")
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
-        Button(action: {
+        Button("Refresh", systemImage: "arrow.clockwise") {
           Task { await viewModel.refreshAllPodcasts() }
-        }) {
-          Image(systemName: "arrow.clockwise")
         }
+        .help("Refresh")
         .disabled(viewModel.isLoading)
       }
     }

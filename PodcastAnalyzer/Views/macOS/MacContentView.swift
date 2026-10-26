@@ -96,10 +96,17 @@ struct MacContentView: View {
     .sheet(isPresented: $importManager.showImportSheet) {
       PodcastImportSheet().frame(minWidth: 400, minHeight: 300)
     }
-    .onChange(of: notificationManager.shouldNavigate) { _, shouldNavigate in
+    .onChange(of: notificationManager.shouldNavigate, initial: true) { _, shouldNavigate in
       if shouldNavigate, let target = notificationManager.navigationTarget {
         handleNotificationNavigation(target: target)
       }
+    }
+    // Controls > Show Full Player, the widget's expand link, and the Open Now
+    // Playing intent all raise this flag.
+    .onChange(of: notificationManager.shouldExpandPlayer, initial: true) { _, shouldExpand in
+      guard shouldExpand else { return }
+      notificationManager.shouldExpandPlayer = false
+      showExpandedPlayer = hasCurrentEpisode
     }
     .task {
       for await notification in NotificationCenter.default.notifications(

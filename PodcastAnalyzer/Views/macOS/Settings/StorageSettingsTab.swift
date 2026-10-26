@@ -12,9 +12,9 @@ import SwiftUI
 struct StorageSettingsTab: View {
   @Environment(\.modelContext) private var modelContext
 
-  @State private var imageCacheSize: String = "Calculating..."
-  @State private var downloadedAudioSize: String = "Calculating..."
-  @State private var transcriptsSize: String = "Calculating..."
+  @State private var imageCacheSize: Int64?
+  @State private var downloadedAudioSize: Int64?
+  @State private var transcriptsSize: Int64?
   @State private var aiAnalysisCount: Int = 0
 
   @State private var isClearingData = false
@@ -24,6 +24,7 @@ struct StorageSettingsTab: View {
   @State private var showClearDownloadsAlert = false
   @State private var showClearTranscriptsAlert = false
   @State private var showClearAIAlert = false
+  @State private var clearError: String?
 
   var body: some View {
     Form {
@@ -32,7 +33,7 @@ struct StorageSettingsTab: View {
           icon: "photo.on.rectangle",
           iconColor: .orange,
           title: "Image Cache",
-          size: imageCacheSize,
+          size: sizeText(imageCacheSize),
           isClearing: isClearingData && clearingMessage == "cache"
         ) {
           showClearCacheAlert = true
@@ -42,7 +43,7 @@ struct StorageSettingsTab: View {
           icon: "arrow.down.circle.fill",
           iconColor: .green,
           title: "Downloaded Episodes",
-          size: downloadedAudioSize,
+          size: sizeText(downloadedAudioSize),
           isClearing: isClearingData && clearingMessage == "downloads",
           isDestructive: true
         ) {
@@ -53,7 +54,7 @@ struct StorageSettingsTab: View {
           icon: "text.bubble",
           iconColor: .blue,
           title: "Transcripts",
-          size: transcriptsSize,
+          size: sizeText(transcriptsSize),
           isClearing: isClearingData && clearingMessage == "transcripts",
           isDestructive: true
         ) {
@@ -64,7 +65,7 @@ struct StorageSettingsTab: View {
           icon: "sparkles",
           iconColor: .purple,
           title: "AI Analysis Data",
-          size: "\(aiAnalysisCount) analyses",
+          size: Text("\(aiAnalysisCount) analyses"),
           isClearing: isClearingData && clearingMessage == "ai",
           isDestructive: true
         ) {
@@ -78,8 +79,8 @@ struct StorageSettingsTab: View {
     }
     .formStyle(.grouped)
     .padding()
-    .onAppear {
-      calculateStorageInfo()
+    .task {
+      await calculateStorageInfo()
     }
     .alert("Clear Image Cache", isPresented: $showClearCacheAlert) {
       Button("Cancel", role: .cancel) {}
@@ -105,14 +106,19 @@ struct StorageSettingsTab: View {
     } message: {
       Text("This will delete all AI-generated summaries, entities, highlights, and Q&A history.")
     }
+    .alert("Couldn't Clear Data", item: $clearError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { message in
+      Text(message)
+    }
   }
 
   @ViewBuilder
   private func storageRow(
     icon: String,
     iconColor: Color,
-    title: String,
-    size: String,
+    title: LocalizedStringResource,
+    size: Text,
     isClearing: Bool,
     isDestructive: Bool = false,
     action: @escaping () -> Void
@@ -124,7 +130,7 @@ struct StorageSettingsTab: View {
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
-        Text(size)
+        size
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -133,33 +139,24 @@ struct StorageSettingsTab: View {
 
       if isClearing {
         ProgressView()
-          .scaleEffect(0.7)
+          .controlSize(.small)
       } else {
-        Button(isDestructive ? "Remove All" : "Clear") {
-          action()
-        }
-        .foregroundStyle(isDestructive ? .red : .blue)
+        Button(
+          isDestructive ? LocalizedStringResource("Remove All") : "Clear",
+          role: isDestructive ? .destructive : nil, action: action)
       }
     }
-    .buttonStyle(.plain)
   }
 
   // MARK: - Storage Calculations
 
-  private func calculateStorageInfo() {
-    Task {
-      let cacheSize = await calculateImageCacheSize()
-      imageCacheSize = formatBytes(cacheSize)
+  private func calculateStorageInfo() async {
+    imageCacheSize = await calculateImageCacheSize()
+    downloadedAudioSize = await calculateDownloadedAudioSize()
+    transcriptsSize = await calculateTranscriptsSize()
 
-      let audioSize = await calculateDownloadedAudioSize()
-      downloadedAudioSize = formatBytes(audioSize)
-
-      let captionsSize = await calculateTranscriptsSize()
-      transcriptsSize = formatBytes(captionsSize)
-
-      let analysisCount = countAIAnalyses()
-      aiAnalysisCount = analysisCount
-    }
+    let analysisCount = countAIAnalyses()
+    aiAnalysisCount = analysisCount
   }
 
   private func calculateImageCacheSize() async -> Int64 {
@@ -179,10 +176,12 @@ struct StorageSettingsTab: View {
     return (try? modelContext.fetchCount(descriptor)) ?? 0
   }
 
-  private func formatBytes(_ bytes: Int64) -> String {
-    let formatter = ByteCountFormatter()
-    formatter.countStyle = .file
-    return formatter.string(fromByteCount: bytes)
+  private func sizeText(_ bytes: Int64?) -> Text {
+    if let bytes {
+      Text(bytes, format: .byteCount(style: .file))
+    } else {
+      Text("Calculating...")
+    }
   }
 
   // MARK: - Clear Actions
@@ -193,9 +192,9 @@ struct StorageSettingsTab: View {
 
     Task {
       ImageCacheUtility.clearAllCache()
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      imageCacheSize = "0 bytes"
     }
   }
 
@@ -208,23 +207,26 @@ struct StorageSettingsTab: View {
         predicate: #Predicate { $0.localAudioPath != nil }
       )
 
-      if let downloadedEpisodes = try? modelContext.fetch(descriptor) {
-        for episode in downloadedEpisodes {
-          if let localPath = episode.localAudioPath {
-            try? FileManager.default.removeItem(atPath: localPath)
+      do {
+        for episode in try modelContext.fetch(descriptor) {
+          // A file already gone is the outcome we want, not a failure.
+          if let localPath = episode.localAudioPath,
+             FileManager.default.fileExists(atPath: localPath) {
+            try FileManager.default.removeItem(atPath: localPath)
           }
           episode.localAudioPath = nil
           episode.downloadedDate = nil
           episode.fileSize = 0
         }
-        modelContext.saveOrLog()
+        try modelContext.save()
+        await FileStorageManager.shared.clearAllAudioFiles()
+      } catch {
+        clearError = error.localizedDescription
       }
 
-      await FileStorageManager.shared.clearAllAudioFiles()
-
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      downloadedAudioSize = "0 bytes"
     }
   }
 
@@ -233,11 +235,15 @@ struct StorageSettingsTab: View {
     clearingMessage = "transcripts"
 
     Task {
-      try? TranscriptStore.shared.deleteAll()
+      do {
+        try TranscriptStore.shared.deleteAll()
+      } catch {
+        clearError = error.localizedDescription
+      }
 
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      transcriptsSize = "0 bytes"
     }
   }
 
@@ -247,16 +253,18 @@ struct StorageSettingsTab: View {
 
     Task {
       let descriptor = FetchDescriptor<EpisodeAIAnalysis>()
-      if let analyses = try? modelContext.fetch(descriptor) {
-        for analysis in analyses {
+      do {
+        for analysis in try modelContext.fetch(descriptor) {
           modelContext.delete(analysis)
         }
-        modelContext.saveOrLog()
+        try modelContext.save()
+      } catch {
+        clearError = error.localizedDescription
       }
 
+      await calculateStorageInfo()
       isClearingData = false
       clearingMessage = ""
-      aiAnalysisCount = 0
     }
   }
 }

@@ -13,9 +13,9 @@ import SwiftUI
 struct MacLibraryEpisodeListView: View {
   let episodes: [LibraryEpisode]
   let podcastInfoModelList: [PodcastInfoModel]
-  let emptyTitle: String
+  let emptyTitle: LocalizedStringResource
   let emptySystemImage: String
-  let emptyDescription: String
+  let emptyDescription: LocalizedStringResource
   let createIfMissing: Bool
   let modelContext: ModelContext
   @Binding var episodeModels: [String: EpisodeDownloadModel]
@@ -111,44 +111,13 @@ struct MacLibraryEpisodeListRow: View {
         downloadState: statusChecker.downloadState,
         podcastModel: podcastModel,
         onPlay: {
-          let playbackURL = statusChecker.playbackURL
-          guard !playbackURL.isEmpty else { return }
-          let playbackEpisode = PlaybackEpisode(
-            id: statusChecker.episodeKey,
-            title: episode.episodeInfo.title,
-            podcastTitle: episode.podcastTitle,
-            audioURL: playbackURL,
-            imageURL: episode.imageURL ?? "",
-            episodeDescription: episode.episodeInfo.podcastEpisodeDescription,
-            pubDate: episode.episodeInfo.pubDate,
-            duration: episode.episodeInfo.duration,
-            guid: episode.episodeInfo.guid
-          )
-          // Live store, not the LibraryEpisode snapshot (can be stale); returns 0
-          // for completed episodes — see EpisodeRowView.playAction().
-          audioManager.play(
-            episode: playbackEpisode,
-            audioURL: playbackURL,
-            startTime: PlaybackStateCoordinator.savedPlaybackPosition(
-              podcastTitle: episode.podcastTitle, episodeTitle: episode.episodeInfo.title),
-            imageURL: episode.imageURL ?? "",
-            useDefaultSpeed: true
-          )
+          MacLibraryEpisodeRow.play(
+            episode.episodeInfo, podcastTitle: episode.podcastTitle, imageURL: episode.imageURL ?? "")
         },
         onPlayNext: {
-          let playbackURL = statusChecker.playbackURL
-          guard !playbackURL.isEmpty else { return }
-          let playbackEpisode = PlaybackEpisode(
-            id: statusChecker.episodeKey,
-            title: episode.episodeInfo.title,
-            podcastTitle: episode.podcastTitle,
-            audioURL: playbackURL,
-            imageURL: episode.imageURL ?? "",
-            episodeDescription: episode.episodeInfo.podcastEpisodeDescription,
-            pubDate: episode.episodeInfo.pubDate,
-            duration: episode.episodeInfo.duration,
-            guid: episode.episodeInfo.guid
-          )
+          guard let playbackEpisode = MacLibraryEpisodeRow.playbackEpisode(
+            for: episode.episodeInfo, podcastTitle: episode.podcastTitle, imageURL: episode.imageURL ?? ""
+          ) else { return }
           audioManager.playNext(playbackEpisode)
         },
         onToggleStar: onToggleStar,

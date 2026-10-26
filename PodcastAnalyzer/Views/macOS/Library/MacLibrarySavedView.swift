@@ -29,14 +29,14 @@ struct MacLibrarySavedView: View {
       }
     )
     .navigationTitle("Saved")
-    .onAppear {
+    .task {
       viewModel.setModelContext(modelContext)
       episodeModels = LibraryEpisodeActions.batchFetchEpisodeModels(from: modelContext)
       // `setModelContext` no-ops on subsequent visits (`isAlreadyLoaded` short
       // circuits it). Without an explicit refresh here, a star toggled in
       // EpisodeDetailView — including on episodes from unsubscribed podcasts —
       // wouldn't show up until the next app launch.
-      Task { await viewModel.refreshSavedEpisodes() }
+      await viewModel.refreshSavedEpisodes()
     }
     .onDisappear {
       viewModel.cleanup()

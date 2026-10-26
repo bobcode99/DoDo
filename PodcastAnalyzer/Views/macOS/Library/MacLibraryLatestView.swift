@@ -34,10 +34,10 @@ struct MacLibraryLatestView: View {
       modelContext: modelContext,
       episodeModels: $episodeModels,
       onToggleStar: {
-        viewModel.setModelContext(modelContext)
+        viewModel.refreshData()
       },
       onEpisodeMutated: {
-        viewModel.setModelContext(modelContext)
+        viewModel.refreshData()
       }
     )
     .navigationTitle("Latest Episodes")

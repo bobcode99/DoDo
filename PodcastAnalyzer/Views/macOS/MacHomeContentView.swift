@@ -60,7 +60,7 @@ struct MacHomeContentView: View {
       if syncManager.isSyncing {
         ToolbarItem(placement: .navigation) {
           HStack(spacing: 6) {
-            ProgressView().scaleEffect(0.7)
+            ProgressView().controlSize(.small)
             if syncManager.syncProgressTotal > 0 {
               Text("\(syncManager.syncProgressCurrent)/\(syncManager.syncProgressTotal)")
                 .font(.caption2.monospacedDigit())
@@ -78,6 +78,7 @@ struct MacHomeContentView: View {
               .font(.caption2)
           }
         }
+        .accessibilityLabel("Change region")
         .help("Change region")
       }
     }
@@ -105,7 +106,7 @@ struct MacHomeContentView: View {
         VStack(alignment: .leading, spacing: 2) {
           Text("Up Next")
             .font(.title2)
-            .fontWeight(.bold)
+            .bold()
           if viewModel.continueListeningCount > 0 {
             Text("\(viewModel.continueListeningCount) in progress")
               .font(.caption)
@@ -174,12 +175,12 @@ struct MacHomeContentView: View {
         HStack {
           Text("Top Episodes")
             .font(.title2)
-            .fontWeight(.bold)
+            .bold()
 
           Spacer()
 
           if viewModel.isLoadingTrendingEpisodes {
-            ProgressView().scaleEffect(0.8)
+            ProgressView().controlSize(.small)
           }
 
           if !viewModel.trendingEpisodes.isEmpty {
@@ -221,12 +222,12 @@ struct MacHomeContentView: View {
       HStack {
         Text("Popular Shows")
           .font(.title2)
-          .fontWeight(.bold)
+          .bold()
 
         Spacer()
 
         if viewModel.isLoadingTopPodcasts {
-          ProgressView().scaleEffect(0.8)
+          ProgressView().controlSize(.small)
         }
 
         if !viewModel.topPodcasts.isEmpty {
@@ -251,7 +252,7 @@ struct MacHomeContentView: View {
         // chevron, single-line title, full-width Divider). Use a LazyVStack
         // so each row spans the section width — matches iOS HomeView.
         LazyVStack(spacing: 0) {
-          ForEach(Array(viewModel.topPodcasts.prefix(30).enumerated()), id: \.element.id) { index, podcast in
+          ForEach(viewModel.topPodcasts.prefix(30).enumerated(), id: \.element.id) { index, podcast in
             TopPodcastRow(
               podcast: podcast,
               rank: index + 1,

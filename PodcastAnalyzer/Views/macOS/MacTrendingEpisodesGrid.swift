@@ -32,7 +32,7 @@ struct MacTrendingEpisodesGrid: View {
   var body: some View {
     ScrollView(.horizontal) {
       LazyHGrid(rows: rows, spacing: columnSpacing) {
-        ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
+        ForEach(episodes.enumerated(), id: \.element.id) { index, episode in
           macTrendingCell(episode: episode, rank: index + 1)
             .containerRelativeFrame(.horizontal) { length, _ in
               // Divide the visible container so 3 columns fully fit and the
@@ -65,7 +65,8 @@ struct MacTrendingEpisodesGrid: View {
       Menu {
         TrendingEpisodeContextMenu(episode: episode)
       } label: {
-        Image(systemName: "ellipsis")
+        Label("More", systemImage: "ellipsis")
+          .labelStyle(.iconOnly)
           .font(.caption)
           .foregroundStyle(.tertiary)
           .frame(width: 28, height: 28)
@@ -73,6 +74,7 @@ struct MacTrendingEpisodesGrid: View {
       }
       .menuStyle(.borderlessButton)
       .menuIndicator(.hidden)
+      .help("More")
     }
     .contextMenu {
       TrendingEpisodeContextMenu(episode: episode)

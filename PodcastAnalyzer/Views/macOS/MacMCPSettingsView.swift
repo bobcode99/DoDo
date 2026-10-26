@@ -16,7 +16,8 @@ struct MacMCPSettingsView: View {
   @AppStorage(MCPMenubarController.keyHeadless) private var headless: Bool = false
   @AppStorage(MCPMenubarController.keyLaunchAtLogin) private var launchAtLogin: Bool = false
   @State private var showToken = false
-  @State private var copiedHint: String?
+  @State private var copiedHint: LocalizedStringResource?
+  @State private var launchAtLoginError: String?
 
   var body: some View {
     // Form inside an explicit ScrollView so long content never collides with
@@ -31,6 +32,17 @@ struct MacMCPSettingsView: View {
         connectSection
       }
       .formStyle(.grouped)
+    }
+    .task(id: copiedHint) {
+      guard copiedHint != nil else { return }
+      try? await Task.sleep(for: .seconds(2))
+      guard !Task.isCancelled else { return }
+      withAnimation { copiedHint = nil }
+    }
+    .alert("Couldn't Change Open at Login", item: $launchAtLoginError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { error in
+      Text(error)
     }
   }
 
@@ -61,7 +73,7 @@ struct MacMCPSettingsView: View {
           Image(systemName: statusSymbol)
             .foregroundStyle(statusTint)
         }
-        .accessibilityLabel(statusLine)
+        .accessibilityLabel(Text(statusLine))
       }
     } header: {
       Text("Server")
@@ -86,7 +98,7 @@ struct MacMCPSettingsView: View {
     }
   }
 
-  private var statusLine: String {
+  private var statusLine: LocalizedStringResource {
     switch manager.status {
     case .stopped: return "Stopped"
     case .running(let url): return "Running at \(url.absoluteString)"
@@ -152,10 +164,13 @@ struct MacMCPSettingsView: View {
         .onChange(of: headless) { _, newValue in
           applyActivationPolicy(headless: newValue)
         }
-      Toggle("Open at Login", isOn: $launchAtLogin)
-        .onChange(of: launchAtLogin) { _, newValue in
-          applyLaunchAtLogin(newValue)
-        }
+      // Only a user flip registers; syncing from the real status on appear
+      // must not, and a failed register must leave the toggle where it was.
+      Toggle("Open at Login", isOn: Binding(
+        get: { launchAtLogin },
+        set: { applyLaunchAtLogin($0) }
+      ))
+      .onAppear { launchAtLogin = SMAppService.mainApp.status == .enabled }
     } header: {
       Text("Headless")
     } footer: {
@@ -211,10 +226,14 @@ struct MacMCPSettingsView: View {
         }
       }
       if let hint = copiedHint {
-        Label(hint, systemImage: "checkmark.circle.fill")
-          .foregroundStyle(.green)
-          .font(.caption)
-          .transition(.opacity)
+        Label {
+          Text(hint)
+        } icon: {
+          Image(systemName: "checkmark.circle.fill")
+        }
+        .foregroundStyle(.green)
+        .font(.caption)
+        .transition(.opacity)
       }
     } header: {
       Text("Connect a client")
@@ -283,12 +302,8 @@ struct MacMCPSettingsView: View {
     pb.setString(string, forType: .string)
   }
 
-  private func flashHint(_ text: String) {
+  private func flashHint(_ text: LocalizedStringResource) {
     withAnimation { copiedHint = text }
-    Task {
-      try? await Task.sleep(for: .seconds(2))
-      withAnimation { copiedHint = nil }
-    }
   }
 
   private func applyActivationPolicy(headless: Bool) {
@@ -307,9 +322,9 @@ struct MacMCPSettingsView: View {
       } else {
         try SMAppService.mainApp.unregister()
       }
+      launchAtLogin = enabled
     } catch {
-      // Reset the toggle on failure so UI matches reality.
-      launchAtLogin = !enabled
+      launchAtLoginError = error.localizedDescription
     }
   }
 }

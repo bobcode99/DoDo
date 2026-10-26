@@ -12,6 +12,7 @@ import SwiftUI
 struct MacWhisperModelRow: View {
   let variant: WhisperModelVariant
   private var manager: WhisperModelManager { .shared }
+  @State private var isConfirmingDelete = false
 
   var body: some View {
     let status = manager.status(for: variant)
@@ -22,7 +23,7 @@ struct MacWhisperModelRow: View {
     }) {
       HStack(spacing: 10) {
         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-          .foregroundStyle(isSelected ? .blue : .secondary)
+          .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
 
         VStack(alignment: .leading, spacing: 2) {
           HStack(spacing: 6) {
@@ -34,8 +35,8 @@ struct MacWhisperModelRow: View {
               Text("Recommended")
                 .font(.caption2)
                 .padding(.horizontal, 5).padding(.vertical, 2)
-                .background(Color.blue.opacity(0.15))
-                .foregroundStyle(.blue)
+                .background(.tint.opacity(0.15))
+                .foregroundStyle(.tint)
                 .clipShape(Capsule())
             }
           }
@@ -64,7 +65,7 @@ struct MacWhisperModelRow: View {
     case .downloading(let progress):
       HStack(spacing: 8) {
         ProgressView(value: progress).frame(width: 80)
-        Text("\(Int(progress * 100))%").font(.caption).foregroundStyle(.secondary)
+        Text(progress, format: .percent.precision(.fractionLength(0))).font(.caption).foregroundStyle(.secondary)
         Button("Cancel download", systemImage: "xmark.circle.fill") {
           manager.cancelDownload(variant)
         }
@@ -74,11 +75,18 @@ struct MacWhisperModelRow: View {
     case .ready:
       HStack(spacing: 8) {
         Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        Button { manager.deleteModel(variant) } label: {
-          Image(systemName: "trash").foregroundStyle(.red).font(.caption)
+        Button { isConfirmingDelete = true } label: {
+          Label("Delete Model", systemImage: "trash")
+            .labelStyle(.iconOnly)
+            .foregroundStyle(.red).font(.caption)
         }
         .buttonStyle(.plain)
         .help("Delete model from disk")
+        .confirmationDialog("Delete \(variant.displayName)?", isPresented: $isConfirmingDelete) {
+          Button("Delete", role: .destructive) { manager.deleteModel(variant) }
+        } message: {
+          Text("You can download it again later.")
+        }
       }
     case .error(let message):
       HStack(spacing: 4) {

@@ -74,16 +74,17 @@ struct MacMiniPlayerBar: View {
 
           // Playback speed button
           Menu {
-            ForEach(Formatters.playbackSpeeds, id: \.self) { speed in
-              Button(action: { audioManager.setPlaybackRate(Float(speed)) }) {
-                HStack {
-                  Text(Formatters.formatSpeed(Float(speed)))
-                  if abs(audioManager.playbackRate - Float(speed)) < 0.01 {
-                    Image(systemName: "checkmark")
-                  }
-                }
+            // Routed through setPlaybackRate so the player and saved rate stay in step.
+            Picker("Playback Speed", selection: Binding(
+              get: { audioManager.playbackRate },
+              set: { audioManager.setPlaybackRate($0) }
+            )) {
+              ForEach(Formatters.playbackSpeeds, id: \.self) { speed in
+                Text(Formatters.formatSpeed(speed)).tag(speed)
               }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
           } label: {
             Text(Formatters.formatSpeed(audioManager.playbackRate))
               .font(.system(size: 11, weight: .medium))
@@ -96,11 +97,12 @@ struct MacMiniPlayerBar: View {
           .help("Playback speed")
 
           // Expand button
-          Button(action: { showExpandedPlayer = true }) {
-            Image(systemName: "chevron.up.2")
-              .font(.system(size: 12))
-              .foregroundStyle(.secondary)
+          Button("Expand Player", systemImage: "chevron.up.2") {
+            showExpandedPlayer = true
           }
+          .labelStyle(.iconOnly)
+          .font(.system(size: 12))
+          .foregroundStyle(.secondary)
           .buttonStyle(.plain)
           .help("Expand player")
         }
@@ -109,16 +111,8 @@ struct MacMiniPlayerBar: View {
       .padding(.horizontal, 20)
       .padding(.vertical, 12)
     }
-    Group {
-      if #available(macOS 26, *) {
-        content
-          .glassEffect(.regular, in: .rect(cornerRadius: 14))
-      } else {
-        content
-          .clipShape(.rect(cornerRadius: 14))
-          .background(.ultraThinMaterial, in: .rect(cornerRadius: 14))
-      }
-    }
+    content
+      .glassEffect(.regular, in: .rect(cornerRadius: 14))
     // Now floats directly over page content (Library lists, Episode Detail, etc.)
     // instead of sitting in a reserved safe-area strip, so it needs its own
     // elevation to read as a floating card rather than blending into the page.
@@ -134,6 +128,7 @@ struct MacMiniPlayerBar: View {
 private struct MacMiniPlayerProgressBar: View {
   @Binding var isHoveringProgress: Bool
   @Binding var isDraggingProgress: Bool
+  @State private var dragProgress: Double = 0
   private var audioManager: EnhancedAudioManager { .shared }
 
   private var progressPercentage: Double {
@@ -143,27 +138,39 @@ private struct MacMiniPlayerProgressBar: View {
 
   var body: some View {
     GeometryReader { geometry in
+      let currentProgress = isDraggingProgress ? dragProgress : progressPercentage
+
       ZStack(alignment: .leading) {
         Rectangle()
           .fill(Color.gray.opacity(0.2))
 
         Rectangle()
           .fill(.tint)
-          .frame(width: geometry.size.width * progressPercentage)
+          .frame(width: geometry.size.width * currentProgress)
       }
       .contentShape(Rectangle())
       .gesture(
         DragGesture(minimumDistance: 0)
           .onChanged { value in
             isDraggingProgress = true
-            let progress = max(0, min(1, value.location.x / geometry.size.width))
-            let newTime = progress * audioManager.duration
-            audioManager.seek(to: newTime)
+            dragProgress = max(0, min(1, value.location.x / geometry.size.width))
           }
-          .onEnded { _ in
+          .onEnded { value in
+            let finalProgress = max(0, min(1, value.location.x / geometry.size.width))
+            audioManager.seek(to: finalProgress * audioManager.duration)
             isDraggingProgress = false
           }
       )
+    }
+    .accessibilityElement()
+    .accessibilityLabel("Playback position")
+    .accessibilityValue(Text("\(Formatters.formatPlaybackTime(audioManager.currentTime)) of \(Formatters.formatPlaybackTime(audioManager.duration))"))
+    .accessibilityAdjustableAction { direction in
+      switch direction {
+      case .increment: audioManager.skipForward()
+      case .decrement: audioManager.skipBackward()
+      @unknown default: break
+      }
     }
   }
 }

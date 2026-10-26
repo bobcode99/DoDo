@@ -17,6 +17,7 @@
 
 import AppKit
 import OSLog
+import SwiftUI
 
 @MainActor
 enum MacBackgroundMode {
@@ -58,24 +59,39 @@ enum MacBackgroundMode {
     window.isVisible && window.styleMask.contains(.titled) && !(window is NSPanel)
   }
 
+  private static func isMinimized(_ window: NSWindow) -> Bool {
+    window.isMiniaturized && !(window is NSPanel)
+  }
+
   // MARK: - Presenting
+
+  /// Set by `MacWindowCommands`. SwiftUI opens scene windows only through
+  /// this action: `NSDocumentController.newDocument` has no document type to
+  /// create here and showed "No document could be created." instead.
+  static var openMainWindow: OpenWindowAction?
 
   /// Brings the app forward with a window, whatever policy it was in.
   static func presentMainWindow() {
     NSApp.setActivationPolicy(.regular)
 
-    if let window = NSApp.windows.first(where: isUserFacing) {
+    // A hidden app's windows and a minimized window both report invisible,
+    // and opening a new one then left two main windows. Unhiding brings the
+    // hidden ones back, but not before this returns, so stop there.
+    if NSApp.isHidden {
+      NSApp.unhide(nil)
+      logger.info("Unhid the app")
+    } else if let window = NSApp.windows.first(where: { isUserFacing($0) || isMinimized($0) }) {
+      window.deminiaturize(nil)
       window.makeKeyAndOrderFront(nil)
       logger.info("Presented existing window")
-    } else {
+    } else if let openMainWindow {
       logger.info("No window to present; asking the scene for a new one")
-      // Every window was closed. `newDocument:` is what SwiftUI's WindowGroup
-      // installs behind File ▸ New Window, so this asks the scene for a fresh
-      // one rather than trying to resurrect an NSWindow it no longer owns.
-      NSDocumentController.shared.newDocument(nil)
+      openMainWindow(id: PodcastAnalyzerApp.mainWindowID)
+    } else {
+      logger.fault("No openWindow action yet; cannot open the main window")
     }
 
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
   }
 
   // MARK: - Observation

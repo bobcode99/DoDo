@@ -13,6 +13,10 @@ import SwiftUI
 private let logger = Logger(subsystem: "com.podcast.analyzer", category: "MacSearchView")
 
 struct MacSearchView: View {
+  private typealias LibraryEpisodeMatch = (
+    uniqueId: String, episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String
+  )
+
   @State private var viewModel = PodcastSearchViewModel()
   @Environment(\.modelContext) private var modelContext
   @Query(filter: #Predicate<PodcastInfoModel> { $0.isSubscribed == true })
@@ -20,6 +24,9 @@ struct MacSearchView: View {
 
   @State private var selectedTab: SearchTab = .applePodcasts
   @State private var searchText = ""
+  @State private var libraryEpisodes: [LibraryEpisodeMatch] = []
+  @State private var transcriptSearchVM = TranscriptSearchViewModel()
+  @State private var subscribeError: String?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -38,7 +45,7 @@ struct MacSearchView: View {
         case .library:
           libraryResultsView
         case .transcripts:
-          emptySearchView
+          transcriptResultsView
         }
       }
     }
@@ -50,47 +57,28 @@ struct MacSearchView: View {
         viewModel.performSearch()
       }
     }
-    .onChange(of: searchText) { _, newValue in
-      viewModel.searchText = newValue
-      if selectedTab == .applePodcasts && !newValue.isEmpty {
-        viewModel.performSearch()
-      }
+    .task(id: [selectedTab.rawValue, searchText]) {
+      try? await Task.sleep(for: .milliseconds(250))
+      guard !Task.isCancelled else { return }
+      await runSearch()
     }
-    .onChange(of: selectedTab) { _, newTab in
-      if newTab == .applePodcasts && !searchText.isEmpty {
-        viewModel.searchText = searchText
-        viewModel.performSearch()
-      }
+    .alert("Subscription Failed", item: $subscribeError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { error in
+      Text(error)
     }
   }
 
   // MARK: - Tab Selector
 
   private var tabSelector: some View {
-    HStack(spacing: 0) {
+    Picker("Search In", selection: $selectedTab) {
       ForEach(SearchTab.allCases, id: \.self) { tab in
-        Button(action: {
-          withAnimation(.easeInOut(duration: 0.2)) {
-            selectedTab = tab
-          }
-        }) {
-          Text(tab.title)
-            .font(.subheadline)
-            .fontWeight(selectedTab == tab ? .semibold : .regular)
-            .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(
-              RoundedRectangle(cornerRadius: 8)
-                .fill(selectedTab == tab ? Color.gray.opacity(0.2) : Color.clear)
-            )
-        }
-        .buttonStyle(.plain)
+        Text(tab.title).tag(tab)
       }
     }
-    .padding(4)
-    .background(Color.gray.opacity(0.1))
-    .clipShape(.rect(cornerRadius: 10))
+    .pickerStyle(.segmented)
+    .labelsHidden()
   }
 
   // MARK: - Empty Search View
@@ -155,7 +143,7 @@ struct MacSearchView: View {
               MacApplePodcastRow(
                 podcast: podcast,
                 isSubscribed: isSubscribed(podcast),
-                onSubscribe: { subscribeToPodcast(podcast) }
+                onSubscribe: { await subscribeToPodcast(podcast) }
               )
             }
             .buttonStyle(.plain)
@@ -170,10 +158,9 @@ struct MacSearchView: View {
 
   private var libraryResultsView: some View {
     let filteredPodcasts = filterLibraryPodcasts()
-    let filteredEpisodes = filterLibraryEpisodes()
 
     return Group {
-      if filteredPodcasts.isEmpty && filteredEpisodes.isEmpty {
+      if filteredPodcasts.isEmpty && libraryEpisodes.isEmpty {
         VStack {
           Spacer()
           Text("No results in your library")
@@ -194,9 +181,9 @@ struct MacSearchView: View {
           }
 
           // Episodes section
-          if !filteredEpisodes.isEmpty {
+          if !libraryEpisodes.isEmpty {
             Section {
-              ForEach(filteredEpisodes, id: \.uniqueId) { item in
+              ForEach(libraryEpisodes, id: \.uniqueId) { item in
                 NavigationLink(value: EpisodeDetailRoute(
                   episode: item.episode,
                   podcastTitle: item.podcastTitle,
@@ -219,27 +206,67 @@ struct MacSearchView: View {
     }
   }
 
+  // MARK: - Transcript Results
+
+  private var transcriptResultsView: some View {
+    Group {
+      if transcriptSearchVM.isSearching {
+        VStack {
+          Spacer()
+          ProgressView()
+          Spacer()
+        }
+      } else if transcriptSearchVM.results.isEmpty {
+        VStack {
+          Spacer()
+          Text("No transcript matches found")
+            .foregroundStyle(.secondary)
+          Spacer()
+        }
+      } else {
+        List(transcriptSearchVM.results) { result in
+          TranscriptResultRow(result: result)
+        }
+        .listStyle(.plain)
+      }
+    }
+  }
+
   // MARK: - Helper Methods
+
+  /// Library matching reads each show's episode blob, which SwiftData decodes
+  /// on every access, so it runs here once per settled query instead of in body.
+  private func runSearch() async {
+    guard !searchText.isEmpty else { return }
+    switch selectedTab {
+    case .applePodcasts:
+      viewModel.searchText = searchText
+      viewModel.performSearch()
+    case .library:
+      libraryEpisodes = filterLibraryEpisodes()
+    case .transcripts:
+      await transcriptSearchVM.performSearch(query: searchText, podcasts: subscribedPodcasts)
+    }
+  }
 
   private func isSubscribed(_ podcast: Podcast) -> Bool {
     subscribedPodcasts.contains { $0.title == podcast.collectionName }
   }
 
-  private func subscribeToPodcast(_ podcast: Podcast) {
+  private func subscribeToPodcast(_ podcast: Podcast) async {
     guard let feedUrl = podcast.feedUrl else { return }
 
-    Task {
-      do {
-        let rssService = PodcastRssService()
-        let podcastInfo = try await rssService.fetchPodcast(from: feedUrl)
-        let podcastInfoModel = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now)
+    do {
+      let rssService = PodcastRssService()
+      let podcastInfo = try await rssService.fetchPodcast(from: feedUrl)
+      let podcastInfoModel = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now)
 
-        modelContext.insert(podcastInfoModel)
-        modelContext.saveOrLog()
-        SubscriptionSyncCoordinator.shared.sync(from: podcastInfoModel)
-      } catch {
-        logger.error("Failed to subscribe: \(error.localizedDescription, privacy: .public)")
-      }
+      modelContext.insert(podcastInfoModel)
+      modelContext.saveOrLog()
+      SubscriptionSyncCoordinator.shared.sync(from: podcastInfoModel)
+    } catch {
+      logger.error("Failed to subscribe: \(error.localizedDescription, privacy: .public)")
+      subscribeError = error.localizedDescription
     }
   }
 
@@ -250,15 +277,13 @@ struct MacSearchView: View {
     }
   }
 
-  private func filterLibraryEpisodes() -> [(
-    uniqueId: String, episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String
-  )] {
+  private func filterLibraryEpisodes() -> [LibraryEpisodeMatch] {
     let query = searchText
-    var results: [(uniqueId: String, episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String)] = []
+    var results: [LibraryEpisodeMatch] = []
 
     for podcast in subscribedPodcasts {
-      // Bind the blob once per podcast — this runs per keystroke, and it was
-      // being re-read four times for every match.
+      // Bind the blob once per podcast; it was being re-read four times for
+      // every match.
       let info = podcast.podcastInfo
       let matchingEpisodes = info.episodes.filter { episode in
         episode.title.localizedStandardContains(query) ||
@@ -286,7 +311,7 @@ struct MacSearchView: View {
 struct MacApplePodcastRow: View {
   let podcast: Podcast
   let isSubscribed: Bool
-  let onSubscribe: () -> Void
+  let onSubscribe: () async -> Void
 
   @State private var isSubscribing = false
 
@@ -314,23 +339,23 @@ struct MacApplePodcastRow: View {
           .font(.subheadline)
           .fontWeight(.semibold)
           .foregroundStyle(.green)
+          .accessibilityLabel("Subscribed")
       } else if isSubscribing {
         ProgressView()
-          .scaleEffect(0.8)
+          .controlSize(.small)
       } else {
-        Button(action: {
+        Button("Subscribe", systemImage: "plus") {
           isSubscribing = true
-          onSubscribe()
           Task {
-            try? await Task.sleep(for: .seconds(2))
+            await onSubscribe()
             isSubscribing = false
           }
-        }) {
-          Image(systemName: "plus")
-            .font(.title3)
-            .foregroundStyle(.blue)
         }
+        .labelStyle(.iconOnly)
+        .font(.title3)
+        .foregroundStyle(.blue)
         .buttonStyle(.plain)
+        .help("Subscribe")
       }
 
       Image(systemName: "chevron.right")
