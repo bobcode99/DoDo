@@ -46,7 +46,7 @@ struct PopularShowsListView: View {
         .padding(.top, 48)
       } else {
         LazyVStack(spacing: 0) {
-          ForEach(Array(podcasts.prefix(200).enumerated()), id: \.element.id) { index, podcast in
+          ForEach(podcasts.prefix(200).enumerated(), id: \.element.id) { index, podcast in
             TopPodcastRow(
               podcast: podcast,
               rank: index + 1,

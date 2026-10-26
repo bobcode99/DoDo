@@ -105,7 +105,7 @@ struct PopularShowsSection: View {
 
   private var list: some View {
     LazyVStack(spacing: 0) {
-      ForEach(Array(viewModel.topPodcasts.prefix(25).enumerated()), id: \.element.id) { index, podcast in
+      ForEach(viewModel.topPodcasts.prefix(25).enumerated(), id: \.element.id) { index, podcast in
         TopPodcastRow(
           podcast: podcast,
           rank: index + 1,

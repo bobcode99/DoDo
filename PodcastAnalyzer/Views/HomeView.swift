@@ -189,7 +189,7 @@ struct HomeScreen: View {
           }
           .padding(.horizontal, 8)
           .padding(.vertical, 4)
-          .glassEffect(Glass.regular.interactive(), in: .rect(cornerRadius: 12))
+          .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
         }
         .accessibilityLabel("Change region")
         .accessibilityValue(viewModel.selectedStorefront.name)

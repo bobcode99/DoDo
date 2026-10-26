@@ -35,11 +35,11 @@ final class HomeViewModel {
   /// excluding the currently playing episode.  Used by the view to show the section subtitle.
   var continueListeningCount: Int {
     let nowPlayingId = EnhancedAudioManager.shared.currentEpisode?.id
-    return scoredUpNextEpisodes.filter { scored in
+    return scoredUpNextEpisodes.count { scored in
       guard scored.episode.id != nowPlayingId else { return false }
       if case .inProgress = scored.reason { return true }
       return false
-    }.count
+    }
   }
 
   // Top podcasts from Apple RSS - observable instance properties that sync with static cache
@@ -579,8 +579,7 @@ extension HomeViewModel {
     result = prependingQueue(to: result, scoredByKey: &scoredByKey, modelsByKey: modelsByKey, currentKey: currentKey)
 
     // ── Prepend Tier 1 ────────────────────────────────────────────────────────
-    if let currentEpisode {
-      let key = currentKey!
+    if let currentEpisode, let key = currentKey {
       let currentModel = modelsByKey[key]
       if currentModel?.isCompleted != true {
         result.removeAll { $0.id == key }
@@ -603,8 +602,8 @@ extension HomeViewModel {
       return ScoredEpisode(episode: episode, downloadModel: modelsByKey[episode.id],
                            score: .infinity, reason: .none, progressRatio: 0)
     }
-    let inProgressCount = scoredUpNextEpisodes.reduce(into: 0) { count, scored in
-      if case .inProgress = scored.reason { count += 1 }
+    let inProgressCount = scoredUpNextEpisodes.count { scored in
+      if case .inProgress = scored.reason { true } else { false }
     }
     logger.info("Loaded \(self.upNextEpisodes.count) up-next episodes (inProgress=\(inProgressCount))")
 

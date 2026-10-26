@@ -34,7 +34,7 @@ struct TrendingEpisodesPagedView: View {
   var body: some View {
     ScrollView(.horizontal) {
       LazyHGrid(rows: rows, spacing: columnSpacing) {
-        ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
+        ForEach(episodes.enumerated(), id: \.element.id) { index, episode in
           TrendingEpisodeRowWithNav(episode: episode, rank: index + 1)
             .containerRelativeFrame(.horizontal) { length, _ in
               // One column fills the viewport minus a peekWidth slice

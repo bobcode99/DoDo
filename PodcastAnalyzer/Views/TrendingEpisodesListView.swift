@@ -18,7 +18,7 @@ struct TrendingEpisodesListView: View {
 
   var body: some View {
     List {
-      ForEach(Array(episodes.prefix(200).enumerated()), id: \.element.id) { index, episode in
+      ForEach(episodes.prefix(200).enumerated(), id: \.element.id) { index, episode in
         let destination = TrendingEpisodeDetailDestination(from: episode)
         HStack(spacing: 0) {
           NavigationLink(value: destination) {
