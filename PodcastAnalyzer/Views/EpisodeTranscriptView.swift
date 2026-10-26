@@ -101,6 +101,15 @@ struct EpisodeTranscriptView: View {
     /// the end of that fight would sit offscreen with no visible highlight.
     @State private var suppressAutoScrollUntil: Date = .distantPast
 
+    /// Start time of the top visible sentence, shown while the user swipes so
+    /// they can tell where in the episode they are. Updated only when the set
+    /// of visible rows changes, not per scroll frame.
+    @State private var scrubTime: TimeInterval?
+    /// True while a finger drags the transcript or it coasts after a flick.
+    /// Programmatic scrolls (auto-scroll, Jump to playing) report `.animating`
+    /// and leave it false, so the time only shows when the user is swiping.
+    @State private var isUserScrolling = false
+
     /// Live lookup of the active sentence at `currentTime` — `nil` when the
     /// time is before the first sentence or unresolved.
     private var liveActiveSentenceID: Int? {
@@ -279,6 +288,30 @@ struct EpisodeTranscriptView: View {
             // the playing sentence, continuously.
             .onScrollPhaseChange { _, newPhase in
                 if newPhase == .interacting { autoScrollEnabled = false }
+                isUserScrolling = newPhase == .interacting || newPhase == .decelerating
+            }
+            .onScrollTargetVisibilityChange(idType: Int.self) { ids in
+                guard let top = ids.first else { return }
+                scrubTime = viewModel.transcript.transcriptSentences.first { $0.id == top }?.startTime
+            }
+            .overlay(alignment: .top) {
+                VStack {
+                    if isUserScrolling, let scrubTime {
+                        Text(Formatters.formatPlaybackTime(scrubTime))
+                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .glassEffect(.regular, in: .capsule)
+                            .padding(.top, 8)
+                            .transition(.opacity)
+                    }
+                }
+                // Appear at once; linger briefly after the scroll settles.
+                .animation(isUserScrolling ? .easeIn(duration: 0.15) : .easeOut(duration: 0.35).delay(0.6),
+                           value: isUserScrolling)
+                // Rows already carry their own times for VoiceOver.
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
             }
             .onChange(of: liveActiveSentenceID, initial: true) { _, newID in
                 // Promote any non-nil live lookup into the sticky cache so
