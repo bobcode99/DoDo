@@ -908,6 +908,7 @@ extension HomeViewModel {
       existingByRSS.applyPodcastInfo(podcastInfo)
       existingByRSS.lastUpdated = Date.now
       try context.save()
+      await loadPodcastFeeds()
       await loadUpNextEpisodes()
       logger.info("Reused existing podcast row for \(podcastInfo.title)")
       return
@@ -921,6 +922,7 @@ extension HomeViewModel {
       existingByTitle.applyPodcastInfo(podcastInfo)
       existingByTitle.lastUpdated = Date.now
       try context.save()
+      await loadPodcastFeeds()
       await loadUpNextEpisodes()
       logger.info("Reused title-matched podcast row for \(podcastInfo.title)")
       return
