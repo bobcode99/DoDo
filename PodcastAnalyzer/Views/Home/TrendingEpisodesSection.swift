@@ -10,10 +10,15 @@ import SwiftUI
 struct TrendingEpisodesSection: View {
   let viewModel: HomeViewModel
 
+  /// Read here rather than through the view model: `HomeViewModel.showTrendingEpisodes`
+  /// is a plain `UserDefaults` read nothing observes, so switching the setting off
+  /// in Settings left the section on Home until something else refreshed it.
+  @AppStorage("showTrendingEpisodes") private var showTrendingEpisodes = true
+
   @ScaledMetric(relativeTo: .subheadline) private var placeholderHeight: CGFloat = TrendingEpisodesPagedView.baseHeight
 
   var body: some View {
-    if viewModel.showTrendingEpisodes
+    if showTrendingEpisodes
         && (!viewModel.trendingEpisodes.isEmpty || viewModel.isLoadingTrendingEpisodes) {
       VStack(alignment: .leading, spacing: 12) {
         header
