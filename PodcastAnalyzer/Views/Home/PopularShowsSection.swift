@@ -11,6 +11,7 @@ struct PopularShowsSection: View {
   let viewModel: HomeViewModel
 
   @State private var subscribeError: String?
+  @ScaledMetric(relativeTo: .largeTitle) private var emptyGlyphSize: CGFloat = 40
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -87,7 +88,7 @@ struct PopularShowsSection: View {
   private var emptyState: some View {
     VStack(spacing: 8) {
       Image(systemName: viewModel.isOffline ? "wifi.slash" : "chart.line.uptrend.xyaxis")
-        .font(.system(size: 40))
+        .font(.system(size: emptyGlyphSize))
         .foregroundStyle(.gray)
       Text(viewModel.isOffline ? "You're offline" : "Unable to load popular shows")
         .font(.subheadline)

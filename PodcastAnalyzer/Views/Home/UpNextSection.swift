@@ -14,6 +14,8 @@ struct UpNextSection: View {
   @Environment(\.episodeRowPlayButtonSize) private var rowPlayButtonSize
   @AppStorage(UpNextCardSize.storageKey) private var cardSizeRaw = UpNextCardSize.standard.rawValue
 
+  @ScaledMetric(relativeTo: .largeTitle) private var emptyGlyphSize: CGFloat = 40
+
   private var cardSize: UpNextCardSize { UpNextCardSize(rawValue: cardSizeRaw) ?? .standard }
 
   var body: some View {
@@ -57,7 +59,7 @@ struct UpNextSection: View {
   private var emptyState: some View {
     VStack(spacing: 8) {
       Image(systemName: "play.circle")
-        .font(.system(size: 40))
+        .font(.system(size: emptyGlyphSize))
         .foregroundStyle(.gray)
       Text("No unplayed episodes")
         .font(.subheadline)

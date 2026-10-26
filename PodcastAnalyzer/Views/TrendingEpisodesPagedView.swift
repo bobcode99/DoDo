@@ -17,6 +17,11 @@ import UIKit
 struct TrendingEpisodesPagedView: View {
   let episodes: [ApplePodcastService.TrendingEpisode]
 
+  /// Three rows of text that grow with Dynamic Type; a fixed height let them
+  /// overlap at the largest accessibility sizes.
+  static let baseHeight: CGFloat = 210
+  @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = TrendingEpisodesPagedView.baseHeight
+
   /// Three rows; the grid flows items column-by-column so the visible layout
   /// is `1 4 7 10 …` / `2 5 8 11 …` / `3 6 9 12 …`.
   private let rows: [GridItem] = Array(
@@ -48,6 +53,6 @@ struct TrendingEpisodesPagedView: View {
     }
     .scrollTargetBehavior(.viewAligned)
     .scrollIndicators(.never)
-    .frame(height: 210)
+    .frame(height: height)
   }
 }

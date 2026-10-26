@@ -10,6 +10,8 @@ import SwiftUI
 struct TrendingEpisodesSection: View {
   let viewModel: HomeViewModel
 
+  @ScaledMetric(relativeTo: .subheadline) private var placeholderHeight: CGFloat = TrendingEpisodesPagedView.baseHeight
+
   var body: some View {
     if viewModel.showTrendingEpisodes
         && (!viewModel.trendingEpisodes.isEmpty || viewModel.isLoadingTrendingEpisodes) {
@@ -25,7 +27,7 @@ struct TrendingEpisodesSection: View {
           }
           // Same height as TrendingEpisodesPagedView so content below doesn't
           // jump when the episodes land.
-          .frame(height: 210)
+          .frame(height: placeholderHeight)
         } else {
           TrendingEpisodesPagedView(
             episodes: Array(viewModel.trendingEpisodes.prefix(12))

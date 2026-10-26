@@ -15,6 +15,8 @@ struct TrendingEpisodeRow: View {
   let episode: ApplePodcastService.TrendingEpisode
   let rank: Int
 
+  @ScaledMetric(relativeTo: .footnote) private var rankWidth: CGFloat = 18
+
   private static let isoFormatter: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -58,7 +60,7 @@ struct TrendingEpisodeRow: View {
         .font(.footnote)
         .bold()
         .foregroundStyle(.secondary)
-        .frame(width: 18, alignment: .trailing)
+        .frame(width: rankWidth, alignment: .trailing)
         .monospacedDigit()
 
       CachedArtworkImage(urlString: episode.podcastArtworkUrl, size: 40, cornerRadius: 6)
