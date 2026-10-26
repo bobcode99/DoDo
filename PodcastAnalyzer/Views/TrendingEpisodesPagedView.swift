@@ -51,37 +51,3 @@ struct TrendingEpisodesPagedView: View {
     .frame(height: 210)
   }
 }
-
-private struct TrendingEpisodeRowWithNav: View {
-  let episode: ApplePodcastService.TrendingEpisode
-  let rank: Int
-
-  @Environment(\.zoomNamespace) private var zoomNamespace
-
-  var body: some View {
-    let destination = TrendingEpisodeDetailDestination(from: episode)
-    HStack(spacing: 0) {
-      NavigationLink(value: destination) {
-        TrendingEpisodeRow(episode: episode, rank: rank)
-          .contentShape(.rect)
-      }
-      .buttonStyle(.plain)
-
-      Menu {
-        TrendingEpisodeContextMenu(episode: episode)
-      } label: {
-        Image(systemName: "ellipsis")
-          .font(.caption)
-          .foregroundStyle(.tertiary)
-          .frame(width: 28, height: 28)
-          .contentShape(.rect)
-      }
-    }
-    .contextMenu {
-      TrendingEpisodeContextMenu(episode: episode)
-    }
-    // See TrendingEpisodesListView: the source has to sit outside the context
-    // menu, or the zoom silently falls back to a slide.
-    .zoomSource(id: destination.id, in: zoomNamespace)
-  }
-}
