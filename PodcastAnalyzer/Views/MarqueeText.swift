@@ -40,6 +40,9 @@ struct MarqueeText: View {
                     .hidden()
                     .onGeometryChange(for: CGFloat.self, of: \.size.width) { intrinsicWidth = $0 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(text)
+            .accessibilityAddTraits(.isStaticText)
     }
 
     private var baseText: Text {
@@ -69,7 +72,6 @@ struct MarqueeText: View {
                 HStack(spacing: spacing) {
                     baseText.lineLimit(1).fixedSize()
                     baseText.lineLimit(1).fixedSize()
-                        .accessibilityHidden(true)
                 }
                 .offset(x: -total * progress)
                 .frame(width: width, height: height, alignment: .leading)
