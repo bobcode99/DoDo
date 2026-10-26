@@ -31,13 +31,9 @@ struct TrendingEpisodeRow: View {
 
   private var formattedDuration: String {
     guard let millis = episode.episode.trackTimeMillis else { return "" }
-    let totalSeconds = millis / 1000
-    let hours = totalSeconds / 3600
-    let minutes = (totalSeconds % 3600) / 60
-    if hours > 0 {
-      return "\(hours)h \(minutes)m"
-    }
-    return "\(minutes) min"
+    return Duration.milliseconds(millis).formatted(
+      .units(allowed: [.hours, .minutes], width: .abbreviated).locale(Formatters.appLocale)
+    )
   }
 
   private var relativeDate: String {
