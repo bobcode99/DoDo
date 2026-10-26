@@ -34,6 +34,9 @@ struct FormattersTests {
     func formatsFractionalSpeeds() {
         #expect(Formatters.formatSpeed(0.5) == "0.5x")
         #expect(Formatters.formatSpeed(1.5) == "1.5x")
+        #expect(Formatters.formatSpeed(0.75) == "0.75x")
+        #expect(Formatters.formatSpeed(1.25) == "1.25x")
+        #expect(Formatters.formatSpeed(1.75) == "1.75x")
     }
 
     @Test("Every selectable speed produces a distinct label")
