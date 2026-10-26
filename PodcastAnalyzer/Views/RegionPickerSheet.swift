@@ -35,6 +35,7 @@ struct RegionPickerSheet: View {
               HStack {
                 Text(region.flag)
                   .font(.title2)
+                  .accessibilityHidden(true)
                 Text(region.name)
                   .foregroundStyle(.primary)
 
@@ -46,6 +47,7 @@ struct RegionPickerSheet: View {
                 }
               }
             }
+            .accessibilityAddTraits(selectedRegion == region.code ? .isSelected : [])
           }
         } footer: {
           Text("Only the regions you've chosen appear here.")
