@@ -142,25 +142,29 @@ struct PlayerControlsView: View {
     }
 
     private var sleepTimerMenu: some View {
-        @Bindable var viewModel = viewModel
-        return Menu {
-            Picker("Sleep timer", selection: $viewModel.sleepTimerOption) {
-                ForEach(SleepTimerOption.allCases, id: \.self) { option in
-                    Label(option.displayName, systemImage: option.systemImage).tag(option)
+        Menu {
+            // Buttons, not a Picker: a Picker skips its setter when the current
+            // option is picked again, and re-picking is how a running timer restarts.
+            ForEach(SleepTimerOption.allCases, id: \.self) { option in
+                let isSelected = viewModel.sleepTimerOption == option
+                Button {
+                    viewModel.sleepTimerOption = option
+                } label: {
+                    Label(option.displayName, systemImage: isSelected ? "checkmark" : option.systemImage)
                 }
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
-            .pickerStyle(.inline)
         } label: {
             Group {
                 if viewModel.isSleepTimerActive {
                     if viewModel.sleepTimerOption == .endOfEpisode {
                         Image(systemName: "stop.circle.fill")
                             .font(.system(size: 22))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                     } else {
                         Text(viewModel.sleepTimerRemainingFormatted)
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                             .minimumScaleFactor(0.5)
                     }
                 } else {

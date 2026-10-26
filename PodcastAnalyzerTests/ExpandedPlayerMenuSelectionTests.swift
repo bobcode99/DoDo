@@ -2,8 +2,8 @@
 //  ExpandedPlayerMenuSelectionTests.swift
 //  PodcastAnalyzerTests
 //
-//  The speed and sleep timer menus are pickers bound to the view model, so the
-//  view model has to report the current choice and apply a new one. Nested in
+//  The speed and sleep timer menus read and set their choice through the view
+//  model, so it has to report the current choice and apply a new one. Nested in
 //  the serialized player suite: both choices live on `EnhancedAudioManager.shared`.
 //
 
