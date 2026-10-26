@@ -22,6 +22,8 @@ struct PopularShowsListView: View {
   /// in HomeView.swift.
   private var podcasts: [AppleRSSPodcast] { viewModel.topPodcasts }
 
+  @State private var subscribeError: String?
+
   var body: some View {
     // Match the Home "Popular Shows" section exactly: TopPodcastRow already draws
     // its own rank, chevron, and trailing divider, so it belongs in a LazyVStack —
@@ -49,7 +51,7 @@ struct PopularShowsListView: View {
               podcast: podcast,
               rank: index + 1,
               isSubscribed: viewModel.isAlreadySubscribed(podcast),
-              onSubscribe: { viewModel.subscribeToPodcast(podcast) }
+              onSubscribe: { subscribe(to: podcast) }
             )
           }
         }
@@ -61,5 +63,20 @@ struct PopularShowsListView: View {
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
     #endif
+    .alert("Subscription Failed", item: $subscribeError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { message in
+      Text(message)
+    }
+  }
+
+  private func subscribe(to podcast: AppleRSSPodcast) {
+    Task {
+      do {
+        try await viewModel.subscribe(to: podcast)
+      } catch {
+        subscribeError = error.localizedDescription
+      }
+    }
   }
 }

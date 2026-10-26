@@ -10,6 +10,8 @@ import SwiftUI
 struct PopularShowsSection: View {
   let viewModel: HomeViewModel
 
+  @State private var subscribeError: String?
+
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 2) {
@@ -27,6 +29,21 @@ struct PopularShowsSection: View {
     // No `.animation` on refresh: rows re-ranked by fresh data would slide, and
     // a sliding row hit-tests at its final spot, so a tap mid-slide opens the
     // show below the finger. Swap in place instead.
+    .alert("Subscription Failed", item: $subscribeError) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { message in
+      Text(message)
+    }
+  }
+
+  private func subscribe(to podcast: AppleRSSPodcast) {
+    Task {
+      do {
+        try await viewModel.subscribe(to: podcast)
+      } catch {
+        subscribeError = error.localizedDescription
+      }
+    }
   }
 
   /// "Updated 2h ago" online, "Offline · saved 2h ago" when showing saved data.
@@ -93,7 +110,7 @@ struct PopularShowsSection: View {
           podcast: podcast,
           rank: index + 1,
           isSubscribed: viewModel.isAlreadySubscribed(podcast),
-          onSubscribe: { viewModel.subscribeToPodcast(podcast) }
+          onSubscribe: { subscribe(to: podcast) }
         )
       }
     }

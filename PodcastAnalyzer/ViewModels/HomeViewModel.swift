@@ -96,8 +96,9 @@ final class HomeViewModel {
   @ObservationIgnored
   private var loadTask: Task<Void, Never>?
 
+  /// Chart ids with a subscription under way, so a second tap on the same show is a no-op.
   @ObservationIgnored
-  private var subscribeTask: Task<Void, Never>?
+  private var subscribingIds: Set<String> = []
 
   @ObservationIgnored
   private var regionChangeTask: Task<Void, Never>?
@@ -866,56 +867,72 @@ extension HomeViewModel {
 
   // MARK: - Subscribe to Podcast
 
+  enum SubscribeError: LocalizedError {
+    case feedNotFound
+
+    var errorDescription: String? {
+      switch self {
+      case .feedNotFound: String(localized: "Couldn't find an RSS feed for this podcast.")
+      }
+    }
+  }
+
+  /// For callers with nowhere to show a failure; the log is all they get.
   func subscribeToPodcast(_ podcast: AppleRSSPodcast) {
-    guard let context = modelContext else { return }
-
-    subscribeTask?.cancel()
-    subscribeTask = Task {
+    Task {
       do {
-        guard let result = try await applePodcastService.lookupPodcast(collectionId: podcast.id),
-              let feedUrl = result.feedUrl else {
-          logger.error("Could not find RSS feed for \(podcast.name)")
-          return
-        }
-
-        let podcastInfo = try await rssService.fetchPodcast(from: feedUrl)
-
-        if let existingByRSS = try? context.fetch(FetchDescriptor<PodcastInfoModel>(
-          predicate: #Predicate { $0.rssUrl == feedUrl }
-        )).first {
-          existingByRSS.setSubscribed(true)
-          existingByRSS.applyPodcastInfo(podcastInfo)
-          existingByRSS.lastUpdated = Date.now
-          try context.save()
-          await loadUpNextEpisodes()
-          logger.info("Reused existing podcast row for \(podcastInfo.title)")
-          return
-        }
-
-        let title = podcastInfo.title
-        if let existingByTitle = try? context.fetch(FetchDescriptor<PodcastInfoModel>(
-          predicate: #Predicate { $0.title == title }
-        )).first {
-          existingByTitle.setSubscribed(true)
-          existingByTitle.applyPodcastInfo(podcastInfo)
-          existingByTitle.lastUpdated = Date.now
-          try context.save()
-          await loadUpNextEpisodes()
-          logger.info("Reused title-matched podcast row for \(podcastInfo.title)")
-          return
-        }
-
-        let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now, isSubscribed: true)
-        context.insert(model)
-        try context.save()
-        SubscriptionSyncCoordinator.shared.sync(from: model)
-        podcastInfoModelList.insert(model, at: 0)
-        await loadUpNextEpisodes()
-        logger.info("Successfully subscribed to \(podcastInfo.title)")
+        try await subscribe(to: podcast)
       } catch {
         logger.error("Failed to subscribe: \(error.localizedDescription, privacy: .public)")
       }
     }
+  }
+
+  /// Not tied to Home's lifetime: leaving the tab, or subscribing to a second
+  /// show, must not abort a subscription that is already under way.
+  func subscribe(to podcast: AppleRSSPodcast) async throws {
+    guard let context = modelContext, subscribingIds.insert(podcast.id).inserted else { return }
+    defer { subscribingIds.remove(podcast.id) }
+
+    guard let feedUrl = try await applePodcastService.lookupPodcast(collectionId: podcast.id)?.feedUrl else {
+      logger.error("Could not find RSS feed for \(podcast.name)")
+      throw SubscribeError.feedNotFound
+    }
+
+    let podcastInfo = try await rssService.fetchPodcast(from: feedUrl)
+
+    if let existingByRSS = try? context.fetch(FetchDescriptor<PodcastInfoModel>(
+      predicate: #Predicate { $0.rssUrl == feedUrl }
+    )).first {
+      existingByRSS.setSubscribed(true)
+      existingByRSS.applyPodcastInfo(podcastInfo)
+      existingByRSS.lastUpdated = Date.now
+      try context.save()
+      await loadUpNextEpisodes()
+      logger.info("Reused existing podcast row for \(podcastInfo.title)")
+      return
+    }
+
+    let title = podcastInfo.title
+    if let existingByTitle = try? context.fetch(FetchDescriptor<PodcastInfoModel>(
+      predicate: #Predicate { $0.title == title }
+    )).first {
+      existingByTitle.setSubscribed(true)
+      existingByTitle.applyPodcastInfo(podcastInfo)
+      existingByTitle.lastUpdated = Date.now
+      try context.save()
+      await loadUpNextEpisodes()
+      logger.info("Reused title-matched podcast row for \(podcastInfo.title)")
+      return
+    }
+
+    let model = PodcastInfoModel(podcastInfo: podcastInfo, lastUpdated: Date.now, isSubscribed: true)
+    context.insert(model)
+    try context.save()
+    SubscriptionSyncCoordinator.shared.sync(from: model)
+    podcastInfoModelList.insert(model, at: 0)
+    await loadUpNextEpisodes()
+    logger.info("Successfully subscribed to \(podcastInfo.title)")
   }
 
   // MARK: - Trending Episodes
@@ -966,8 +983,6 @@ extension HomeViewModel {
     regionObserverTask = nil
     regionChangeTask?.cancel()
     regionChangeTask = nil
-    subscribeTask?.cancel()
-    subscribeTask = nil
     completionObserverTask?.cancel()
     completionObserverTask = nil
     reconnectObserverTask?.cancel()
