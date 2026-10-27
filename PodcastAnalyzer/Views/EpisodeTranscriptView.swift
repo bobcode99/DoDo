@@ -132,13 +132,18 @@ struct EpisodeTranscriptView: View {
             && viewModel.transcript.transcriptSearchQuery.isEmpty
     }
 
+    private struct DurationMismatch: Equatable {
+        let audio: TimeInterval
+        let transcript: TimeInterval
+    }
+
     /// Audio file duration vs. the transcript's last timestamp. Non-nil only
     /// when they differ enough to actually drift the highlight — a transcript
     /// normally ends a little before the audio (outro/credits aren't
     /// transcribed), so we require both an absolute (90s) and relative (5%)
     /// gap before warning. The usual real cause is Dynamic Ad Insertion: the
     /// played mp3 was re-stitched with ads after the transcript was generated.
-    private var durationMismatch: (audio: TimeInterval, transcript: TimeInterval)? {
+    private var durationMismatch: DurationMismatch? {
         let audio = (viewModel.isCurrentEpisode && viewModel.audioManager.duration > 0)
             ? viewModel.audioManager.duration
             : viewModel.savedDuration
@@ -147,8 +152,18 @@ struct EpisodeTranscriptView: View {
               transcriptEnd > 0 else { return nil }
         let diff = abs(audio - transcriptEnd)
         guard diff > 90, diff > audio * 0.05 else { return nil }
-        return (audio, transcriptEnd)
+        return DurationMismatch(audio: audio, transcript: transcriptEnd)
     }
+
+    /// Last mismatch observed on this page, kept so the banner stays up for
+    /// the whole visit. The length it compares against swaps the moment
+    /// playback starts (persisted duration → live player duration), and the
+    /// two disagree whenever the file being played isn't the cut the
+    /// transcript was made from — so the warning used to vanish on play and
+    /// leave the reader with a silently drifting highlight. Cleared only when
+    /// the sentence list itself changes (regenerate / import / translation
+    /// regroup), which is the one time the old numbers stop being true.
+    @State private var stickyDurationMismatch: DurationMismatch?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -157,7 +172,8 @@ struct EpisodeTranscriptView: View {
                     showRegenerateConfirmation: $showRegenerateConfirmation,
                     hasLocalAudio: viewModel.hasLocalAudio
                 )
-            } else if viewModel.hasTranscript, let mismatch = durationMismatch {
+            } else if viewModel.hasTranscript,
+                      let mismatch = durationMismatch ?? stickyDurationMismatch {
                 TranscriptDurationMismatchBanner(
                     audioDuration: mismatch.audio,
                     transcriptDuration: mismatch.transcript
@@ -208,12 +224,16 @@ struct EpisodeTranscriptView: View {
                 showRegenerateConfirmation = false
             }
         }
+        .onChange(of: durationMismatch, initial: true) { _, mismatch in
+            if let mismatch { stickyDurationMismatch = mismatch }
+        }
         .onChange(of: viewModel.transcript.transcriptSentences.count) { _, _ in
             // If the underlying sentence list changes (regroup after
             // translation toggle, transcript regenerated, etc.) the sticky
             // cache may point at an id that no longer exists. Drop it so the
             // next live lookup re-seeds it cleanly.
             stickyActiveSentenceID = nil
+            stickyDurationMismatch = durationMismatch
         }
         .onChange(of: viewModel.isCurrentEpisode) { _, isCurrent in
             // When another episode takes over, drop the forward-ratcheted
