@@ -10,7 +10,8 @@ import SwiftUI
 
 struct TrendingEpisodeRow: View {
   let episode: ApplePodcastService.TrendingEpisode
-  let rank: Int
+  /// Chart position; nil for search results, which have no ranking to show.
+  let rank: Int?
 
   @ScaledMetric(relativeTo: .footnote) private var rankWidth: CGFloat = 18
 
@@ -49,12 +50,14 @@ struct TrendingEpisodeRow: View {
 
   var body: some View {
     HStack(spacing: 10) {
-      Text("\(rank)")
-        .font(.footnote)
-        .bold()
-        .foregroundStyle(.secondary)
-        .frame(width: rankWidth, alignment: .trailing)
-        .monospacedDigit()
+      if let rank {
+        Text("\(rank)")
+          .font(.footnote)
+          .bold()
+          .foregroundStyle(.secondary)
+          .frame(width: rankWidth, alignment: .trailing)
+          .monospacedDigit()
+      }
 
       CachedArtworkImage(urlString: episode.podcastArtworkUrl, size: 40, cornerRadius: 6)
 

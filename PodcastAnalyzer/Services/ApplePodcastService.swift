@@ -246,6 +246,23 @@ class ApplePodcastService: Sendable {
         return response.results
     }
 
+    /// Searches episodes across the whole directory, subscribed or not. Each
+    /// result carries its show's id, name and artwork, so it can be shown and
+    /// played without first fetching the show.
+    func searchEpisodes(term: String, limit: Int = 10) async throws -> [Episode] {
+        let encoded = term.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let urlString =
+            "\(baseURL)/search?media=podcast&entity=podcastEpisode&term=\(encoded)&limit=\(limit)"
+
+        guard let url = URL(string: urlString) else {
+            throw URLError(.badURL)
+        }
+
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(EpisodeSearchResponse.self, from: data)
+        return response.results
+    }
+
     // Fetch episodes from Apple (fixed to handle only podcast return without error)
     func fetchEpisodes(for collectionId: Int, limit: Int = 200) async throws -> [Episode] {
         let urlString = "\(baseURL)/lookup?id=\(collectionId)&entity=podcastEpisode&limit=\(limit)"
@@ -281,5 +298,20 @@ class ApplePodcastService: Sendable {
         let parser = RSSParser(data: data)
         let episodes = try parser.parse()
         return Array(episodes.prefix(limit))
+    }
+}
+
+extension ApplePodcastService.TrendingEpisode {
+    /// Wraps an episode-search result. Unlike chart episodes, a search result
+    /// names its own show, so the podcast fields come from it.
+    init(searchResult episode: Episode) {
+        let podcastId = episode.collectionId.map(String.init) ?? ""
+        self.init(
+            id: "\(podcastId)_\(episode.trackName)",
+            podcastName: episode.collectionName ?? "",
+            podcastArtworkUrl: episode.artworkUrl160 ?? episode.artworkUrl600,
+            podcastId: podcastId,
+            episode: episode
+        )
     }
 }

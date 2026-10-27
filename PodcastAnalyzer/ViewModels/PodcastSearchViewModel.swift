@@ -16,6 +16,8 @@ private let logger = Logger(subsystem: "com.podcast.analyzer", category: "Podcas
 final class PodcastSearchViewModel {
   var searchText = ""
   var podcasts: [Podcast] = []
+  /// Episode matches from any show, subscribed or not, listed under the shows.
+  var episodes: [ApplePodcastService.TrendingEpisode] = []
   var isLoading = false
 
   var selectedPodcastId: Int?
@@ -34,6 +36,7 @@ final class PodcastSearchViewModel {
   func performSearch() {
     guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else {
       podcasts = []
+      episodes = []
       return
     }
 
@@ -42,10 +45,15 @@ final class PodcastSearchViewModel {
 
     isLoading = true
     podcasts = []
+    episodes = []
 
     searchTask = Task {
+      let term = searchText
+      // Runs alongside the show search; a failure here only costs the
+      // episode section, never the shows.
+      async let foundEpisodes = try? service.searchEpisodes(term: term)
       do {
-        let results = try await service.searchPodcasts(term: searchText, limit: 20)
+        let results = try await service.searchPodcasts(term: term, limit: 20)
         if !Task.isCancelled {
           podcasts = results
         }
@@ -54,7 +62,9 @@ final class PodcastSearchViewModel {
           logger.error("Search error: \(error.localizedDescription, privacy: .public)")
         }
       }
+      let episodeResults = await foundEpisodes ?? []
       if !Task.isCancelled {
+        episodes = episodeResults.map(ApplePodcastService.TrendingEpisode.init(searchResult:))
         isLoading = false
       }
     }

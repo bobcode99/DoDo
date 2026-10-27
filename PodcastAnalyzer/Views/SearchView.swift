@@ -26,7 +26,7 @@ struct PodcastSearchView: View {
 
     // Cached library filter results (updated only when searchText changes)
     @State private var filteredPodcasts: [PodcastInfoModel] = []
-    @State private var filteredEpisodes: [(episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String)] = []
+    @State private var filteredEpisodes: [LibrarySearchEpisode] = []
     @State private var transcriptSearchVM = TranscriptSearchViewModel()
     @State private var subscribeTask: Task<Void, Never>?
     @State private var debounceTask: Task<Void, Never>?
@@ -42,19 +42,44 @@ struct PodcastSearchView: View {
             // Search results
             switch selectedTab {
             case .transcripts:
-                transcriptResultsView
+                TranscriptSearchResultsView(
+                    viewModel: transcriptSearchVM,
+                    podcastTitles: podcastTitles,
+                    isQueryEmpty: searchText.isEmpty
+                )
             default:
                 if searchText.isEmpty {
                     emptySearchView
                 } else if selectedTab == .applePodcasts {
-                    applePodcastsResultsView
+                    AppleSearchResultsView(
+                        isLoading: viewModel.isLoading,
+                        podcasts: viewModel.podcasts,
+                        episodes: viewModel.episodes,
+                        isSubscribed: isSubscribed,
+                        onSubscribe: subscribeToPodcast,
+                        onNavigate: navigate
+                    )
                 } else {
-                    libraryResultsView
+                    LibrarySearchResultsView(
+                        podcasts: filteredPodcasts,
+                        episodes: filteredEpisodes,
+                        onNavigate: navigate,
+                        onPlay: playEpisode
+                    )
                 }
             }
 
         }
         .navigationTitle("Search")
+        // Registered here, not in navigationDestinations(): Home registers its
+        // own with a zoom transition, and a stack must not see two handlers.
+        .navigationDestination(for: TrendingEpisodeDetailDestination.self) { dest in
+            EpisodeDetailView(
+                episode: dest.asPodcastEpisodeInfo,
+                podcastTitle: dest.podcastName,
+                fallbackImageURL: dest.podcastArtworkUrl
+            )
+        }
         .searchable(text: $searchText, isPresented: $searchPresented, prompt: searchPrompt)
         // Hide the keyboard when a tapped result pushes onto this tab's
         // NavigationPath. Deactivating the search presentation is the only
@@ -150,155 +175,6 @@ struct PodcastSearchView: View {
         )
     }
 
-    // MARK: - Apple Podcasts Results
-
-    private var applePodcastsResultsView: some View {
-        Group {
-            if viewModel.isLoading {
-                VStack {
-                    Spacer()
-                    ProgressView("Searching...")
-                    Spacer()
-                }
-            } else if viewModel.podcasts.isEmpty {
-                // The data source is named here and nowhere else: before a
-                // search it is trivia, but the moment a show is missing it is
-                // the explanation *and* the way out. A directory nobody
-                // mentioned looks like a broken search.
-                VStack(spacing: 8) {
-                    Spacer()
-                    Text("No results found")
-                        .foregroundStyle(.secondary)
-                    Text("Search covers the Apple Podcasts directory. If a show isn't listed there, add it by RSS URL in Settings ▸ Subscriptions.")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                    Spacer()
-                }
-            } else {
-                List {
-                    ForEach(viewModel.podcasts, id: \.collectionId) { podcast in
-                        Button {
-                            navigate(PodcastBrowseRoute(
-                                podcastName: podcast.collectionName,
-                                artworkURL: podcast.artworkUrl100 ?? "",
-                                artistName: podcast.artistName,
-                                collectionId: String(podcast.collectionId),
-                                applePodcastURL: nil
-                            ))
-                        } label: {
-                            HStack {
-                                ApplePodcastRow(
-                                    podcast: podcast,
-                                    isSubscribed: isSubscribed(podcast),
-                                    onSubscribe: { subscribeToPodcast(podcast) }
-                                )
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .listStyle(.plain)
-
-            }
-        }
-    }
-
-    // MARK: - Library Results
-
-    private var libraryResultsView: some View {
-        Group {
-            if filteredPodcasts.isEmpty && filteredEpisodes.isEmpty {
-                ContentUnavailableView.search
-            } else {
-                List {
-                    // Podcasts section
-                    if !filteredPodcasts.isEmpty {
-                        Section {
-                            ForEach(filteredPodcasts) { podcastModel in
-                                LibraryPodcastRow(podcastModel: podcastModel) {
-                                    navigate(PodcastBrowseRoute(podcastModel: podcastModel))
-                                }
-                            }
-                        }
-                    }
-
-                    // Episodes section
-                    if !filteredEpisodes.isEmpty {
-                        Section {
-                            ForEach(filteredEpisodes, id: \.episode.id) { item in
-                                LibraryEpisodeRow(
-                                    episode: item.episode,
-                                    podcastTitle: item.podcastTitle,
-                                    podcastImageURL: item.podcastImageURL,
-                                    podcastLanguage: item.podcastLanguage,
-                                    onPlay: {
-                                      playEpisode(item.episode, podcastTitle: item.podcastTitle, imageURL: item.podcastImageURL)
-                                    },
-                                    onOpen: {
-                                        navigate(EpisodeDetailRoute(
-                                            episode: item.episode,
-                                            podcastTitle: item.podcastTitle,
-                                            fallbackImageURL: item.podcastImageURL,
-                                            podcastLanguage: item.podcastLanguage
-                                        ))
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                .listStyle(.plain)
-
-            }
-        }
-    }
-
-    // MARK: - Transcript Results
-
-    private var transcriptResultsView: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Picker("Filter by Podcast", selection: $transcriptSearchVM.selectedPodcastFilter) {
-                    Text("All Podcasts").tag(String?(nil))
-                    ForEach(podcastTitles, id: \.self) { title in
-                        Text(title).tag(String?(title))
-                    }
-                }
-                .pickerStyle(.menu)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-
-            if searchText.isEmpty {
-                ContentUnavailableView(
-                    "Search episode transcripts",
-                    systemImage: "text.magnifyingglass"
-                )
-            } else if transcriptSearchVM.isSearching {
-                Spacer()
-                ProgressView()
-                Spacer()
-            } else if transcriptSearchVM.results.isEmpty {
-                ContentUnavailableView.search
-            } else {
-                List {
-                    ForEach(transcriptSearchVM.results) { result in
-                        TranscriptResultRow(result: result)
-                    }
-                }
-                .listStyle(.plain)
-
-            }
-        }
-    }
-
     private var podcastTitles: [String] {
         subscribedPodcasts.map(\.title).sorted()
     }
@@ -392,7 +268,10 @@ struct PodcastSearchView: View {
         }
     }
 
-    private func playEpisode(_ episode: PodcastEpisodeInfo, podcastTitle: String, imageURL: String) {
+    private func playEpisode(_ item: LibrarySearchEpisode) {
+        let episode = item.episode
+        let podcastTitle = item.podcastTitle
+        let imageURL = item.podcastImageURL
         guard let audioURL = episode.audioURL else { return }
         let playbackEpisode = PlaybackEpisode(
             id: "\(podcastTitle)\u{1F}\(episode.title)",
@@ -426,27 +305,10 @@ struct PodcastSearchView: View {
             podcast.title.localizedStandardContains(query)
         }
 
-        var episodeResults: [(episode: PodcastEpisodeInfo, podcastTitle: String, podcastImageURL: String, podcastLanguage: String)] = []
-        for podcast in subscribedPodcasts {
-            // Bind the blob once per podcast. Reading `podcast.podcastInfo`
-            // re-materializes the whole episode array every time, and this ran
-            // per keystroke — previously once for the episode list plus three
-            // more times for every *match*.
-            let info = podcast.podcastInfo
-            let matchingEpisodes = info.episodes.filter { episode in
-                episode.title.localizedStandardContains(query) ||
-                (episode.podcastEpisodeDescription?.localizedStandardContains(query) ?? false)
-            }
-            for episode in matchingEpisodes {
-                episodeResults.append((
-                    episode: episode,
-                    podcastTitle: info.title,
-                    podcastImageURL: info.imageURL,
-                    podcastLanguage: info.language
-                ))
-            }
-        }
-        filteredEpisodes = episodeResults
+        filteredEpisodes = LibrarySearchFilter.episodes(
+            in: subscribedPodcasts.map(\.podcastInfo),
+            matching: query
+        )
     }
 }
 

@@ -97,6 +97,65 @@ struct DiscoveryToSubscribeFlowTests {
         #expect(episode.trackId == nil)
     }
 
+    @Test("An episode found by search carries its own show, so it plays without subscribing")
+    func episodeSearchResultMapsToPlayableEpisode() throws {
+        // Trimmed from a real `entity=podcastEpisode` search response.
+        let json = Data("""
+        {
+          "resultCount": 1,
+          "results": [
+            {
+              "wrapperType": "podcastEpisode",
+              "kind": "podcast-episode",
+              "trackId": 1000742971321,
+              "trackName": "How to fix your entire life in 1 day",
+              "releaseDate": "2025-12-28T19:15:06Z",
+              "trackTimeMillis": 2400000,
+              "episodeUrl": "https://traffic.megaphone.fm/APO9460419839.mp3",
+              "artworkUrl160": "https://example.com/160.jpg",
+              "artworkUrl600": "https://example.com/600.jpg",
+              "collectionId": 1566479559,
+              "collectionName": "The Koe Cast",
+              "genres": [{ "name": "Self-Improvement", "id": "1500" }]
+            }
+          ]
+        }
+        """.utf8)
+
+        let result = try #require(
+            JSONDecoder().decode(EpisodeSearchResponse.self, from: json).results.first
+        )
+        let episode = ApplePodcastService.TrendingEpisode(searchResult: result)
+
+        #expect(episode.podcastName == "The Koe Cast")
+        #expect(episode.podcastId == "1566479559")
+        #expect(episode.podcastArtworkUrl == "https://example.com/160.jpg")
+        #expect(episode.episode.id == "1000742971321", "rows are keyed by trackId")
+
+        let destination = TrendingEpisodeDetailDestination(from: episode)
+        #expect(destination.audioURL == "https://traffic.megaphone.fm/APO9460419839.mp3")
+        #expect(destination.podcastName == "The Koe Cast")
+        let info = destination.asPodcastEpisodeInfo
+        #expect(info.title == "How to fix your entire life in 1 day")
+        #expect(info.audioURL == "https://traffic.megaphone.fm/APO9460419839.mp3", "play needs the audio URL")
+    }
+
+    @Test("An episode result missing its show fields still maps instead of failing the list")
+    func sparseEpisodeSearchResultMaps() throws {
+        let json = Data("""
+        {"resultCount":1,"results":[{"trackName":"Orphan","artworkUrl600":"https://example.com/600.jpg"}]}
+        """.utf8)
+
+        let result = try #require(
+            JSONDecoder().decode(EpisodeSearchResponse.self, from: json).results.first
+        )
+        let episode = ApplePodcastService.TrendingEpisode(searchResult: result)
+
+        #expect(episode.podcastName.isEmpty)
+        #expect(episode.podcastId.isEmpty)
+        #expect(episode.podcastArtworkUrl == "https://example.com/600.jpg", "falls back to the larger artwork")
+    }
+
     @Test("An empty or whitespace query clears results instead of firing a search")
     func blankQueryDoesNotSearch() throws {
         let viewModel = PodcastSearchViewModel()
@@ -104,12 +163,19 @@ struct DiscoveryToSubscribeFlowTests {
         {"resultCount":1,"results":[{"collectionId":1,"collectionName":"X","artistName":"Y"}]}
         """.utf8)
         viewModel.podcasts = try JSONDecoder().decode(SearchResponse.self, from: json).results
+        let episodeJSON = Data("""
+        {"resultCount":1,"results":[{"trackName":"E","collectionId":1,"collectionName":"X"}]}
+        """.utf8)
+        viewModel.episodes = try JSONDecoder().decode(EpisodeSearchResponse.self, from: episodeJSON)
+            .results.map(ApplePodcastService.TrendingEpisode.init(searchResult:))
         #expect(!viewModel.podcasts.isEmpty)
+        #expect(!viewModel.episodes.isEmpty)
 
         viewModel.searchText = "   "
         viewModel.performSearch()
 
         #expect(viewModel.podcasts.isEmpty, "stale results must not survive a cleared query")
+        #expect(viewModel.episodes.isEmpty, "stale episode results must not survive a cleared query")
         #expect(!viewModel.isLoading, "a skipped search must not leave the spinner on")
     }
 

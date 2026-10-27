@@ -113,7 +113,7 @@ struct MacSearchView: View {
           ProgressView("Searching...")
           Spacer()
         }
-      } else if viewModel.podcasts.isEmpty {
+      } else if viewModel.podcasts.isEmpty && viewModel.episodes.isEmpty {
         // Named here and nowhere else — see the iOS view. Before a search the
         // directory is trivia; the moment a show is missing it is both the
         // explanation and the way out.
@@ -130,23 +130,41 @@ struct MacSearchView: View {
         }
       } else {
         List {
-          ForEach(viewModel.podcasts, id: \.collectionId) { podcast in
-            NavigationLink(
-              value: PodcastBrowseRoute(
-                podcastName: podcast.collectionName,
-                artworkURL: podcast.artworkUrl100 ?? "",
-                artistName: podcast.artistName,
-                collectionId: String(podcast.collectionId),
-                applePodcastURL: nil
-              )
-            ) {
-              MacApplePodcastRow(
-                podcast: podcast,
-                isSubscribed: isSubscribed(podcast),
-                onSubscribe: { await subscribeToPodcast(podcast) }
-              )
+          if !viewModel.podcasts.isEmpty {
+            Section("Shows") {
+              ForEach(viewModel.podcasts, id: \.collectionId) { podcast in
+                NavigationLink(
+                  value: PodcastBrowseRoute(
+                    podcastName: podcast.collectionName,
+                    artworkURL: podcast.artworkUrl100 ?? "",
+                    artistName: podcast.artistName,
+                    collectionId: String(podcast.collectionId),
+                    applePodcastURL: nil
+                  )
+                ) {
+                  MacApplePodcastRow(
+                    podcast: podcast,
+                    isSubscribed: isSubscribed(podcast),
+                    onSubscribe: { await subscribeToPodcast(podcast) }
+                  )
+                }
+                .buttonStyle(.plain)
+              }
             }
-            .buttonStyle(.plain)
+          }
+
+          if !viewModel.episodes.isEmpty {
+            Section("Episodes") {
+              ForEach(viewModel.episodes, id: \.episode.id) { episode in
+                NavigationLink(value: TrendingEpisodeDetailDestination(from: episode)) {
+                  TrendingEpisodeRow(episode: episode, rank: nil)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                  TrendingEpisodeContextMenu(episode: episode)
+                }
+              }
+            }
           }
         }
         .listStyle(.plain)
