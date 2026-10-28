@@ -7,9 +7,6 @@
 
 import SwiftData
 import SwiftUI
-#if os(iOS)
-import UIKit
-#endif
 
 // MARK: - Main Search View
 
@@ -22,7 +19,7 @@ struct PodcastSearchView: View {
 
     @State private var selectedTab: SearchTab = .applePodcasts
     @State private var searchText = ""
-    @State private var searchPresented = false
+    @FocusState private var isSearchFocused: Bool
 
     // Cached library filter results (updated only when searchText changes)
     @State private var filteredPodcasts: [PodcastInfoModel] = []
@@ -34,6 +31,10 @@ struct PodcastSearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            searchField
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
             // Tab selector
             tabSelector
                 .padding(.horizontal, 16)
@@ -71,6 +72,7 @@ struct PodcastSearchView: View {
 
         }
         .navigationTitle("Search")
+        .platformToolbarTitleDisplayMode()
         // Registered here, not in navigationDestinations(): Home registers its
         // own with a zoom transition, and a stack must not see two handlers.
         .navigationDestination(for: TrendingEpisodeDetailDestination.self) { dest in
@@ -80,21 +82,12 @@ struct PodcastSearchView: View {
                 fallbackImageURL: dest.podcastArtworkUrl
             )
         }
-        .searchable(text: $searchText, isPresented: $searchPresented, prompt: searchPrompt)
         // Hide the keyboard when a tapped result pushes onto this tab's
-        // NavigationPath. Deactivating the search presentation is the only
-        // thing that reliably dismisses the search field's keyboard —
-        // focus-state changes alone don't resign it mid-push. searchText is
-        // untouched, so the results are still there on swipe-back.
+        // NavigationPath. searchText is untouched, so the results are still
+        // there on swipe-back.
         .onChange(of: tabCoordinator?.searchRouter.path.count ?? 0) { oldCount, newCount in
             if newCount > oldCount {
-                dismissKeyboard()
-            }
-        }
-        .onSubmit(of: .search) {
-            if selectedTab == .applePodcasts {
-                viewModel.searchText = searchText
-                viewModel.performSearch()
+                isSearchFocused = false
             }
         }
         .task(id: TranscriptSearchKey(tab: selectedTab, query: searchText)) {
@@ -125,7 +118,7 @@ struct PodcastSearchView: View {
         .onDisappear {
             subscribeTask?.cancel()
             debounceTask?.cancel()
-            dismissKeyboard()
+            isSearchFocused = false
         }
         .alert("Subscription Failed", item: $subscribeError) { _ in
             Button("OK", role: .cancel) {}
@@ -141,6 +134,19 @@ struct PodcastSearchView: View {
             } else if newTab == .transcripts {
                 // task(id:) handles re-trigger when switching to this tab
             }
+        }
+    }
+
+    // MARK: - Search Field
+
+    private var searchField: some View {
+        SearchField(text: $searchText, prompt: searchPrompt, isFocused: $isSearchFocused, onSubmit: submitSearch)
+    }
+
+    private func submitSearch() {
+        if selectedTab == .applePodcasts {
+            viewModel.searchText = searchText
+            viewModel.performSearch()
         }
     }
 
@@ -189,43 +195,9 @@ struct PodcastSearchView: View {
 
     // MARK: - Helper Methods
 
-    private func dismissKeyboard() {
-        searchPresented = false
-        #if os(iOS)
-        for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            for window in windowScene.windows {
-                window.endEditing(true)
-            }
-        }
-        #endif
-    }
-
-    /// Dismisses the keyboard first, then pushes after a beat. The tab-bar
-    /// search field (Tab role .search) orphans its keyboard if it is still
-    /// first responder when a push starts — nothing can dismiss it afterwards.
-    /// Resigning while the field is still frontmost works normally, so order
-    /// matters: dismiss, let it land, then navigate.
-    /// Pushes a result's route. When the tab-bar search field (Tab role
-    /// .search) is active, the keyboard must be dismissed BEFORE the push:
-    /// pushing while the field is first responder orphans the keyboard
-    /// (nothing can dismiss it afterwards), and pushing during the search
-    /// collapse animation gets silently dropped by the NavigationStack. So:
-    /// dismiss, wait out the collapse, then push. Verified in simulator.
     private func navigate(_ route: any Hashable) {
-        #if os(iOS)
-        if searchPresented {
-            dismissKeyboard()
-            Task {
-                try? await Task.sleep(for: .milliseconds(800))
-                tabCoordinator?.searchRouter.push(route)
-            }
-        } else {
-            tabCoordinator?.searchRouter.push(route)
-        }
-        #else
+        isSearchFocused = false
         tabCoordinator?.searchRouter.push(route)
-        #endif
     }
 
     private func isSubscribed(_ podcast: Podcast) -> Bool {

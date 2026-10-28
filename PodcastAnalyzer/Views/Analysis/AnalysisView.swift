@@ -95,9 +95,7 @@ struct AnalysisView: View {
       }
     }
     .navigationTitle(Constants.analysisString)
-    #if os(iOS)
-    .navigationBarTitleDisplayMode(.large)
-    #endif
+    .platformToolbarTitleDisplayMode()
     .searchable(text: $searchText, prompt: "Search episodes")
     .toolbar {
       Menu {
