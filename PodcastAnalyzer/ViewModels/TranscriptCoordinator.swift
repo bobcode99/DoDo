@@ -279,7 +279,11 @@ final class TranscriptCoordinator {
       )
       guard !Task.isCancelled else { return }
       self.rssTranscriptState = state
-      if case .downloaded = state {
+      // A feed transcript is a small text file, so fetch it rather than make
+      // the user tap for it.
+      if case .available = state {
+        self.downloadRSSTranscript()
+      } else if case .downloaded = state {
         self.loadExistingTranscriptTask?.cancel()
         self.loadExistingTranscriptTask = Task { [weak self] in
           await self?.loadExistingTranscript()

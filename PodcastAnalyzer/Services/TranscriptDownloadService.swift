@@ -93,7 +93,12 @@ public actor TranscriptDownloadService {
 
     // 2. Detect format and convert to SRT if needed
     let srtContent: String
-    if isVTTContent(content, mimeType: type) {
+    if type.lowercased().contains("json") {
+      guard let converted = JSONTranscriptParser.convertToSRT(data) else {
+        throw TranscriptDownloadError.conversionFailed
+      }
+      srtContent = converted
+    } else if isVTTContent(content, mimeType: type) {
       logger.debug("Converting VTT to SRT")
       srtContent = VTTParser.convertToSRT(content)
     } else if isSRTContent(content, mimeType: type) {

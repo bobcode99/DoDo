@@ -26,6 +26,7 @@ public actor PodcastRssService {
     case vtt = "text/vtt"
     case srt = "application/x-subrip"
     case srtAlt = "application/srt"
+    case json = "application/json"
 
     /// Check if a MIME type matches this transcript type
     func matches(_ mimeType: String) -> Bool {
@@ -39,6 +40,7 @@ public actor PodcastRssService {
       case .vtt: return 0      // Prefer VTT (most widely supported)
       case .srt: return 1      // SRT is also good
       case .srtAlt: return 1   // Same as SRT
+      case .json: return 2     // Timed, but often per-word and needs merging
       }
     }
   }

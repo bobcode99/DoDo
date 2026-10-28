@@ -203,6 +203,15 @@ struct PodcastRssParsingTests {
                 == "https://example.com/1.vtt")
     }
 
+    @Test("A JSON transcript is used when it's the only timed one")
+    func acceptsJSONTranscript() async throws {
+        let json = item(
+            extra: #"      <podcast:transcript url="https://example.com/1.json" type="application/json"/>"#)
+
+        #expect(try await parse(feed(items: json)).episodes.first?.transcriptURL
+                == "https://example.com/1.json")
+    }
+
     @Test("A transcript in a format the app can't read is ignored")
     func ignoresUnsupportedTranscript() async throws {
         let unsupported = item(
