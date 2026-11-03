@@ -10,6 +10,9 @@ import SwiftData
 import Foundation
 import OSLog
 import Speech
+#if os(iOS)
+import UIKit
+#endif
 
 extension SFSpeechRecognizer {
   /// Async wrapper for `requestAuthorization` that is safe under
@@ -343,6 +346,23 @@ class TranscriptManager {
 
       let task = Task { [weak self] in
         guard let self else { return }
+        // iOS background grace window, so a quick app switch doesn't freeze
+        // the job. Longer absences suspend it; withStallTimeout doesn't count
+        // that time.
+        #if os(iOS)
+        var bgTaskID: UIBackgroundTaskIdentifier = .invalid
+        bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "Transcript") {
+          if bgTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(bgTaskID)
+            bgTaskID = .invalid
+          }
+        }
+        defer {
+          if bgTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(bgTaskID)
+          }
+        }
+        #endif
         await self.processJob(job)
       }
       processingTasks[job.id] = task
@@ -356,10 +376,17 @@ class TranscriptManager {
 
   /// Wraps a local-engine progress stream so a stall — no element arriving
   /// within `stallSeconds` — throws instead of hanging the job forever.
-  private nonisolated static func withStallTimeout<Element: Sendable>(
+  ///
+  /// Only time the app is active counts. While iOS has the app suspended
+  /// (phone locked, user in another app) the engine is frozen too; counting
+  /// that wall-clock time failed healthy jobs with "stalled" the moment the
+  /// user came back.
+  nonisolated static func withStallTimeout<Element: Sendable>(
     _ stream: AsyncThrowingStream<Element, Error>,
     stallSeconds: TimeInterval,
-    label: String
+    label: String,
+    tick: Duration = .seconds(5),
+    isActive: @escaping @Sendable () async -> Bool = { await isAppActive() }
   ) -> AsyncThrowingStream<Element, Error> {
     AsyncThrowingStream { continuation in
       let task = Task {
@@ -371,7 +398,11 @@ class TranscriptManager {
             let element = try await withThrowingTaskGroup(of: Element?.self) { group in
               group.addTask { try await iterator.next() }
               group.addTask {
-                try await Task.sleep(for: .seconds(stallSeconds))
+                var activeIdle: Duration = .zero
+                while activeIdle < .seconds(stallSeconds) {
+                  try await Task.sleep(for: tick)
+                  if await isActive() { activeIdle += tick }
+                }
                 throw NSError(
                   domain: "TranscriptManager", code: 7,
                   userInfo: [NSLocalizedDescriptionKey:
@@ -392,6 +423,14 @@ class TranscriptManager {
       }
       continuation.onTermination = { _ in task.cancel() }
     }
+  }
+
+  private static func isAppActive() -> Bool {
+    #if os(iOS)
+    UIApplication.shared.applicationState == .active
+    #else
+    true
+    #endif
   }
 
   // One job through whichever engine applies (Apple Speech, Whisper, Yap) plus
