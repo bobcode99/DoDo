@@ -43,6 +43,13 @@ struct PodcastAnalyzerApp: App {
   /// closed it.
   static let mainWindowID = "main"
 
+  /// True while this process is the host app for the unit tests. Tests reach
+  /// the app's singletons (`setSubscribed` writes through
+  /// `SubscriptionSyncCoordinator.shared`), so a host on the real stores let a
+  /// test's fake feed land in the iCloud-synced subscriptions, where the app
+  /// kept trying to auto-subscribe to it.
+  static let isHostingTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
   let sharedModelContainer: ModelContainer = {
     let fullSchema = Schema([
       PodcastInfoModel.self,
@@ -54,18 +61,29 @@ struct PodcastAnalyzerApp: App {
       SubscribedPodcastModel.self,
     ])
 
+    // Hosting tests: in-memory and off CloudKit, so nothing a test does
+    // through the app's singletons reaches the real stores or iCloud.
+    func configuration(
+      _ name: String, _ schema: Schema, cloudKit: ModelConfiguration.CloudKitDatabase
+    ) -> ModelConfiguration {
+      ModelConfiguration(
+        name, schema: schema,
+        isStoredInMemoryOnly: isHostingTests,
+        cloudKitDatabase: isHostingTests ? .none : cloudKit
+      )
+    }
+
     // Local-only store: unchanged from before. Kept off CloudKit because it
     // carries device-specific state (downloaded file paths) that would be
     // meaningless — or actively wrong — synced to another device.
-    let localConfiguration = ModelConfiguration(
+    let localConfiguration = configuration(
       "local",
-      schema: Schema([
+      Schema([
         PodcastInfoModel.self,
         EpisodeDownloadModel.self,
         EpisodeTranscriptModel.self,
       ]),
-      isStoredInMemoryOnly: false,
-      cloudKitDatabase: .none
+      cloudKit: .none
     )
 
     // CloudKit-synced store: playback progress, subscribed-podcast pointers
@@ -78,16 +96,15 @@ struct PodcastAnalyzerApp: App {
     // the watch app reads Up Next — the watch shares this container, and an
     // App Group would not reach it. The row is already CloudKit-legal: no
     // relationships, no #Unique, every property defaulted.
-    let cloudConfiguration = ModelConfiguration(
+    let cloudConfiguration = configuration(
       "cloud",
-      schema: Schema([
+      Schema([
         PlaybackProgressModel.self,
         SubscribedPodcastModel.self,
         EpisodeAIAnalysis.self,
         QueueItemModel.self,
       ]),
-      isStoredInMemoryOnly: false,
-      cloudKitDatabase: .private(cloudKitContainerIdentifier)
+      cloudKit: .private(cloudKitContainerIdentifier)
     )
 
     do {
