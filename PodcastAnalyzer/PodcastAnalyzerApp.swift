@@ -167,6 +167,13 @@ struct PodcastAnalyzerApp: App {
     SubscriptionSyncCoordinator.shared.setModelContainer(sharedModelContainer)
     TranscriptStore.shared.setModelContainer(sharedModelContainer)
     AppIntentsModelStore.container = sharedModelContainer
+    // Same reason, for playback: the widget's play button cold-launches the
+    // app in the background with no scene. Without this coordinator the
+    // finished episode was never marked played and the saved queue never
+    // restored.
+    if PlaybackStateCoordinator.shared == nil {
+      _ = PlaybackStateCoordinator(modelContext: sharedModelContainer.mainContext)
+    }
     #if os(iOS)
     PhoneWatchSession.shared.activate()
     #endif
@@ -209,12 +216,6 @@ struct PodcastAnalyzerApp: App {
         // After the alerts, so their titles follow the in-app language too.
         .environment(\.locale, languageManager.locale)
         .task {
-          // Critical: initialize playback state and sync manager first
-          if PlaybackStateCoordinator.shared == nil {
-            _ = PlaybackStateCoordinator(modelContext: sharedModelContainer.mainContext)
-          }
-          // Restore queue if it was deferred (ContentView.onAppear ran before coordinator init)
-          EnhancedAudioManager.shared.restoreQueueIfNeeded()
           BackgroundSyncManager.shared.setModelContainer(sharedModelContainer)
 
           // Start foreground sync if enabled

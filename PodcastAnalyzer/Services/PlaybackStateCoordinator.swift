@@ -67,6 +67,14 @@ class PlaybackStateCoordinator {
     return model.lastPlaybackPosition
   }
 
+  /// Whether an episode is marked played. False when it has no record.
+  static func isCompleted(podcastTitle: String, episodeTitle: String) -> Bool {
+    guard let coordinator = shared, let context = coordinator.modelContext else { return false }
+    let id = coordinator.makeEpisodeId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
+    let descriptor = FetchDescriptor<EpisodeDownloadModel>(predicate: #Predicate { $0.id == id })
+    return (try? context.fetch(descriptor).first)?.isCompleted ?? false
+  }
+
   // MARK: - Feed Lookup
 
   /// RSS URL for a subscribed podcast, by title.

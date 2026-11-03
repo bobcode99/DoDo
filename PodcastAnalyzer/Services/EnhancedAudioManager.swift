@@ -135,7 +135,39 @@ class EnhancedAudioManager: NSObject {
 
   // Auto-play candidates (unplayed episodes that can be randomly selected)
   var autoPlayCandidates: [PlaybackEpisode] = [] {
-    didSet { pushUpNextToWatch() }
+    didSet {
+      pushUpNextToWatch()
+      Self.saveAutoPlayCandidates(autoPlayCandidates)
+    }
+  }
+
+  /// Saved because only Home and Library build the candidates, and a widget
+  /// play cold-launches the app in the background where neither ever loads —
+  /// the episode then ended with nothing to play next. Descriptions are
+  /// dropped to keep the saved list small; playback doesn't need them.
+  static func saveAutoPlayCandidates(_ episodes: [PlaybackEpisode], to defaults: UserDefaults = .standard) {
+    let trimmed = episodes.map { episode in
+      var episode = episode
+      episode.episodeDescription = nil
+      return episode
+    }
+    defaults.set(try? JSONEncoder().encode(trimmed), forKey: Keys.autoPlayCandidates)
+  }
+
+  static func loadAutoPlayCandidates(from defaults: UserDefaults = .standard) -> [PlaybackEpisode] {
+    guard let data = defaults.data(forKey: Keys.autoPlayCandidates) else { return [] }
+    return (try? JSONDecoder().decode([PlaybackEpisode].self, from: data)) ?? []
+  }
+
+  /// The candidate to auto-play when an episode ends: the first that isn't the
+  /// episode that just finished and hasn't been finished since the list was
+  /// built (a saved list can be days old).
+  static func nextAutoPlayEpisode(
+    from candidates: [PlaybackEpisode],
+    excluding currentID: String?,
+    isCompleted: (PlaybackEpisode) -> Bool
+  ) -> PlaybackEpisode? {
+    candidates.first { $0.id != currentID && !isCompleted($0) }
   }
 
   /// The watch shows the same Up Next as Home: Play Next queue, then the
@@ -228,10 +260,15 @@ class EnhancedAudioManager: NSObject {
     static let lastEpisodePubDate = "lastEpisodePubDate"
     static let lastEpisodeGuid = "lastEpisodeGuid"
     static let pausedAt = "lastPausedAt"
+    static let autoPlayCandidates = "autoPlayCandidates"
   }
 
   override private init() {
     super.init()
+    // The backing storage, not the property: @Observable routes even an init
+    // assignment through didSet, whose watch push reads `shared` while it is
+    // still being created — a launch crash on iOS.
+    _autoPlayCandidates = Self.loadAutoPlayCandidates()
     setupAudioSession()
     setupRemoteControls()
     setupInterruptionObserver()
@@ -1164,18 +1201,14 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   /// Restore the last played episode on app launch (without playing)
-  /// Flag indicating queue still needs restoration (coordinator wasn't ready at restore time)
-  private var needsQueueRestore = false
-
   func restoreLastEpisode() {
     guard !hasRestoredLastEpisode else { return }
     hasRestoredLastEpisode = true
 
-    // Restore persisted queue
+    // Restore persisted queue (the coordinator is created in App.init, before
+    // any playback entry point can run).
     if let coordinator = PlaybackStateCoordinator.shared {
       queue = coordinator.restoreQueue()
-    } else {
-      needsQueueRestore = true
     }
 
     guard let state = loadLastPlaybackState() else {
@@ -1233,13 +1266,6 @@ private func handleAudioInterruption(_ notification: Notification) {
         self.updateWidgetPlaybackData()
       }
     }
-  }
-
-  /// Called after PlaybackStateCoordinator is initialized to restore queue if it was deferred
-  func restoreQueueIfNeeded() {
-    guard needsQueueRestore, let coordinator = PlaybackStateCoordinator.shared else { return }
-    needsQueueRestore = false
-    queue = coordinator.restoreQueue()
   }
 
   // MARK: - Caption Management
@@ -1858,7 +1884,7 @@ private func handleAudioInterruption(_ notification: Notification) {
   }
 
   private func handlePlaybackEnded() {
-    logger.info("Playback ended")
+    logger.notice("Playback ended: \(self.currentEpisode?.title ?? "-", privacy: .public) (coordinator \(PlaybackStateCoordinator.shared == nil ? "missing" : "ready", privacy: .public), \(self.autoPlayCandidates.count, privacy: .public) auto-play candidates, queue \(self.queue.count, privacy: .public))")
 
     // The completion write and the queue advance below happen exactly when iOS
     // is most willing to suspend us — audio just stopped, so the background
@@ -1907,14 +1933,17 @@ private func handleAudioInterruption(_ notification: Notification) {
 
     // Check auto-play setting and try to play random unplayed episode
     let autoPlayEnabled = UserDefaults.standard.bool(forKey: Keys.autoPlayNextEpisode)
-    if autoPlayEnabled, !autoPlayCandidates.isEmpty {
-      // Pick the top-scored episode (candidates are kept in Up Next order)
-      let nextEpisode = autoPlayCandidates[0]
+    // Top-scored first: candidates are kept in Up Next order.
+    let nextCandidate = Self.nextAutoPlayEpisode(
+      from: autoPlayCandidates, excluding: currentEpisode?.id,
+      isCompleted: { PlaybackStateCoordinator.isCompleted(podcastTitle: $0.podcastTitle, episodeTitle: $0.title) }
+    )
+    if autoPlayEnabled, let nextEpisode = nextCandidate {
       let savedPosition = PlaybackStateCoordinator.savedPlaybackPosition(
         podcastTitle: nextEpisode.podcastTitle,
         episodeTitle: nextEpisode.title
       )
-      logger.info("Auto-playing next episode: \(nextEpisode.title) at \(Int(savedPosition))s")
+      logger.notice("Auto-playing next episode: \(nextEpisode.title, privacy: .public) at \(Int(savedPosition), privacy: .public)s")
       currentTime = 0
       play(
         episode: nextEpisode,
