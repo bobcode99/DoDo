@@ -292,44 +292,19 @@ extension DataManagementView {
   // MARK: - Diagnostic Export
 
   private func exportDiagnosticReport() {
-    // Gather library stats
     let podcastCount = (try? modelContext.fetchCount(
       FetchDescriptor<PodcastInfoModel>(predicate: #Predicate { $0.isSubscribed == true }))) ?? 0
     let episodeCount = (try? modelContext.fetchCount(FetchDescriptor<EpisodeDownloadModel>())) ?? 0
-
-    // Build report
-    var report: [String: Any] = [:]
-    report["appVersion"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
-    report["build"] = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "unknown"
-    report["osVersion"] = ProcessInfo.processInfo.operatingSystemVersionString
-    report["date"] = Date.now.formatted(.iso8601)
-    report["subscribedPodcasts"] = podcastCount
-    report["trackedEpisodes"] = episodeCount
-
-    // Include non-sensitive UserDefaults keys (skip API keys)
-    let safeKeys = [
-      "transcriptEngine", "selectedTranscriptLocale", "defaultPlaybackSpeed",
-      "autoPlayNextEpisode", "autoDownloadNewEpisodes", "showTrendingEpisodes",
-      "skipForwardInterval", "skipBackwardInterval", "selectedPodcastRegion"
-    ]
-    var settingsSnapshot: [String: Any] = [:]
-    for key in safeKeys {
-      settingsSnapshot[key] = UserDefaults.standard.object(forKey: key) ?? "not set"
-    }
-    report["settings"] = settingsSnapshot
-
-    do {
-      let jsonData = try JSONSerialization.data(withJSONObject: report, options: .prettyPrinted)
-      var fullReport = "=== Diagnostic Report ===\n\n" + (String(data: jsonData, encoding: .utf8) ?? "")
-
-      // Append recent log file if available
-      let logURL = URL.documentsDirectory.appending(path: "app_logs.txt")
-      if let logs = try? String(contentsOf: logURL, encoding: .utf8) {
-        fullReport += "\n\n=== Recent Logs ===\n" + logs.suffix(8000)
+    let stats = [("Subscribed podcasts", podcastCount), ("Tracked episodes", episodeCount)]
+    Task {
+      do {
+        let url = try await Task.detached {
+          try DiagnosticReport.makeFile(problem: nil, libraryStats: stats)
+        }.value
+        shareItem = ShareableOPML(url: url)
+      } catch {
+        actionError = error.localizedDescription
       }
-      shareItem = try shareableFile(fullReport, named: "diagnostic_report.txt")
-    } catch {
-      actionError = error.localizedDescription
     }
   }
 

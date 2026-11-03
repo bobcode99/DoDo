@@ -193,7 +193,7 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
 
     do {
       try FileManager.default.copyItem(at: location, to: ourTempFile)
-      logger.info("Copied download to temp location: \(ourTempFile.lastPathComponent)")
+      logger.info("Copied download to temp location: \(ourTempFile.lastPathComponent, privacy: .public)")
     } catch {
       logger.error("Failed to copy temp file: \(error.localizedDescription, privacy: .public)")
       // Update state asynchronously
@@ -241,15 +241,15 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
       }
 
       guard let (podcastTitle, episodeTitle) = parseEpisodeKey(episodeKey) else {
-        logger.error("Invalid episode key format: \(episodeKey)")
+        logger.error("Invalid episode key format: \(episodeKey, privacy: .public)")
         try? FileManager.default.removeItem(at: ourTempFile)
         return
       }
 
-      logger.info("Download finished for: \(episodeTitle), processing file...")
+      logger.info("Download finished for: \(episodeTitle, privacy: .public), processing file...")
 
       do {
-        logger.info("Processing downloaded file for: \(episodeTitle)")
+        logger.info("Processing downloaded file for: \(episodeTitle, privacy: .public)")
 
         // Set finishing state on main thread
         await MainActor.run {
@@ -362,14 +362,14 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
                 episodeTitle: episodeTitle,
                 podcastTitle: podcastTitle
               )
-              logger.info("Auto-downloaded RSS transcript for: \(episodeTitle)")
+              logger.info("Auto-downloaded RSS transcript for: \(episodeTitle, privacy: .public)")
             } catch {
               logger.warning("Auto-download RSS transcript failed: \(error.localizedDescription, privacy: .public)")
             }
           }
         }
 
-        logger.info("Download completed successfully: \(episodeTitle)")
+        logger.info("Download completed successfully: \(episodeTitle, privacy: .public)")
 
       } catch {
         try? FileManager.default.removeItem(at: ourTempFile)
@@ -514,7 +514,7 @@ final class DownloadManager {
     }
     if deleted > 0 {
       context.saveOrLog()
-      logger.info("Auto-deleted \(deleted) played download(s)")
+      logger.info("Auto-deleted \(deleted, privacy: .public) played download(s)")
     }
   }
 
@@ -630,7 +630,7 @@ final class DownloadManager {
     // Fast-path: skip if already in-flight or done
     switch downloadStates[episodeKey] {
     case .downloading, .finishing:
-      logger.info("Download already in progress for: \(episode.title)")
+      logger.info("Download already in progress for: \(episode.title, privacy: .public)")
       return
     case .downloaded:
       return
@@ -641,7 +641,7 @@ final class DownloadManager {
     guard let audioURLString = episode.audioURL,
           let url = URL(string: audioURLString)
     else {
-      logger.error("Invalid audio URL for episode: \(episode.title)")
+      logger.error("Invalid audio URL for episode: \(episode.title, privacy: .public)")
       downloadStates[episodeKey] = .failed(error: "Invalid URL")
       return
     }
@@ -663,7 +663,7 @@ final class DownloadManager {
           forPath: NSHomeDirectory())
         if let freeSpace = attrs[.systemFreeSize] as? Int64,
            freeSpace < 50 * 1024 * 1024 {
-          logger.warning("Insufficient disk space for download: \(freeSpace / 1_048_576) MB free")
+          logger.warning("Insufficient disk space for download: \(freeSpace / 1_048_576, privacy: .public) MB free")
           downloadStates[episodeKey] = .failed(error: "Not enough disk space (need at least 50 MB)")
           return
         }
@@ -688,7 +688,7 @@ final class DownloadManager {
         session: urlSession
       )
       task.resume()
-      logger.info("Started download: \(episode.title)")
+      logger.info("Started download: \(episode.title, privacy: .public)")
     }
   }
 
@@ -699,7 +699,7 @@ final class DownloadManager {
       await sessionDelegate.cancelDownload(episodeTitle: episodeTitle, podcastTitle: podcastTitle)
       inFlightProgress.removeValue(forKey: episodeKey)
       downloadStates[episodeKey] = .notDownloaded
-      logger.info("Cancelled download: \(episodeTitle)")
+      logger.info("Cancelled download: \(episodeTitle, privacy: .public)")
     }
   }
 
@@ -721,7 +721,7 @@ final class DownloadManager {
         downloadStates[episodeKey] = .notDownloaded
         // Reset disk-check cache so a future re-download can be discovered
         diskCheckedKeys.remove(episodeKey)
-        logger.info("Deleted download: \(episodeTitle)")
+        logger.info("Deleted download: \(episodeTitle, privacy: .public)")
       } catch {
         logger.error("Failed to delete download: \(error.localizedDescription, privacy: .public)")
       }
@@ -762,7 +762,7 @@ final class DownloadManager {
     // If state says downloaded, verify the file still exists on disk
     if case .downloaded(let path) = state {
       if !FileManager.default.fileExists(atPath: path) {
-        logger.warning("Download record exists but file missing on disk: \(path)")
+        logger.warning("Download record exists but file missing on disk: \(path, privacy: .public)")
         Task { @MainActor [weak self] in
           self?.downloadStates[episodeKey] = .notDownloaded
         }

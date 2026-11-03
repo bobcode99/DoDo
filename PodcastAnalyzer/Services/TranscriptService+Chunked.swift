@@ -43,7 +43,7 @@ extension TranscriptService {
             userInfo: [NSLocalizedDescriptionKey: "Invalid audio file duration"])
         }
 
-        self.logger.info("Audio duration: \(audioFileDuration)s — evaluating chunked vs sequential")
+        self.logger.notice("Audio duration: \(audioFileDuration, privacy: .public)s — evaluating chunked vs sequential")
 
         if audioFileDuration < 60 {
           self.logger.info("Audio < 1 min, using sequential processing")
@@ -84,13 +84,13 @@ extension TranscriptService {
           phase: .splitting
         ))
 
-        self.logger.info("Exporting audio chunks (chunkDuration: \(chunkDuration)s)")
+        self.logger.info("Exporting audio chunks (chunkDuration: \(chunkDuration, privacy: .public)s)")
         let overlap: TimeInterval = 2.0
         let chunks = try await ChunkedTranscriptionService.exportAudioChunks(
           from: audioURL, totalDuration: audioFileDuration,
           chunkDuration: chunkDuration, overlap: overlap
         )
-        self.logger.info("Exported \(chunks.count) chunks")
+        self.logger.notice("Exported \(chunks.count, privacy: .public) chunks")
         defer { ChunkedTranscriptionService.cleanupTempFiles(chunks) }
 
         // Announce the part count as soon as it's known so the UI can show
@@ -172,7 +172,7 @@ extension TranscriptService {
         // fall inside detected music ranges.
         let musicRanges = await musicRangesTask
         if !musicRanges.isEmpty {
-          self.logger.info("Detected \(musicRanges.count) music range(s); annotating SRT")
+          self.logger.info("Detected \(musicRanges.count, privacy: .public) music range(s); annotating SRT")
         }
         let annotatedSegments = ChunkedTranscriptionService.annotateMusicSegments(
           speechSegments: mergedSegments,

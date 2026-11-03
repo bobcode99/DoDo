@@ -5,6 +5,8 @@ import SwiftUI
 /// TranscriptGeneratingView) so this stays a thin dispatcher.
 struct EpisodeTranscriptStatusView: View {
     @Bindable var viewModel: EpisodeDetailViewModel
+    @State private var reportFile: ShareableOPML?
+    @State private var isPreparingReport = false
 
     var body: some View {
         switch viewModel.transcript.transcriptState {
@@ -102,6 +104,32 @@ struct EpisodeTranscriptStatusView: View {
                 Label("Try Again", systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
+
+            Button {
+                reportProblem(message: message)
+            } label: {
+                Label("Report Problem", systemImage: "ladybug")
+            }
+            .buttonStyle(.borderless)
+            .disabled(isPreparingReport)
+        }
+        .sheet(item: $reportFile) { item in
+            ShareSheet(items: [item.url])
+        }
+    }
+
+    /// Shares a diagnostic report naming the failed episode, engine and error,
+    /// so it reaches the developer with the context that explains it.
+    private func reportProblem(message: String) {
+        let problem = "Transcription failed — \(viewModel.podcastTitle) / \(viewModel.title)"
+            + " — engine: \(viewModel.transcript.effectiveEngine.rawValue)"
+            + ", language: \(viewModel.transcript.transcriptLanguageName) — \(message)"
+        isPreparingReport = true
+        Task {
+            defer { isPreparingReport = false }
+            reportFile = try? await Task.detached {
+                ShareableOPML(url: try DiagnosticReport.makeFile(problem: problem))
+            }.value
         }
     }
 }

@@ -305,6 +305,9 @@ struct PodcastAnalyzerApp: App {
     .defaultLaunchBehavior(.suppressed)
     #endif
     .onChange(of: scenePhase) { _, newPhase in
+      // In diagnostic reports this marks where iOS may have suspended work
+      // (a "stalled" transcript right after a background stretch, say).
+      logger.notice("Scene phase: \(String(describing: newPhase), privacy: .public)")
       switch newPhase {
       case .active:
         // Opt-in cleanup of finished episodes (self-throttled to hourly).

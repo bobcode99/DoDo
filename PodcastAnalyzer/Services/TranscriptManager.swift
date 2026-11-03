@@ -162,9 +162,9 @@ class TranscriptManager {
       if case .failed = existing.status {
         // Allow retry: remove the failed job so a new one can be queued
         activeJobs.removeValue(forKey: jobId)
-        logger.info("Retrying failed transcript job for: \(episodeTitle)")
+        logger.info("Retrying failed transcript job for: \(episodeTitle, privacy: .public)")
       } else {
-        logger.info("Transcript job already exists for: \(episodeTitle)")
+        logger.info("Transcript job already exists for: \(episodeTitle, privacy: .public)")
         return
       }
     }
@@ -181,7 +181,7 @@ class TranscriptManager {
 
     pendingJobs.append(job)
     activeJobs[jobId] = job
-    logger.info("Queued transcript job for: \(episodeTitle)")
+    logger.notice("Queued transcript job for: \(episodeTitle, privacy: .public)")
     startProcessingIfNeeded()
   }
 
@@ -205,7 +205,7 @@ class TranscriptManager {
     }
 
     guard !TranscriptStore.shared.exists(episodeTitle: episodeTitle, podcastTitle: podcastTitle) else {
-      logger.info("Auto-transcript skipped — caption already exists: \(episodeTitle)")
+      logger.info("Auto-transcript skipped — caption already exists: \(episodeTitle, privacy: .public)")
       return
     }
     queueTranscript(
@@ -261,7 +261,7 @@ class TranscriptManager {
       processingTasks[jobId]?.cancel()
       processingTasks.removeValue(forKey: jobId)
       runningJobIds.remove(jobId)
-      logger.info("Cancelled running transcript job for: \(episodeTitle)")
+      logger.info("Cancelled running transcript job for: \(episodeTitle, privacy: .public)")
 
       if runningJobIds.isEmpty && pendingJobs.isEmpty {
         isProcessing = false
@@ -443,10 +443,22 @@ class TranscriptManager {
     let engine = job.engine ?? TranscriptEngine(
       rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
     ) ?? .appleSpeech
+    // Key steps log at .notice: iOS keeps those on disk, while .info lines are
+    // usually gone by the time a user exports a diagnostic report.
+    let startedAt = Date()
+    var loggedQuarter = -1
+    func logMilestone(_ progress: Double) {
+      let quarter = Int(progress * 4)
+      guard quarter > loggedQuarter, quarter < 4 else { return }
+      loggedQuarter = quarter
+      logger.notice("Transcript \(quarter * 25, privacy: .public)% after \(Int(Date().timeIntervalSince(startedAt)), privacy: .public)s: \(job.episodeTitle, privacy: .public)")
+    }
 
     do {
       let audioURL = URL(fileURLWithPath: job.audioPath)
       let fileExists = FileManager.default.fileExists(atPath: job.audioPath)
+      let fileMB = ((try? FileManager.default.attributesOfItem(atPath: job.audioPath)[.size] as? Int) ?? 0) / 1_048_576
+      logger.notice("Transcript started: \(job.podcastTitle, privacy: .public) / \(job.episodeTitle, privacy: .public) — engine=\(engine.rawValue, privacy: .public) language=\(job.language ?? "default", privacy: .public) file=\(fileExists ? "\(fileMB) MB" : "missing", privacy: .public)")
 
       // Non-yap engines always need the local file
       if engine != .yapServer && !fileExists {
@@ -548,6 +560,10 @@ class TranscriptManager {
             // Always forward phase transitions promptly (they're rare); throttle
             // only the high-frequency percentage updates.
             let phaseChanged = activeJobs[job.id]?.phase != progressUpdate.phase
+            if phaseChanged {
+              logger.notice("Transcript phase \(String(describing: progressUpdate.phase), privacy: .public) after \(Int(Date().timeIntervalSince(startedAt)), privacy: .public)s: \(job.episodeTitle, privacy: .public)")
+            }
+            logMilestone(progressUpdate.progress)
             if phaseChanged || now.timeIntervalSince(lastUIUpdate) >= 0.25 {
               activeJobs[job.id]?.partProgress = parts
               activeJobs[job.id]?.phase = progressUpdate.phase
@@ -615,14 +631,16 @@ class TranscriptManager {
           stallSeconds: Self.localStallSeconds, label: "Whisper"
         ) {
           // Capture detected language as soon as Whisper reports it.
-          if let lang = progressUpdate.detectedLanguage {
+          if let lang = progressUpdate.detectedLanguage, activeJobs[job.id]?.detectedLanguage == nil {
             activeJobs[job.id]?.detectedLanguage = lang
+            logger.notice("Whisper detected language \(lang, privacy: .public): \(job.episodeTitle, privacy: .public)")
           }
           if progressUpdate.isComplete {
             finalSRTContent = progressUpdate.srtContent
             activeJobs[job.id]?.status = .transcribing(progress: 1.0)
           } else {
             let now = Date()
+            logMilestone(progressUpdate.progress)
             if now.timeIntervalSince(lastUIUpdate) >= 0.25 {
               activeJobs[job.id]?.status = .transcribing(progress: progressUpdate.progress)
               lastUIUpdate = now
@@ -649,7 +667,7 @@ class TranscriptManager {
         // No model download needed — jump straight to transcribing
         activeJobs[job.id]?.status = .transcribing(progress: 0)
 
-        logger.info("[YapServer] job.language=\(job.language ?? "<nil>") for \(job.episodeTitle)")
+        logger.info("[YapServer] job.language=\(job.language ?? "<nil>", privacy: .public) for \(job.episodeTitle, privacy: .public)")
 
         let serverURL = await MainActor.run { YapServerSettings.shared.serverURL }
         let apiKey = await MainActor.run { YapServerSettings.shared.apiKey }
@@ -702,7 +720,7 @@ class TranscriptManager {
 
         // Back on @MainActor — store before polling so cancelJob() can reach the server
         activeJobs[job.id]?.yapServerJobID = yapJobID
-        logger.info("[YapServer] server job id=\(yapJobID) stored for \(job.episodeTitle)")
+        logger.info("[YapServer] server job id=\(yapJobID, privacy: .public) stored for \(job.episodeTitle, privacy: .public)")
 
         try Task.checkCancellation()
 
@@ -729,19 +747,19 @@ class TranscriptManager {
 
       // MARK: Completion (shared)
       activeJobs[job.id]?.status = .completed
-      logger.info("Transcript completed for: \(job.episodeTitle)")
+      logger.notice("Transcript completed in \(Int(Date().timeIntervalSince(startedAt)), privacy: .public)s: \(job.episodeTitle, privacy: .public)")
 
       try? await Task.sleep(for: .seconds(3))
       activeJobs.removeValue(forKey: job.id)
 
     } catch is CancellationError {
       activeJobs.removeValue(forKey: job.id)
-      logger.info("Transcript cancelled for: \(job.episodeTitle)")
+      logger.notice("Transcript cancelled after \(Int(Date().timeIntervalSince(startedAt)), privacy: .public)s: \(job.episodeTitle, privacy: .public)")
     } catch {
       // `engine` resolved at the top of processJob is still in scope here.
       let message = Self.describeFailure(error, engine: engine)
       activeJobs[job.id]?.status = .failed(error: message)
-      logger.error("Transcript failed for \(job.episodeTitle) [\(engine.rawValue)]: \(error.localizedDescription, privacy: .public)")
+      logger.error("Transcript failed for \(job.episodeTitle, privacy: .public) [\(engine.rawValue, privacy: .public)]: \(error.localizedDescription, privacy: .public)")
       if engine == .yapServer {
         yapConsecutiveFailures[job.podcastTitle, default: 0] += 1
       }

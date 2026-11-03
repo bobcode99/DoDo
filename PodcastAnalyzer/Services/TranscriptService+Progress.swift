@@ -82,7 +82,7 @@ extension TranscriptService {
         let audioFile = try AVAudioFile(forReading: audioURL)
         let audioFileDuration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
 
-        self.logger.info("Audio duration (progress): \(audioFileDuration)s")
+        self.logger.info("Audio duration (progress): \(audioFileDuration, privacy: .public)s")
 
         continuation.yield(TranscriptionProgress(
           progress: 0.0,

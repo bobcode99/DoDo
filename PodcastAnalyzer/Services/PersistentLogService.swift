@@ -88,6 +88,26 @@ final class PersistentLogService {
     logsDirectory: URL,
     logger: Logger
   ) throws {
+    let lines = try currentSessionLines(subsystems: subsystems)
+    guard !lines.isEmpty else {
+      logger.info("No app log entries found in the last 24 hours — skipping export")
+      return
+    }
+
+    // Ensure directory exists
+    if !FileManager.default.fileExists(atPath: logsDirectory.path) {
+      try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+    }
+
+    let fileName = sessionFileName
+    let fileURL = logsDirectory.appendingPathComponent(fileName)
+
+    try lines.joined(separator: "\n").write(to: fileURL, atomically: true, encoding: .utf8)
+    logger.info("Exported \(lines.count) log entries to \(fileName)")
+  }
+
+  /// This process's app log entries from the last 24 hours, one formatted line each.
+  private nonisolated static func currentSessionLines(subsystems: [String]) throws -> [String] {
     let store = try OSLogStore(scope: .currentProcessIdentifier)
 
     let oneDayAgo = Date().addingTimeInterval(-24 * 60 * 60)
@@ -100,41 +120,41 @@ final class PersistentLogService {
       : NSPredicate(format: "subsystem IN %@", subsystems)
     let entries = try store.getEntries(at: position, matching: predicate)
 
-    let appEntries = entries.compactMap { $0 as? OSLogEntryLog }
-
-    guard !appEntries.isEmpty else {
-      logger.info("No app log entries found in the last 24 hours — skipping export")
-      return
-    }
-
-    // Format entries
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS Z"
     dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
-    var lines: [String] = []
-    lines.reserveCapacity(appEntries.count)
-
-    for entry in appEntries {
+    return entries.compactMap { $0 as? OSLogEntryLog }.map { entry in
       let timestamp = dateFormatter.string(from: entry.date)
-      let level = levelString(for: entry.level)
-      let category = entry.category
-      let message = entry.composedMessage
-      lines.append("[\(timestamp)] [\(level)] [\(entry.subsystem)/\(category)] \(message)")
+      return "[\(timestamp)] [\(levelString(for: entry.level))] [\(entry.subsystem)/\(entry.category)] \(entry.composedMessage)"
+    }
+  }
+
+  // MARK: - Diagnostic report
+
+  /// Logs for a diagnostic report: this session read live from the log store
+  /// (so it's there even if the app never went to the background), followed by
+  /// the most recent earlier session files. Slow; call off the main actor.
+  nonisolated static func diagnosticLogText(previousSessions: Int = 3) -> String {
+    var sections: [String] = []
+
+    let current = (try? currentSessionLines(subsystems: ["com.podcast.analyzer"])) ?? []
+    sections.append("=== Current session (\(sessionFileName)) ===\n" + current.joined(separator: "\n"))
+
+    let logsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("Logs", isDirectory: true)
+    let earlier = ((try? FileManager.default.contentsOfDirectory(
+      at: logsDirectory, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles
+    )) ?? [])
+      .filter { $0.pathExtension == "log" && $0.lastPathComponent != sessionFileName }
+      .sorted { $0.lastPathComponent > $1.lastPathComponent }  // names are timestamps
+      .prefix(previousSessions)
+    for file in earlier {
+      guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+      sections.append("=== Earlier session (\(file.lastPathComponent)) ===\n" + text)
     }
 
-    let content = lines.joined(separator: "\n")
-
-    // Ensure directory exists
-    if !FileManager.default.fileExists(atPath: logsDirectory.path) {
-      try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
-    }
-
-    let fileName = sessionFileName
-    let fileURL = logsDirectory.appendingPathComponent(fileName)
-
-    try content.write(to: fileURL, atomically: true, encoding: .utf8)
-    logger.info("Exported \(appEntries.count) log entries to \(fileName)")
+    return sections.joined(separator: "\n\n")
   }
 
   // MARK: - Cleanup

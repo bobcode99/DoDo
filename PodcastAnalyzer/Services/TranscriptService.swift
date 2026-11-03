@@ -84,7 +84,7 @@ public actor TranscriptService {
     // reliably map itself — Apple's own equivalence table is authoritative.
     if let resolved = await SpeechTranscriber.supportedLocale(equivalentTo: targetLocale) {
       if resolved.identifier(.bcp47) != targetLocale.identifier(.bcp47) {
-        logger.info(
+        logger.notice(
           "Resolved locale \(self.targetLocale.identifier(.bcp47), privacy: .public) -> \(resolved.identifier(.bcp47), privacy: .public)"
         )
       }
@@ -115,7 +115,7 @@ public actor TranscriptService {
 
     let modules: [any SpeechModule] = [newTranscriber]
     let installed = await Set(SpeechTranscriber.installedLocales)
-    logger.info("Installed locales: \(installed.map { $0.identifier }.joined(separator: ", "))")
+    logger.notice("Installed locales: \(installed.map { $0.identifier }.joined(separator: ", "), privacy: .public)")
 
     if installed.map({ $0.identifier(.bcp47) }).contains(targetLocale.identifier(.bcp47)) {
       self.analyzer = await makeConfiguredAnalyzer(modules: modules)
@@ -191,7 +191,7 @@ public actor TranscriptService {
       context.contextualStrings = [.general: contextualStrings]
       do {
         try await analyzer.setContext(context)
-        logger.info("Applied \(self.contextualStrings.count) contextual strings to analyzer")
+        logger.info("Applied \(self.contextualStrings.count, privacy: .public) contextual strings to analyzer")
       } catch {
         logger.error("Failed to apply contextual strings: \(error.localizedDescription, privacy: .public)")
       }
