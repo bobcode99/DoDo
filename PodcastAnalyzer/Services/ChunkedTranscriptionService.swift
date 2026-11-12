@@ -214,15 +214,15 @@ nonisolated enum ChunkedTranscriptionService {
     return merged
   }
 
-  /// Replaces transcribed segments that fall mostly inside detected music
-  /// ranges with explicit `[♪ Music]` marker segments. Apple Speech produces
-  /// garbage on pure music; this keeps the SRT honest by dropping those
-  /// segments and surfacing the music ranges directly.
+  /// Marks transcribed segments that fall mostly inside detected music with
+  /// "♪ " instead of dropping them: the classifier also fires on a host
+  /// talking over a music bed, and that speech is worth keeping. The viewer
+  /// fades marked lines and can hide them.
   ///
-  /// A segment is dropped when `musicOverlapRatio` (≥ 0.7 by default) of its
-  /// duration lies inside any music range. The previous midpoint-only check
-  /// dropped real speech that crossed a music boundary (e.g. host starting to
-  /// talk before the intro music tag fully ended).
+  /// A segment counts as music when `musicOverlapRatio` (≥ 0.7 by default) of
+  /// its duration lies inside any music range. A `[♪ Music]` placeholder is
+  /// added only where a music passage has no transcribed line at all, so pure
+  /// music still shows up.
   static func annotateMusicSegments(
     speechSegments: [ChunkSegment],
     musicRanges: [MusicDetectionService.TimeRange],
@@ -232,23 +232,35 @@ nonisolated enum ChunkedTranscriptionService {
   ) -> [ChunkSegment] {
     guard !musicRanges.isEmpty else { return speechSegments }
 
-    let speechOnly = speechSegments.filter { segment in
+    func isInMusic(_ segment: ChunkSegment) -> Bool {
       let duration = max(segment.endTime - segment.startTime, 0.001)
       let overlap = musicRanges.reduce(0.0) { acc, range in
         acc + max(0, min(segment.endTime, range.end) - max(segment.startTime, range.start))
       }
-      return overlap / duration < musicOverlapRatio
+      return overlap / duration >= musicOverlapRatio
+    }
+
+    let marked = speechSegments.map { segment in
+      isInMusic(segment)
+        ? ChunkSegment(
+            startTime: segment.startTime, endTime: segment.endTime,
+            text: MusicDetectionService.musicLinePrefix + segment.text)
+        : segment
     }
 
     let markers = coalesceMusicRanges(
       musicRanges,
-      around: speechOnly,
+      around: speechSegments.filter { !isInMusic($0) },
       maxSilentGap: maxSilentMusicGap
-    ).map { range in
+    )
+    .filter { range in
+      !speechSegments.contains { $0.startTime < range.end && range.start < $0.endTime }
+    }
+    .map { range in
       ChunkSegment(startTime: range.start, endTime: range.end, text: marker)
     }
 
-    return (speechOnly + markers).sorted { $0.startTime < $1.startTime }
+    return (marked + markers).sorted { $0.startTime < $1.startTime }
   }
 
   /// Joins music ranges that are really one passage.

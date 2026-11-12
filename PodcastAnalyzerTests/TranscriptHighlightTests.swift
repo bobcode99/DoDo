@@ -290,15 +290,16 @@ struct TranscriptHighlightTests {
         let result = ChunkedTranscriptionService.annotateMusicSegments(
             speechSegments: speech, musicRanges: musicRanges
         )
-        #expect(result.contains { $0.text == "Welcome back to the show" })
-        #expect(result.contains { $0.text == MusicDetectionService.markerText })
+        #expect(result.map(\.text) == ["Welcome back to the show"])
     }
 
-    @Test("Speech entirely inside music is replaced by the marker")
-    func speechFullyInsideMusicIsDropped() {
+    /// Talking over a music bed used to be deleted and replaced by
+    /// [♪ Music]. The line is kept now, only marked.
+    @Test("Speech inside music is kept and marked, with no placeholder")
+    func speechInsideMusicIsKeptAndMarked() {
         let speech = [
             ChunkedTranscriptionService.ChunkSegment(
-                startTime: 10.0, endTime: 11.0, text: "garble"
+                startTime: 10.0, endTime: 11.0, text: "今天來聊聊"
             )
         ]
         let musicRanges = [
@@ -307,8 +308,33 @@ struct TranscriptHighlightTests {
         let result = ChunkedTranscriptionService.annotateMusicSegments(
             speechSegments: speech, musicRanges: musicRanges
         )
-        #expect(!result.contains { $0.text == "garble" })
-        #expect(result.contains { $0.text == MusicDetectionService.markerText })
+        #expect(result.map(\.text) == ["♪ 今天來聊聊"])
+    }
+
+    @Test("Music lines group apart from speech and show without the mark")
+    func musicLinesGroupApart() throws {
+        let segments = [
+            seg(0, start: 0, end: 1, text: "Hello"),
+            seg(1, start: 1, end: 2, text: "♪ la la"),
+            seg(2, start: 2, end: 3, text: "♪ la"),
+            seg(3, start: 3, end: 4, text: "back"),
+        ]
+        let sentences = TranscriptGrouping.groupIntoSentences(segments)
+        try #require(sentences.count == 3)
+        #expect(sentences.map(\.isMusic) == [false, true, false])
+        #expect(sentences[1].text == "la la la")
+    }
+
+    @Test("Hiding music drops marked lines and placeholders, keeps speech")
+    func hidingMusic() {
+        let segments = [
+            seg(0, start: 0, end: 3, text: MusicDetectionService.markerText),
+            seg(1, start: 3, end: 4, text: "Hello."),
+            seg(2, start: 4, end: 5, text: "♪ la la"),
+            seg(3, start: 5, end: 6, text: "Bye."),
+        ]
+        let sentences = TranscriptGrouping.groupIntoSentences(segments, hidingMusic: true)
+        #expect(sentences.map(\.text) == ["Hello.", "Bye."])
     }
 
     /// A song whose classifier confidence dips mid-way arrives as two abutting

@@ -431,7 +431,8 @@ final class ExpandedPlayerViewModel {
       ) {
         self.hasTranscript = true
         self.transcriptSegments = segments
-        self.groupedSentences = TranscriptGrouping.groupIntoSentences(segments)
+        self.groupedSentences = TranscriptGrouping.groupIntoSentences(
+          segments, hidingMusic: SubtitleSettingsManager.shared.hideMusicSections)
         self.lastLoadedEpisodeId = episodeId
       } else {
         self.hasTranscript = false

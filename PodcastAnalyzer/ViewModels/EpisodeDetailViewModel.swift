@@ -66,6 +66,12 @@ struct TranscriptSegment: Identifiable, Equatable, Codable {
     Formatters.formatPlaybackTime(startTime)
   }
 
+  /// Transcribed while music was playing (marked "♪ " by music detection).
+  nonisolated var isMusic: Bool { MusicDetectionService.isMusicLine(text) }
+
+  /// `text` without the music mark — what to show, search, translate.
+  nonisolated var spokenText: String { MusicDetectionService.stripMusicPrefix(text) }
+
   /// Returns display text based on subtitle display mode
   func displayText(mode: SubtitleDisplayMode) -> (primary: String, secondary: String?) {
     switch mode {

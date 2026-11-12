@@ -115,7 +115,7 @@ struct TranscriptSettingsTab: View {
       } header: {
         Text("Automation")
       } footer: {
-        Text("Detect Music marks music ranges as [♪ Music] instead of transcribing them. Split Long Audio transcribes in parallel parts (faster on Apple Speech); turn off for one single-pass run. Transcription Context adds per-podcast names & jargon to improve accuracy. Automatic Transcription covers both what gets transcribed on download and which shows are followed.")
+        Text("Detect Music keeps lines inside music and marks them ♪. Split Long Audio transcribes in parallel parts (faster on Apple Speech); turn off for one single-pass run. Transcription Context adds per-podcast names & jargon to improve accuracy. Automatic Transcription covers both what gets transcribed on download and which shows are followed.")
       }
 
       // MARK: Whisper models list

@@ -27,9 +27,17 @@ struct TranscriptSentence: Identifiable {
     var endTime: TimeInterval { segments.last?.endTime ?? 0 }
     var formattedStartTime: String { segments.first?.formattedStartTime ?? "0:00" }
 
-    /// Combined original text with CJK-aware spacing.
+    /// Combined original text with CJK-aware spacing, music marks removed.
     var text: String {
-        CJKTextUtils.joinTexts(segments.map { $0.text.trimmingCharacters(in: .whitespaces) })
+        CJKTextUtils.joinTexts(segments.map { $0.spokenText.trimmingCharacters(in: .whitespaces) })
+    }
+
+    /// Spoken over music. The grouper never mixes music and non-music lines.
+    var isMusic: Bool { segments.first?.isMusic ?? false }
+
+    /// A `[♪ Music]` placeholder row.
+    var isMusicMarker: Bool {
+        segments.count == 1 && MusicDetectionService.isMarker(segments[0].text)
     }
 
     /// Combined translated text. Returns nil unless every segment has a translation.
@@ -79,8 +87,17 @@ enum TranscriptGrouping {
 
     /// Group raw SRT segments into sentence blocks.
     /// Splits at: sentence-ending punctuation, time gap > `gapThreshold`,
-    /// or the soft cap (with look-ahead deferral up to the hard cap).
-    static func groupIntoSentences(_ segments: [TranscriptSegment]) -> [TranscriptSentence] {
+    /// a switch between music and non-music lines, or the soft cap (with
+    /// look-ahead deferral up to the hard cap). `hidingMusic` drops music
+    /// lines and `[♪ Music]` placeholders.
+    static func groupIntoSentences(
+        _ segments: [TranscriptSegment], hidingMusic: Bool = false
+    ) -> [TranscriptSentence] {
+        let sentences = groupAll(segments)
+        return hidingMusic ? sentences.filter { !$0.isMusic && !$0.isMusicMarker } : sentences
+    }
+
+    private static func groupAll(_ segments: [TranscriptSegment]) -> [TranscriptSentence] {
         var sentences: [TranscriptSentence] = []
         var group: [TranscriptSegment] = []
         var charCount = 0
@@ -109,7 +126,7 @@ enum TranscriptGrouping {
         /// just before that produces an awkward "...end" / ", continuation" pair.
         func nextIsMidClause(_ index: Int) -> Bool {
             guard index + 1 < segments.count else { return false }
-            let next = segments[index + 1].text.trimmingCharacters(in: .whitespaces)
+            let next = segments[index + 1].spokenText.trimmingCharacters(in: .whitespaces)
             guard let first = next.first else { return false }
             if cjkClauseContinuations.contains(first) { return true }
             if groupIsCJK { return false }
@@ -123,14 +140,15 @@ enum TranscriptGrouping {
             let hasTimeGap = group.last.map {
                 segment.startTime - $0.endTime > gapThreshold
             } ?? false
+            let musicChanged = group.last.map { $0.isMusic != segment.isMusic } ?? false
 
             // Music markers always stand alone; flush any in-progress
             // sentence before appending the marker.
-            if hasTimeGap || (isMarker && !group.isEmpty) {
+            if hasTimeGap || musicChanged || (isMarker && !group.isEmpty) {
                 flush()
             }
 
-            let trimmed = segment.text.trimmingCharacters(in: .whitespaces)
+            let trimmed = segment.spokenText.trimmingCharacters(in: .whitespaces)
             group.append(segment)
             charCount += trimmed.count
             if !groupIsCJK { groupIsCJK = CJKTextUtils.containsCJK(trimmed) }
@@ -423,6 +441,15 @@ struct SentenceView: View, Equatable {
                         .frame(width: 50, alignment: .leading)
                 }
 
+                if sentence.isMusic {
+                    Image(systemName: "music.note")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                        .padding(.trailing, 6)
+                        .accessibilityLabel("Music")
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
                     primaryTextView
                     if let secondary = secondaryText {
@@ -461,7 +488,7 @@ struct SentenceView: View, Equatable {
             Text(karaokeAttributedString())
                 .font(.body)
                 .lineSpacing(4)
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(sentence.isMusic ? Color.secondary : Color.primary)
         } else {
             // Translation mode: no per-segment timing, so no karaoke.
             Text(primaryText)
@@ -481,7 +508,7 @@ struct SentenceView: View, Equatable {
         var prevEndIsCJK = false
 
         for (i, seg) in sentence.segments.enumerated() {
-            let raw = seg.text.trimmingCharacters(in: .whitespaces)
+            let raw = seg.spokenText.trimmingCharacters(in: .whitespaces)
             guard !raw.isEmpty else { continue }
 
             let nextStartIsCJK = raw.unicodeScalars.first.map { CJKTextUtils.isCJKScalar($0) } ?? false

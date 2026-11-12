@@ -76,7 +76,7 @@ final class TranscriptTranslationManager {
     cancel(episodeKey: episodeKey)
     let total = segments.count
     jobs[episodeKey] = Job(target: target, status: .translating(progress: 0, completed: 0, total: total))
-    let stream = translator(segments.map(\.text), source, Locale.Language(identifier: target.languageIdentifier))
+    let stream = translator(segments.map(\.spokenText), source, Locale.Language(identifier: target.languageIdentifier))
 
     tasks[episodeKey] = Task {
       var translated = segments

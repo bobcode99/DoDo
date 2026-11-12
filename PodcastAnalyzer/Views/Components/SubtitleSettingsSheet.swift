@@ -55,6 +55,12 @@ struct SubtitleSettingsSheet: View {
           }
         }
 
+        Section {
+          Toggle("Hide Music Sections", isOn: Bindable(settings).hideMusicSections)
+        } footer: {
+          Text("Hides lines marked ♪ (spoken or sung over music) and [♪ Music] placeholders.")
+        }
+
         // Info Section
         Section {
           VStack(alignment: .leading, spacing: 8) {

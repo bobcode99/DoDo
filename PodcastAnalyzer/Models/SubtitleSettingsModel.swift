@@ -214,7 +214,7 @@ final class SubtitleSettingsManager {
   }
 
   /// Run the SoundAnalysis music classifier during chunked Apple Speech
-  /// transcription and inject `[♪ Music]` markers in place of music ranges.
+  /// transcription and mark lines inside music with "♪ ".
   /// Default on; users with voice-over-heavy content can disable when the
   /// classifier mis-flags speech as music.
   var enableMusicDetection: Bool = true {
@@ -225,6 +225,12 @@ final class SubtitleSettingsManager {
   /// (fewer false positives on speech-with-music); lower = more aggressive
   /// (catches faint intro/outro music).
   var musicDetectionSensitivity: MusicDetectionSensitivity = .medium {
+    didSet { saveSettings() }
+  }
+
+  /// Leave lines marked as music (and `[♪ Music]` placeholders) out of the
+  /// transcript view. Display only; the stored transcript keeps them.
+  var hideMusicSections: Bool = false {
     didSet { saveSettings() }
   }
 
@@ -245,6 +251,7 @@ final class SubtitleSettingsManager {
     static let autoGenerateTranscripts = "subtitle_auto_generate_transcripts"
     static let enableMusicDetection = "subtitle_enable_music_detection"
     static let musicDetectionSensitivity = "subtitle_music_detection_sensitivity"
+    static let hideMusicSections = "subtitle_hide_music_sections"
     static let splitLongAudio = "subtitle_split_long_audio"
   }
 
@@ -292,6 +299,8 @@ final class SubtitleSettingsManager {
       musicDetectionSensitivity = value
     }
 
+    hideMusicSections = defaults.bool(forKey: Keys.hideMusicSections)
+
     // Default to true if not previously set.
     if defaults.object(forKey: Keys.splitLongAudio) != nil {
       splitLongAudio = defaults.bool(forKey: Keys.splitLongAudio)
@@ -307,6 +316,7 @@ final class SubtitleSettingsManager {
     defaults.set(autoGenerateTranscripts, forKey: Keys.autoGenerateTranscripts)
     defaults.set(enableMusicDetection, forKey: Keys.enableMusicDetection)
     defaults.set(musicDetectionSensitivity.rawValue, forKey: Keys.musicDetectionSensitivity)
+    defaults.set(hideMusicSections, forKey: Keys.hideMusicSections)
     defaults.set(splitLongAudio, forKey: Keys.splitLongAudio)
   }
 

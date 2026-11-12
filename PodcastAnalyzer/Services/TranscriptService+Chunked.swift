@@ -168,8 +168,7 @@ extension TranscriptService {
           allChunkResults, chunks: chunks)
 
         // Await the music-detection result (started in parallel above) and
-        // splice `[♪ Music]` markers in place of any transcribed segments that
-        // fall inside detected music ranges.
+        // mark the transcribed segments that fall inside detected music.
         let musicRanges = await musicRangesTask
         if !musicRanges.isEmpty {
           self.logger.info("Detected \(musicRanges.count, privacy: .public) music range(s); annotating SRT")

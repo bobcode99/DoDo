@@ -4,8 +4,8 @@
 //
 //  Pre-transcription pass that uses SoundAnalysis' built-in classifier to
 //  detect music / singing ranges in an audio file. The chunked transcription
-//  pipeline then marks those ranges as music in the SRT output instead of
-//  feeding them to Apple Speech (which produces garbage on music).
+//  pipeline keeps every transcribed line and marks the ones inside those
+//  ranges with "♪ ", so the viewer can fade or hide them.
 //
 
 import Foundation
@@ -26,12 +26,44 @@ nonisolated enum MusicDetectionService {
   /// the SRT annotator and the sentence grouper agree on the single token.
   static let markerGlyph: Character = "\u{266A}"
 
-  /// Canonical text injected into the SRT in place of music ranges.
+  /// Placeholder line for a music stretch where nothing was transcribed.
   static let markerText = "[\(markerGlyph) Music]"
 
-  /// True if `text` is (or contains) a music marker.
+  /// Prefix on a transcribed line that falls inside music. The usual subtitle
+  /// convention, so it reads fine in an exported SRT.
+  static let musicLinePrefix = "\(markerGlyph) "
+
+  /// True if `text` is a `[♪ Music]` placeholder.
   static func isMarker(_ text: String) -> Bool {
-    text.contains(markerGlyph)
+    text.trimmingCharacters(in: .whitespaces).hasPrefix("[\(markerGlyph)")
+  }
+
+  /// True if `text` is a transcribed line marked as inside music.
+  static func isMusicLine(_ text: String) -> Bool {
+    text.trimmingCharacters(in: .whitespaces).hasPrefix(musicLinePrefix)
+  }
+
+  /// `text` without the music-line prefix.
+  static func stripMusicPrefix(_ text: String) -> String {
+    let trimmed = text.trimmingCharacters(in: .whitespaces)
+    return trimmed.hasPrefix(musicLinePrefix)
+      ? String(trimmed.dropFirst(musicLinePrefix.count))
+      : text
+  }
+
+  /// Whether one classifier window counts as music. A window where speech is
+  /// also clearly present is someone talking over a music bed, not music.
+  static func isMusicWindow(
+    _ scores: [String: Double],
+    minimumConfidence: Double,
+    speechCeiling: Double = 0.5
+  ) -> Bool {
+    let speech = scores["speech"] ?? 0
+    guard speech < speechCeiling else { return false }
+    return scores.contains { label, confidence in
+      let label = label.lowercased()
+      return (label.contains("music") || label.contains("singing")) && confidence >= minimumConfidence
+    }
   }
 
   // MARK: - Types
@@ -111,7 +143,10 @@ private nonisolated final class ClassificationObserver: NSObject, SNResultsObser
 
   func request(_ request: SNRequest, didProduce result: SNResult) {
     guard let result = result as? SNClassificationResult else { return }
-    guard result.classifications.contains(where: isMusicMatch(_:)) else { return }
+    let scores = Dictionary(
+      result.classifications.map { ($0.identifier, $0.confidence) },
+      uniquingKeysWith: max)
+    guard MusicDetectionService.isMusicWindow(scores, minimumConfidence: minimumConfidence) else { return }
 
     let range = MusicDetectionService.TimeRange(
       start: result.timeRange.start.seconds,
@@ -139,12 +174,6 @@ private nonisolated final class ClassificationObserver: NSObject, SNResultsObser
   }
 
   // MARK: - Internal
-
-  private func isMusicMatch(_ classification: SNClassification) -> Bool {
-    let label = classification.identifier.lowercased()
-    let isMusicLike = label.contains("music") || label.contains("singing")
-    return isMusicLike && classification.confidence >= minimumConfidence
-  }
 
   private func complete() {
     // First completion wins. Guards against SoundAnalysis firing both

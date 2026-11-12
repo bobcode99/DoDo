@@ -97,7 +97,7 @@ nonisolated struct SRTParser {
 
             // This is actual transcript text
             if isTextLine {
-                transcriptText.append(trimmed)
+                transcriptText.append(MusicDetectionService.stripMusicPrefix(trimmed))
             }
         }
 

@@ -101,6 +101,43 @@ struct MusicDetectionRangeTests {
         #expect(MusicDetectionService.isMarker("[Music]") == false)
     }
 
+    @Test("A line marked as music is not a placeholder, and loses its mark for display")
+    func musicLine() {
+        let line = "♪ 今天來聊聊"
+        #expect(MusicDetectionService.isMusicLine(line))
+        #expect(MusicDetectionService.isMarker(line) == false)
+        #expect(MusicDetectionService.stripMusicPrefix(line) == "今天來聊聊")
+        #expect(MusicDetectionService.isMusicLine(MusicDetectionService.markerText) == false)
+        #expect(MusicDetectionService.stripMusicPrefix("Hello") == "Hello")
+    }
+
+    @Test("AI and copy text drop the music mark")
+    func plainTextDropsMark() {
+        let srt = SRTParser.serialize(segments: [
+            TranscriptSegment(id: 1, startTime: 0, endTime: 2, text: "♪ la la"),
+            TranscriptSegment(id: 2, startTime: 2, endTime: 4, text: "Hello"),
+        ])
+        #expect(SRTParser.extractPlainText(from: srt) == "la la Hello")
+    }
+
+    // MARK: - Classifier window
+
+    @Test("Talking over a music bed is not music")
+    func speechOverMusicIsNotMusic() {
+        #expect(MusicDetectionService.isMusicWindow(
+            ["music": 0.8, "speech": 0.9], minimumConfidence: 0.6) == false)
+    }
+
+    @Test("Music or singing without clear speech is music")
+    func musicWithoutSpeech() {
+        #expect(MusicDetectionService.isMusicWindow(
+            ["music": 0.8, "speech": 0.1], minimumConfidence: 0.6))
+        #expect(MusicDetectionService.isMusicWindow(
+            ["singing": 0.7], minimumConfidence: 0.6))
+        #expect(MusicDetectionService.isMusicWindow(
+            ["music": 0.5], minimumConfidence: 0.6) == false)
+    }
+
     // MARK: - Best-effort behaviour
 
     @Test("An unreadable audio file yields no ranges rather than failing transcription")
