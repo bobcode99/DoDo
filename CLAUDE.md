@@ -45,6 +45,7 @@ xcodebuild test ... -only-testing:PodcastAnalyzerTests/SuiteName/testName
 
 - **Audio:** Never create multiple `AVPlayer` instances — always use `EnhancedAudioManager.shared`.
 - **Downloads:** Keyed by `audioURL`. States: `notDownloaded → downloading(%) → downloaded(path) | failed(error)`.
+- **System callbacks:** The app target's default isolation is `MainActor`, so a closure handed to a system API is inferred `@MainActor`. If the API calls it on its own queue (`queue: nil` / `using: nil`, TCC, BGTaskScheduler, audio taps), Swift's runtime check traps with SIGTRAP. Pass `.main`, or build the closure inside a `nonisolated` func. SwiftLint `callback_queue_nil` flags the nil-queue form.
 - **Schema migrations:** Not implemented — schema changes reset data. Break old formats freely.
 - **No backward compatibility**: Break old formats freely.
 

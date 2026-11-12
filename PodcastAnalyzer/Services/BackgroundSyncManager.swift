@@ -124,9 +124,12 @@ class BackgroundSyncManager {
   #if os(iOS)
   /// Call this in app's init to register background task (iOS only)
   static func registerBackgroundTask() {
+    // `.main`, not nil: this closure is inferred @MainActor (the target's
+    // default isolation), and nil runs it on a BGTaskScheduler queue, where
+    // Swift's isolation check traps (SIGTRAP).
     BGTaskScheduler.shared.register(
       forTaskWithIdentifier: backgroundTaskIdentifier,
-      using: nil
+      using: .main
     ) { task in
       guard let refreshTask = task as? BGAppRefreshTask else {
         task.setTaskCompleted(success: false)

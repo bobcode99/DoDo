@@ -133,3 +133,16 @@ nesting:
     warning: 3
 
 reporter: "xcode"
+
+# --- Concurrency crash guards ---
+custom_rules:
+  # The app target defaults every closure to @MainActor. A system API told
+  # to call back on a nil queue runs that closure on its own queue, and
+  # Swift's runtime isolation check traps (SIGTRAP).
+  callback_queue_nil:
+    name: "Callback on an unspecified queue"
+    regex: '\b(using|queue):\s*nil\b'
+    match_kinds: [identifier, keyword]
+    excluded: ".*Tests/.*"
+    message: "Pass .main, or form the closure in a nonisolated function: a nil queue runs a @MainActor-inferred closure off the main thread and crashes."
+    severity: error
