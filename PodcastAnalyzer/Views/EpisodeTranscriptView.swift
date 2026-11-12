@@ -12,10 +12,11 @@
 //     merge naturally.
 //   • A slim TranscriptStatusStrip shows the reading language, auto-scroll
 //     state, and live search match counts.
-//   • The transcript ScrollView overlays a floating "Jump to playing" pill
+//   • The transcript ScrollView overlays a small "Jump to playing" icon pill
 //     that appears when the user pauses following while the episode plays.
 //
 
+import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -235,6 +236,9 @@ struct EpisodeTranscriptView: View {
             stickyActiveSentenceID = nil
             stickyDurationMismatch = durationMismatch
         }
+        .onChange(of: SubtitleSettingsManager.shared.hideMusicSections) {
+            viewModel.transcript.regroupSentences()
+        }
         .onChange(of: viewModel.isCurrentEpisode) { _, isCurrent in
             // When another episode takes over, drop the forward-ratcheted
             // caches so the highlight falls back to this episode's persisted
@@ -370,7 +374,7 @@ struct EpisodeTranscriptView: View {
                     proxy.scrollTo(target, anchor: .center)
                 }
             }
-            .overlay(alignment: .bottomTrailing) {
+            .overlay {
                 JumpToPlayingPill(isVisible: showJumpToPlaying) {
                     autoScrollEnabled = true
                     suppressAutoScrollUntil = Date.now.addingTimeInterval(0.45)
@@ -388,8 +392,13 @@ struct EpisodeTranscriptView: View {
 
     @ViewBuilder
     private var transcriptStatusSection: some View {
-        EpisodeTranscriptStatusView(viewModel: viewModel)
-            .padding()
+        // Scrolls so the engine config can't overflow up under the nav title
+        // when it's taller than the space above the mini player.
+        ScrollView {
+            EpisodeTranscriptStatusView(viewModel: viewModel)
+                .padding()
+        }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     // MARK: - SRT Import
@@ -422,3 +431,73 @@ struct EpisodeTranscriptView: View {
         }
     }
 }
+
+// MARK: - Preview
+
+#if DEBUG
+private enum EpisodeTranscriptPreview {
+    static func viewModel(lines: [String] = []) -> EpisodeDetailViewModel {
+        let episode = PodcastEpisodeInfo(
+            title: "Understanding Swift Concurrency",
+            podcastEpisodeDescription: "A deep dive into async/await.",
+            pubDate: Date.now,
+            audioURL: "https://example.com/episode.mp3",
+            duration: 1800
+        )
+        let viewModel = EpisodeDetailViewModel(
+            episode: episode,
+            podcastTitle: "The Swift Podcast",
+            fallbackImageURL: nil,
+            podcastLanguage: "en"
+        )
+        guard !lines.isEmpty else { return viewModel }
+        let transcript = viewModel.transcript
+        transcript.transcriptSegments = lines.enumerated().map { index, text in
+            TranscriptSegment(
+                id: index, startTime: Double(index) * 6, endTime: Double(index) * 6 + 5, text: text)
+        }
+        transcript.transcriptText = lines.joined(separator: "\n")
+        transcript.transcriptState = .completed
+        transcript.regroupSentences()
+        return viewModel
+    }
+
+    static let lines = [
+        "♪ Welcome back to the show.",
+        "Today we're talking about Swift concurrency.",
+        "Actors protect their state from data races.",
+        "Every call into an actor from outside is async.",
+        "Sendable marks values that are safe to share.",
+        "Main actor isolation keeps UI work on the main thread.",
+        "Tasks inherit the actor they were created on.",
+        "Detached tasks don't inherit anything.",
+        "That's it for today, thanks for listening.",
+    ]
+}
+
+#Preview("Transcript") {
+    NavigationStack {
+        EpisodeTranscriptView(
+            viewModel: EpisodeTranscriptPreview.viewModel(lines: EpisodeTranscriptPreview.lines),
+            onShowTranslationPicker: {},
+            onShowSubtitleSettings: {},
+            onShowRegenerateConfirmation: {}
+        )
+        .navigationTitle("Transcript")
+    }
+    .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+
+#Preview("No transcript yet") {
+    NavigationStack {
+        EpisodeTranscriptView(
+            viewModel: EpisodeTranscriptPreview.viewModel(),
+            onShowTranslationPicker: {},
+            onShowSubtitleSettings: {},
+            onShowRegenerateConfirmation: {}
+        )
+        .navigationTitle("Transcript")
+    }
+    .modelContainer(for: PodcastInfoModel.self, inMemory: true)
+}
+#endif

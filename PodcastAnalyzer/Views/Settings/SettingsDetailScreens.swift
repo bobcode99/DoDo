@@ -50,6 +50,10 @@ struct SyncSettingsScreen: View {
           }
         }
         .disabled(!syncManager.isBackgroundSyncEnabled)
+
+        if syncManager.isNotificationsEnabled {
+          NavigationLink("Choose Shows", value: SettingsRoute.notifyShows)
+        }
       } footer: {
         if let error = syncManager.lastSyncError {
           Text("Last sync failed: \(error)")
@@ -373,7 +377,7 @@ struct TranscriptSettingsScreen: View {
       } header: {
         Text("Advanced")
       } footer: {
-        Text("Music ranges are marked [♪ Music] instead of transcribed; lower sensitivity catches fainter music. Splitting transcribes in parallel parts, which is faster than a single pass.")
+        Text("Lines inside music are kept and marked ♪; hide them in a transcript's subtitle settings. Lower sensitivity catches fainter music. Splitting transcribes in parallel parts, which is faster than a single pass.")
       }
     }
     .navigationTitle("Transcripts")
@@ -577,6 +581,9 @@ struct AppearanceSettingsScreen: View {
   @AppStorage(UpNextCardSize.storageKey)
   private var upNextCardSize = UpNextCardSize.standard.rawValue
 
+  @AppStorage(JumpToPlayingCorner.storageKey)
+  private var jumpToPlayingCorner = JumpToPlayingCorner.topTrailing.rawValue
+
   /// Empty = System Default. Stored here rather than read through the
   /// environment because this screen is the one place that writes it.
   @AppStorage(AppAccentColorDefaults.key) private var accentRaw = ""
@@ -710,6 +717,18 @@ struct AppearanceSettingsScreen: View {
         Text("Up Next")
       } footer: {
         Text("Larger cards have bigger artwork and play buttons, easier to tap.")
+      }
+
+      Section {
+        Picker("Jump to Playing Button", selection: $jumpToPlayingCorner) {
+          ForEach(JumpToPlayingCorner.allCases) { corner in
+            Text(corner.titleKey).tag(corner.rawValue)
+          }
+        }
+      } header: {
+        Text("Transcript")
+      } footer: {
+        Text("Where the button that scrolls back to the playing line sits.")
       }
 
       Section {

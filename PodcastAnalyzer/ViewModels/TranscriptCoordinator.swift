@@ -213,7 +213,16 @@ final class TranscriptCoordinator {
 
   /// Immediately syncs transcriptState from current job status to avoid 0% flash.
   private func syncTranscriptState() {
-    guard let job = TranscriptManager.shared.activeJobs[episodeKey] else { return }
+    guard let job = TranscriptManager.shared.activeJobs[episodeKey] else {
+      // The job vanished while we still show progress: it was cancelled
+      // elsewhere, e.g. cancelling its download drops a waiting job. A
+      // finished job reports .completed before it is removed.
+      if isTranscriptProcessing {
+        isObservingTranscriptManager = false
+        transcriptState = .idle
+      }
+      return
+    }
     // Restore the *running job's* engine/language so a re-entered generating view
     // shows the real pipeline (e.g. Whisper), not the coordinator's stale default
     // — otherwise effectiveEngine falls back to Apple Speech and its split stages.
@@ -230,7 +239,7 @@ final class TranscriptCoordinator {
     transcriptPhase = job.phase
     transcriptTimeoutSeconds = job.timeoutSeconds
     switch job.status {
-    case .queued:
+    case .queued, .waitingForDownload:
       transcriptState = .transcribing(progress: 0)
     case .downloadingModel(let progress):
       transcriptState = .downloadingModel(progress: progress)
@@ -370,12 +379,6 @@ final class TranscriptCoordinator {
     let effectiveEngine = self.effectiveEngine
     let localAudioPath = host?.localAudioPath
 
-    if effectiveEngine != .yapServer, localAudioPath == nil {
-      transcriptState = .error(
-        String.appLocalized("No local audio file available. Please download the episode first."))
-      return
-    }
-
     if effectiveEngine == .yapServer, localAudioPath == nil, (episode.audioURL ?? "").isEmpty {
       transcriptState = .error(String.appLocalized("No audio URL available for this episode."))
       return
@@ -394,14 +397,21 @@ final class TranscriptCoordinator {
 
     logger.info("[generateTranscript] engine=\(effectiveEngine.rawValue) selectedLang=\(self.selectedTranscriptLanguage ?? "<nil>") resolvedLang=\(language ?? "<nil>") podcastLang=\(self.podcastLanguage)")
 
-    TranscriptManager.shared.queueTranscript(
-      episodeTitle: episode.title,
-      podcastTitle: podcastTitle,
-      audioPath: localAudioPath ?? "",
-      audioRemoteURL: episode.audioURL,
-      language: language,
-      engine: selectedTranscriptEngine
-    )
+    if effectiveEngine != .yapServer, localAudioPath == nil {
+      // On-device engines need the file: download first, transcribe when it lands.
+      TranscriptManager.shared.enqueue(
+        episode: episode, podcastTitle: podcastTitle, localPath: nil,
+        language: language, engine: effectiveEngine)
+    } else {
+      TranscriptManager.shared.queueTranscript(
+        episodeTitle: episode.title,
+        podcastTitle: podcastTitle,
+        audioPath: localAudioPath ?? "",
+        audioRemoteURL: episode.audioURL,
+        language: language,
+        engine: selectedTranscriptEngine
+      )
+    }
     observeTranscriptManager()
   }
 
@@ -491,7 +501,8 @@ final class TranscriptCoordinator {
   // MARK: - Sentence Grouping & Search
 
   func regroupSentences() {
-    groupedSentences = TranscriptGrouping.groupIntoSentences(transcriptSegments)
+    groupedSentences = TranscriptGrouping.groupIntoSentences(
+      transcriptSegments, hidingMusic: SubtitleSettingsManager.shared.hideMusicSections)
     if !transcriptSearchQuery.isEmpty {
       updateSearchMatches(query: transcriptSearchQuery)
     }

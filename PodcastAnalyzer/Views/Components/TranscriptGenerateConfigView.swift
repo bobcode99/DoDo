@@ -24,7 +24,11 @@ struct TranscriptGenerateConfigView: View {
 
             Divider()
 
-            engineSelector
+            // Once Download & Transcribe is queued the engine is chosen;
+            // only the progress card is left to show.
+            if !viewModel.isWaitingToTranscribe {
+                engineSelector
+            }
 
             // Generation options are only meaningful once audio is available
             // (or when streaming via Yap). When a download is required first,
@@ -36,7 +40,9 @@ struct TranscriptGenerateConfigView: View {
                 contextTermsSection
             }
 
-            Divider()
+            if !viewModel.isWaitingToTranscribe {
+                Divider()
+            }
 
             primaryActionView
 
@@ -55,7 +61,7 @@ struct TranscriptGenerateConfigView: View {
 
     @ViewBuilder
     private var header: some View {
-        if canGenerate {
+        if canGenerate || viewModel.isDownloadInFlight {
             VStack(spacing: 4) {
                 Text(headerTitle).font(.headline)
                 Text(statusDescription)
@@ -112,14 +118,14 @@ struct TranscriptGenerateConfigView: View {
             return "Select an engine and language, then tap Generate."
         }
         switch viewModel.downloadState {
-        case .downloading:
-            return "Downloading episode audio. You can generate the transcript once this finishes."
-        case .finishing:
-            return "Finalizing the downloaded file…"
+        case .downloading, .finishing:
+            return viewModel.isWaitingToTranscribe
+                ? "The transcript starts as soon as the download finishes."
+                : "Tap Transcribe When Done to get a transcript as soon as it finishes."
         case .failed:
             return "Download failed. Retry, or switch to Yap Server to stream instead."
         case .notDownloaded, .downloaded:
-            return "Download the episode audio to generate a transcript locally, or switch to Yap Server to stream instead."
+            return "The episode downloads first, then the transcript is made on this device. Or switch to Yap Server to stream instead."
         }
     }
 
@@ -215,7 +221,7 @@ struct TranscriptGenerateConfigView: View {
                 Toggle(isOn: Bindable(settings).enableMusicDetection) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Music detection")
-                        Text("Mark music sections as [♪ Music] instead of mis-transcribing them.")
+                        Text("Mark lines spoken over music with ♪ so you can hide them.")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
@@ -347,15 +353,13 @@ private struct DownloadActionView: View {
 
     var body: some View {
         switch viewModel.downloadState {
-        case .downloading:
+        case .downloading, .finishing:
             progressRow
-        case .finishing:
-            finishingRow
         case .failed(let error):
             failedRow(error: error)
         case .notDownloaded, .downloaded:
-            Button(action: { viewModel.startDownload() }) {
-                Label("Download Episode", systemImage: "arrow.down.circle")
+            Button(action: { viewModel.transcript.generateTranscript() }) {
+                Label("Download & Transcribe", systemImage: "arrow.down.circle")
                     .font(.subheadline)
                     .padding(.horizontal, 20).padding(.vertical, 10)
             }
@@ -364,33 +368,55 @@ private struct DownloadActionView: View {
     }
 
     private var progressRow: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                // Live ring — viewModel.downloadState only changes on state
-                // transitions, so progress must be read live, not captured.
-                LiveDownloadProgressRing(
-                    episodeTitle: viewModel.episode.title,
-                    podcastTitle: viewModel.podcastTitle,
-                    size: 18,
-                    symbol: "arrow.down"
-                )
-                Text("Downloading…")
-                    .font(.subheadline)
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                if viewModel.downloadState == .finishing {
+                    ProgressView()
+                        .frame(width: 32, height: 32)
+                } else {
+                    // Live ring — viewModel.downloadState only changes on state
+                    // transitions, so progress must be read live, not captured.
+                    LiveDownloadProgressRing(
+                        episodeKey: episodeKey, size: 32, lineWidth: 3, symbol: "arrow.down")
+                }
+                Text(viewModel.downloadState == .finishing ? "Finalizing download…" : "Downloading…")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+                if viewModel.downloadState != .finishing {
+                    TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                        Text((DownloadManager.shared.inFlightProgress[episodeKey] ?? 0)
+                            .formatted(.percent.precision(.fractionLength(0))))
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            Button("Cancel", role: .cancel) { viewModel.cancelDownload() }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            .padding(14)
+            .background(.fill.tertiary, in: .rect(cornerRadius: 16))
+
+            if !viewModel.isWaitingToTranscribe {
+                Button(action: { viewModel.transcript.generateTranscript() }) {
+                    Label("Transcribe When Done", systemImage: "text.bubble")
+                        .font(.subheadline)
+                        .padding(.horizontal, 20).padding(.vertical, 10)
+                }
+                .buttonStyle(.accentProminent)
+            }
+
+            Button("Cancel", role: .cancel) {
+                // Cancelling a Download & Transcribe drops both halves.
+                if viewModel.isWaitingToTranscribe { viewModel.transcript.cancelTranscript() }
+                viewModel.cancelDownload()
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .disabled(viewModel.downloadState == .finishing)
         }
-        .frame(maxWidth: 320)
+        .frame(maxWidth: 360)
     }
 
-    private var finishingRow: some View {
-        HStack(spacing: 10) {
-            ProgressView().controlSize(.small)
-            Text("Finalizing download…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
+    private var episodeKey: String {
+        EpisodeKeyUtils.makeKey(podcastTitle: viewModel.podcastTitle, episodeTitle: viewModel.episode.title)
     }
 
     private func failedRow(error: String) -> some View {
@@ -400,7 +426,7 @@ private struct DownloadActionView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
-            Button(action: { viewModel.startDownload() }) {
+            Button(action: { viewModel.transcript.generateTranscript() }) {
                 Label("Retry Download", systemImage: "arrow.clockwise")
                     .font(.subheadline)
                     .padding(.horizontal, 20).padding(.vertical, 10)
@@ -471,3 +497,17 @@ private enum TranscriptConfigPreview {
     .preferredColorScheme(.dark)
 }
 #endif
+
+private extension EpisodeDetailViewModel {
+    var isDownloadInFlight: Bool {
+        switch downloadState {
+        case .downloading, .finishing: true
+        default: false
+        }
+    }
+
+    /// Download & Transcribe is queued: the transcript job waits on this download.
+    var isWaitingToTranscribe: Bool {
+        TranscriptManager.shared.isGenerating(episodeTitle: episode.title, podcastTitle: podcastTitle)
+    }
+}

@@ -2,101 +2,87 @@
 //  JumpToPlayingPill.swift
 //  PodcastAnalyzer
 //
-//  Floating glass pill that re-aligns the transcript with audio playback.
+//  Small floating icon pill that re-aligns the transcript with audio playback.
 //  Shown when the user has paused auto-scroll while the episode is the
 //  currently-loaded one, and dismissed during search to avoid clutter.
 //
-//  The pill is draggable: it rests bottom-trailing and the user can park it
-//  anywhere over the transcript. The parked spot is the setting — it persists
-//  in AppStorage and applies to every episode.
+//  It sits in a corner of the transcript, top-trailing by default; the corner
+//  is picked in Settings → Appearance and applies to every episode.
 //
 
 import SwiftUI
+
+enum JumpToPlayingCorner: String, CaseIterable, Identifiable {
+  case topTrailing
+  case topLeading
+  case bottomTrailing
+  case bottomLeading
+
+  static let storageKey = "jumpToPlayingCorner"
+
+  var id: String { rawValue }
+
+  var titleKey: LocalizedStringKey {
+    switch self {
+    case .topTrailing: "Top Right"
+    case .topLeading: "Top Left"
+    case .bottomTrailing: "Bottom Right"
+    case .bottomLeading: "Bottom Left"
+    }
+  }
+
+  var alignment: Alignment {
+    switch self {
+    case .topTrailing: .topTrailing
+    case .topLeading: .topLeading
+    case .bottomTrailing: .bottomTrailing
+    case .bottomLeading: .bottomLeading
+    }
+  }
+
+  var isTop: Bool { self == .topTrailing || self == .topLeading }
+}
 
 struct JumpToPlayingPill: View {
     var isVisible: Bool
     var action: () -> Void
 
-    /// Parked position, as a negative inset from the bottom-trailing corner.
-    @AppStorage("jumpToPlayingOffsetX") private var parkedX: Double = 0
-    @AppStorage("jumpToPlayingOffsetY") private var parkedY: Double = 0
-
-    @State private var dragTranslation: CGSize = .zero
-    @State private var pillSize: CGSize = .zero
+    @AppStorage(JumpToPlayingCorner.storageKey)
+    private var cornerRaw = JumpToPlayingCorner.topTrailing.rawValue
 
     @Environment(\.appAccentColor) private var accent
     @Environment(\.colorScheme) private var colorScheme
 
-    private static let edgeInset: CGFloat = 16
+    private var corner: JumpToPlayingCorner {
+        JumpToPlayingCorner(rawValue: cornerRaw) ?? .topTrailing
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            let offset = clamped(
-                CGSize(width: parkedX + dragTranslation.width,
-                       height: parkedY + dragTranslation.height),
-                in: geo.size
-            )
-            Group {
-                if isVisible {
-                    pill
-                        .onGeometryChange(for: CGSize.self) { $0.size } action: { pillSize = $0 }
-                        // High priority, not simultaneous: the 8pt slop keeps a
-                        // plain tap flowing to the Button, while a real drag
-                        // wins before the ScrollView starts panning.
-                        .highPriorityGesture(dragGesture(in: geo.size))
-                        .offset(offset)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+        Group {
+            if isVisible {
+                pill.transition(.move(edge: corner.isTop ? .top : .bottom).combined(with: .opacity))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .animation(.snappy(duration: 0.25), value: isVisible)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: corner.alignment)
+        .animation(.snappy(duration: 0.25), value: isVisible)
     }
 
     private var pill: some View {
         let fill = AccentFill.color(accent, colorScheme)
         return Button(action: action) {
-            Label("Jump to playing", systemImage: "text.line.first.and.arrowtriangle.forward")
-                .font(.body.weight(.semibold))
-                // ~50pt tall: comfortably over the 44pt minimum hit target.
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .contentShape(.capsule)
-            // One material, tinted — not glass painted over a separate
-            // `.tint` fill. Two of them fight: the glass washes the
-            // fill out, and the label was hardcoded `.white`, so the
-            // pill read as white text on pale glass in light mode and
-            // white on white in dark.
-            .foregroundStyle(fill.contrastingLabel)
-            .glassEffect(Glass.regular.tint(fill), in: .capsule)
-            .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+            Image(systemName: "scope")
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .foregroundStyle(fill.contrastingLabel)
+                .glassEffect(Glass.regular.tint(fill), in: .capsule)
+                .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                // The pill is drawn small; the tap target stays 44pt.
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .padding(.trailing, Self.edgeInset)
-        .padding(.bottom, Self.edgeInset)
-    }
-
-    private func dragGesture(in container: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { dragTranslation = $0.translation }
-            .onEnded { value in
-                let parked = clamped(
-                    CGSize(width: parkedX + value.translation.width,
-                           height: parkedY + value.translation.height),
-                    in: container
-                )
-                parkedX = parked.width
-                parkedY = parked.height
-                dragTranslation = .zero
-            }
-    }
-
-    /// Keeps the pill inside its container. Zero is the resting bottom-trailing
-    /// corner, so both axes only ever travel negative.
-    private func clamped(_ offset: CGSize, in container: CGSize) -> CGSize {
-        let minX = -max(container.width - pillSize.width, 0)
-        let minY = -max(container.height - pillSize.height, 0)
-        return CGSize(width: min(max(offset.width, minX), 0),
-                      height: min(max(offset.height, minY), 0))
+        .accessibilityLabel("Jump to playing")
+        .padding(12)
     }
 }
