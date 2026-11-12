@@ -129,16 +129,29 @@ class PodcastInfoModel {
 
   // MARK: - Per-Podcast Automation
 
-  /// When `true`, new episodes from this podcast are queued for transcription
-  /// automatically. The engine is resolved at execution time: YAP server when
-  /// configured, otherwise a local engine (Whisper / Apple Speech) gated by the
-  /// device's charging state. Respects `TranscriptManager`'s per-podcast
+  /// When `true`, new episodes from this podcast get a transcript
+  /// automatically: the feed's own when it has one, else the engine picked in
+  /// Settings: Yap from the feed URL, or a local engine once the episode is
+  /// downloaded, gated by the device's charging state. Respects `TranscriptManager`'s per-podcast
   /// session failure cap.
   var autoTranscribeNewEpisodes: Bool = false
 
   /// Three-state auto-download setting (AntennaPod pattern).
   /// "enabled" | "disabled" | "inheritGlobal".
   var autoDownloadSetting: String = AutoDownloadSetting.inheritGlobal.rawValue
+
+  /// New episodes download automatically, by this show's setting or the global one.
+  var downloadsNewEpisodes: Bool {
+    switch AutoDownloadSetting(rawValue: autoDownloadSetting) ?? .inheritGlobal {
+    case .enabled: true
+    case .disabled: false
+    case .inheritGlobal: UserDefaults.standard.bool(forKey: "autoDownloadNewEpisodes")
+    }
+  }
+
+  /// Whether a sync sends a notification for this show's new episodes, when
+  /// New Episode Notifications is on. Automation (download, queue) ignores it.
+  var notifyNewEpisodes: Bool = true
 
   /// Playback speed for this show, overriding the global default.
   /// 0 = use the global default (a real speed is never 0, so no separate flag).

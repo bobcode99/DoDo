@@ -368,7 +368,7 @@ final class EpisodeStatusObserver {
       case .downloadingModel(let progress):
         isDownloadingModel = true
         transcriptProgress = progress
-      case .queued:
+      case .queued, .waitingForDownload:
         isDownloadingModel = false
         transcriptProgress = 0
       case .completed:

@@ -21,6 +21,7 @@ enum SettingsRoute: Hashable {
   case general
 
   case autoDownloadShows
+  case notifyShows
   case autoTranscription
   case transcriptContext
   #if DEBUG

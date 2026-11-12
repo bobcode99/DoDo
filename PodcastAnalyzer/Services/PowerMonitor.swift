@@ -43,6 +43,7 @@ final class PowerMonitor {
       if !wasCharging && self.isCharging {
         self.logger.info("Device started charging — triggering auto-download coordinator")
         Task { await AutoDownloadCoordinator.shared.run(reason: .powerBecameEligible) }
+        TranscriptManager.shared.catchUpAutoTranscripts()
       }
     }
   }

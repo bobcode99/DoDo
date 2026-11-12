@@ -45,7 +45,7 @@ struct TranscriptGenerationProgressOverallView: View {
       for job in jobs.sorted(by: { $0.episodeTitle < $1.episodeTitle }) {
         switch job.status {
         case .transcribing, .downloadingModel: active.append(job)
-        case .queued: queued.append(job)
+        case .queued, .waitingForDownload: queued.append(job)
         case .failed: failed.append(job)
         case .completed: completed.append(job)
         }
@@ -206,14 +206,7 @@ private struct TranscriptJobRow: View {
       .frame(minWidth: 44, minHeight: 44)
     case .retry:
       Button("Retry", systemImage: "arrow.clockwise.circle.fill") {
-        manager.queueTranscript(
-          episodeTitle: job.episodeTitle,
-          podcastTitle: job.podcastTitle,
-          audioPath: job.audioPath,
-          audioRemoteURL: job.audioRemoteURL,
-          language: job.language,
-          engine: job.engine
-        )
+        manager.retry(job)
       }
       .labelStyle(.iconOnly)
       .buttonStyle(.plain)
@@ -231,6 +224,14 @@ private struct TranscriptJobRow: View {
     switch job.status {
     case .queued:
       Text("Waiting")
+    case .waitingForDownload:
+      if let progress = DownloadManager.shared.inFlightProgress[job.id] {
+        ProgressView(value: progress) {
+          Text("Downloading episode… \(Int(progress * 100))%")
+        }
+      } else {
+        Text("Waiting for download")
+      }
     case .downloadingModel(let progress):
       ProgressView(value: progress) {
         Text("Downloading model… \(Int(progress * 100))%")

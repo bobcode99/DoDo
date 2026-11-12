@@ -30,11 +30,21 @@ extension SFSpeechRecognizer {
 
 /// Tracks the status of a transcript generation job
 enum TranscriptJobStatus: Equatable {
+  /// On-device engines need the audio file; the episode is downloading first.
+  case waitingForDownload
   case queued
   case downloadingModel(progress: Double)
   case transcribing(progress: Double)
   case completed
   case failed(error: String)
+
+  /// The episode is still owed a transcript.
+  var isInFlight: Bool {
+    switch self {
+    case .waitingForDownload, .queued, .downloadingModel, .transcribing: true
+    case .completed, .failed: false
+    }
+  }
 }
 
 /// Parallel-part progress for split (chunked) Apple Speech transcription.
@@ -44,12 +54,19 @@ struct TranscriptPartProgress: Equatable, Sendable {
   let total: Int
 }
 
+/// One episode for `TranscriptManager.queueBatch`.
+struct BatchTranscriptItem {
+  let episode: PodcastEpisodeInfo
+  let podcastTitle: String
+  let language: String
+}
+
 /// Represents a transcript generation job
 struct TranscriptJob: Identifiable {
   let id: String  // podcastTitle + Unit Separator + episodeTitle (same format as episode keys)
   let episodeTitle: String
   let podcastTitle: String
-  let audioPath: String
+  var audioPath: String
   let audioRemoteURL: String?  // Remote RSS audio URL — used by yap when episode not downloaded
   let language: String?
   let engine: TranscriptEngine?  // nil = use global Settings default
@@ -104,12 +121,7 @@ class TranscriptManager {
   /// the Library, quick-access, and macOS transcribing badges don't each
   /// re-derive the same loop.
   var activeJobCount: Int {
-    activeJobs.values.reduce(into: 0) { count, job in
-      switch job.status {
-      case .queued, .downloadingModel, .transcribing: count += 1
-      case .completed, .failed: break
-      }
-    }
+    activeJobs.values.count(where: \.status.isInFlight)
   }
 
   // Maximum concurrent transcript jobs
@@ -195,13 +207,8 @@ class TranscriptManager {
     engine: TranscriptEngine? = nil
   ) {
     let jobId = makeJobId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
-    if let existing = activeJobs[jobId] {
-      switch existing.status {
-      case .queued, .downloadingModel, .transcribing, .completed:
-        return  // already in flight or done; let queueTranscript handle retry of .failed
-      case .failed:
-        break
-      }
+    if let status = activeJobs[jobId]?.status, status.isInFlight || status == .completed {
+      return  // already in flight or done; queueTranscript handles retry of .failed
     }
 
     guard !TranscriptStore.shared.exists(episodeTitle: episodeTitle, podcastTitle: podcastTitle) else {
@@ -218,14 +225,215 @@ class TranscriptManager {
     )
   }
 
+  /// Queues every item that has no transcript yet.
+  func queueBatch(_ items: [BatchTranscriptItem], engine: TranscriptEngine) {
+    let existing = TranscriptStore.shared.existingEpisodeIds()
+    for item in items {
+      let id = makeJobId(podcastTitle: item.podcastTitle, episodeTitle: item.episode.title)
+      guard !existing.contains(id), activeJobs[id]?.status.isInFlight != true else { continue }
+      let localPath = DownloadManager.shared.getLocalPath(
+        episodeTitle: item.episode.title, podcastTitle: item.podcastTitle)
+      let language = item.language.isEmpty ? nil : item.language
+      guard item.episode.transcriptURL != nil else {
+        enqueue(
+          episode: item.episode, podcastTitle: item.podcastTitle,
+          localPath: localPath, language: language, engine: engine)
+        continue
+      }
+      Task {
+        // The publisher's transcript is free and needs no audio; generate
+        // only when it fails to download.
+        guard await !fetchFeedTranscript(item.episode, podcastTitle: item.podcastTitle) else { return }
+        enqueue(
+          episode: item.episode, podcastTitle: item.podcastTitle,
+          localPath: localPath, language: language, engine: engine)
+      }
+    }
+  }
+
+  /// Saves the feed's own transcript (podcast:transcript). False when the
+  /// episode has none or the download failed.
+  func fetchFeedTranscript(_ episode: PodcastEpisodeInfo, podcastTitle: String) async -> Bool {
+    guard let url = episode.transcriptURL.flatMap(URL.init(string:)) else { return false }
+    do {
+      try await TranscriptDownloadService.shared.downloadTranscript(
+        from: url, type: episode.transcriptType ?? "", episodeTitle: episode.title,
+        podcastTitle: podcastTitle)
+      return true
+    } catch {
+      logger.warning("Feed transcript failed, generating instead: \(error.localizedDescription, privacy: .public)")
+      return false
+    }
+  }
+
+  /// Retries a failed job, downloading the episode again if an on-device
+  /// engine needs a file that is no longer there.
+  func retry(_ job: TranscriptJob) {
+    let localPath = FileManager.default.fileExists(atPath: job.audioPath)
+      ? job.audioPath
+      : DownloadManager.shared.getLocalPath(episodeTitle: job.episodeTitle, podcastTitle: job.podcastTitle)
+    enqueue(
+      episode: PodcastEpisodeInfo(title: job.episodeTitle, audioURL: job.audioRemoteURL),
+      podcastTitle: job.podcastTitle, localPath: localPath,
+      language: job.language, engine: job.engine ?? Self.defaultEngine)
+  }
+
+  /// On-device engines need the audio file, so an episode without one becomes
+  /// a `.waitingForDownload` job that `downloadStatesChanged` moves forward.
+  func enqueue(
+    episode: PodcastEpisodeInfo, podcastTitle: String, localPath: String?,
+    language: String?, engine: TranscriptEngine
+  ) {
+    guard engine == .yapServer || localPath != nil else {
+      let id = makeJobId(podcastTitle: podcastTitle, episodeTitle: episode.title)
+      var job = TranscriptJob(
+        id: id, episodeTitle: episode.title, podcastTitle: podcastTitle, audioPath: "",
+        audioRemoteURL: episode.audioURL, language: language, engine: engine)
+      job.status = .waitingForDownload
+      // Set before starting the download: a download that fails at once
+      // reports straight back through downloadStatesChanged.
+      activeJobs[id] = job
+      DownloadManager.shared.downloadEpisode(
+        episode: episode, podcastTitle: podcastTitle, language: language ?? "en")
+      return
+    }
+    queueTranscript(
+      episodeTitle: episode.title, podcastTitle: podcastTitle, audioPath: localPath ?? "",
+      audioRemoteURL: episode.audioURL, language: language, engine: engine)
+  }
+
+  /// Called on every change to `DownloadManager.downloadStates`: queues jobs
+  /// whose download landed and fails those whose download failed.
+  func downloadStatesChanged(_ states: [String: DownloadState]) {
+    var queuedAny = false
+    for job in activeJobs.values where job.status == .waitingForDownload {
+      switch states[job.id] {
+      case .downloaded(let path):
+        var ready = job
+        ready.audioPath = path
+        ready.status = .queued
+        activeJobs[job.id] = ready
+        pendingJobs.append(ready)
+        queuedAny = true
+      case .failed(let error):
+        activeJobs[job.id]?.status = .failed(
+          error: String(format: .appLocalized("Download failed: %@"), error))
+      default:
+        break
+      }
+    }
+    if queuedAny { startProcessingIfNeeded() }
+  }
+
+  // MARK: - Automatic transcription
+
+  /// A download that may be owed an automatic transcript.
+  struct DownloadedEpisode: Equatable {
+    let podcastTitle: String
+    let episodeTitle: String
+    let localPath: String
+    let downloadedDate: Date?
+  }
+
+  /// The downloads the user asked to have transcribed automatically, through
+  /// "Transcribe Downloads" or by following the show, that still lack one.
+  nonisolated static func autoTranscribeBacklog(
+    _ downloads: [DownloadedEpisode], followedShows: Set<String>,
+    transcribeAllDownloads: Bool, transcribed: Set<String>, since cutoff: Date
+  ) -> [DownloadedEpisode] {
+    downloads.filter { download in
+      (transcribeAllDownloads || followedShows.contains(download.podcastTitle))
+        && (download.downloadedDate ?? .distantPast) >= cutoff
+        && !transcribed.contains(EpisodeKeyUtils.makeKey(
+          podcastTitle: download.podcastTitle, episodeTitle: download.episodeTitle))
+    }
+  }
+
+  /// New episodes of a show the user follows: take the feed's transcript when
+  /// it has one, otherwise transcribe from the feed URL on a Yap server. On-device
+  /// engines wait for the download (`autoTranscribeDownload`).
+  func autoTranscribeNewEpisodes(_ episodes: [PodcastEpisodeInfo], podcastTitle: String, language: String) {
+    let useFeedTranscripts = SubtitleSettingsManager.shared.autoDownloadTranscripts
+    let yap = engineForAutoEnqueue(podcastTitle: podcastTitle) == .yapServer
+    for episode in episodes where !isGenerating(episodeTitle: episode.title, podcastTitle: podcastTitle) {
+      Task {
+        if useFeedTranscripts, await fetchFeedTranscript(episode, podcastTitle: podcastTitle) { return }
+        guard yap else { return }
+        queueAutoTranscript(
+          episodeTitle: episode.title, podcastTitle: podcastTitle, audioPath: "",
+          audioRemoteURL: episode.audioURL, language: language.isEmpty ? nil : language,
+          engine: .yapServer)
+      }
+    }
+  }
+
+  /// A download just landed. Transcribe it if the user wants downloads, or
+  /// this show, transcribed automatically and the power gates allow it now.
+  /// A download skipped here is picked up by `catchUpAutoTranscripts`.
+  func autoTranscribeDownload(
+    episodeTitle: String, podcastTitle: String, localPath: String, language: String?
+  ) {
+    guard SubtitleSettingsManager.shared.autoGenerateTranscripts || followsShow(podcastTitle),
+          let engine = engineForAutoEnqueue(podcastTitle: podcastTitle)
+    else { return }
+    queueAutoTranscript(
+      episodeTitle: episodeTitle, podcastTitle: podcastTitle, audioPath: localPath,
+      language: language, engine: engine)
+  }
+
+  /// Queues the automatic transcripts that never ran for the last week's
+  /// downloads: the download landed on battery or in Low Power Mode, or the
+  /// app quit first. Runs at launch and when the device starts charging.
+  func catchUpAutoTranscripts() {
+    guard let context = modelContainer?.mainContext else { return }
+    let shows = (try? context.fetch(FetchDescriptor<PodcastInfoModel>(
+      predicate: #Predicate { $0.isSubscribed }))) ?? []
+    let followed = Set(shows.filter(\.autoTranscribeNewEpisodes).map(\.title))
+    let transcribeAll = SubtitleSettingsManager.shared.autoGenerateTranscripts
+    guard transcribeAll || !followed.isEmpty else { return }
+
+    let languages = Dictionary(
+      shows.map { ($0.title, $0.feedLanguage) }, uniquingKeysWith: { first, _ in first })
+    let downloads = ((try? context.fetch(FetchDescriptor<EpisodeDownloadModel>(
+      predicate: #Predicate { $0.localAudioPath != nil }))) ?? [])
+      .compactMap { model in
+        model.localAudioPath.map {
+          DownloadedEpisode(
+            podcastTitle: model.podcastTitle, episodeTitle: model.episodeTitle,
+            localPath: $0, downloadedDate: model.downloadedDate)
+        }
+      }
+    let backlog = Self.autoTranscribeBacklog(
+      downloads, followedShows: followed, transcribeAllDownloads: transcribeAll,
+      transcribed: TranscriptStore.shared.existingEpisodeIds(),
+      since: .now.addingTimeInterval(-7 * 86_400))
+
+    for episode in backlog where FileManager.default.fileExists(atPath: episode.localPath) {
+      guard let engine = engineForAutoEnqueue(podcastTitle: episode.podcastTitle) else { continue }
+      let language = languages[episode.podcastTitle] ?? ""
+      queueAutoTranscript(
+        episodeTitle: episode.episodeTitle, podcastTitle: episode.podcastTitle,
+        audioPath: episode.localPath, language: language.isEmpty ? nil : language, engine: engine)
+    }
+    if !backlog.isEmpty {
+      logger.notice("Auto-transcript catch-up: \(backlog.count, privacy: .public) downloads without a transcript")
+    }
+  }
+
+  private func followsShow(_ podcastTitle: String) -> Bool {
+    guard let context = modelContainer?.mainContext else { return false }
+    var descriptor = FetchDescriptor<PodcastInfoModel>(predicate: #Predicate {
+      $0.title == podcastTitle && $0.isSubscribed && $0.autoTranscribeNewEpisodes
+    })
+    descriptor.fetchLimit = 1
+    return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+  }
+
   /// Checks if a transcript is being generated for an episode. Every pending
   /// and running job has an `activeJobs` entry, so its status is authoritative.
   func isGenerating(episodeTitle: String, podcastTitle: String) -> Bool {
     let jobId = makeJobId(podcastTitle: podcastTitle, episodeTitle: episodeTitle)
-    switch activeJobs[jobId]?.status {
-    case .queued, .downloadingModel, .transcribing: return true
-    case .completed, .failed, nil: return false
-    }
+    return activeJobs[jobId]?.status.isInFlight ?? false
   }
 
   /// Cancels all pending and running transcript jobs.
@@ -267,6 +475,11 @@ class TranscriptManager {
         isProcessing = false
       }
     }
+  }
+
+  /// The engine picked in Settings.
+  static var defaultEngine: TranscriptEngine {
+    TranscriptEngine(rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? "") ?? .appleSpeech
   }
 
   // MARK: - Auto-transcribe engine resolution
@@ -315,21 +528,21 @@ class TranscriptManager {
   /// auto-enqueue path (feed refresh, post-download hook, backfill sheet) can
   /// surface the battery warning before consuming the user's battery.
   func resolveAutoTranscribeEngine() -> AutoTranscribeEngineDecision {
-    // 1. Prefer YAP when configured. Battery is irrelevant for YAP (work happens server-side).
-    if !YapServerSettings.shared.serverURL.isEmpty {
+    // The engine picked in Settings decides. A saved URL can't: serverURL has a
+    // non-empty default, so every device would look like it has a Yap server.
+    // Battery is irrelevant for YAP (work happens server-side).
+    let local = Self.defaultEngine
+    if local == .yapServer {
       return .yap
     }
 
-    // 2. No YAP — fall back to local engine. Gated by charging or session opt-in.
-    let local = TranscriptEngine(
-      rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
-    ) ?? .appleSpeech
+    // Local engines are gated by charging or session opt-in.
 
     #if os(iOS)
     if PowerMonitor.shared.isCharging || allowLocalOnBattery {
       return .local(local)
     }
-    return .blocked(reason: "On battery and YAP server is not configured.")
+    return .blocked(reason: .appLocalized("This device isn't charging."))
     #else
     // macOS: PowerMonitor reports !isCharging always; treat as unrestricted.
     return .local(local)
@@ -440,9 +653,7 @@ class TranscriptManager {
     updatedJob.status = .downloadingModel(progress: 0)
     activeJobs[job.id] = updatedJob
 
-    let engine = job.engine ?? TranscriptEngine(
-      rawValue: UserDefaults.standard.string(forKey: "transcriptEngine") ?? ""
-    ) ?? .appleSpeech
+    let engine = job.engine ?? Self.defaultEngine
     // Key steps log at .notice: iOS keeps those on disk, while .info lines are
     // usually gone by the time a user exports a diagnostic report.
     let startedAt = Date()

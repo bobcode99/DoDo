@@ -232,6 +232,7 @@ struct PodcastAnalyzerApp: App {
 
           // Opt-in cleanup of finished episodes (24h grace; see sweep docs).
           DownloadManager.shared.sweepPlayedDownloads()
+          TranscriptManager.shared.catchUpAutoTranscripts()
 
           // macOS: embed the MCP HTTP server and set up the menubar controller.
           // Both honor the user's Preferences toggles; neither runs unless asked.

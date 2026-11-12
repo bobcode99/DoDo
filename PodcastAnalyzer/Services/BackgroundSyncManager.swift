@@ -265,6 +265,7 @@ class BackgroundSyncManager {
       let episodesWithUserData = Self.episodeKeysWithUserData(in: context)
 
       var totalNewEpisodes = 0
+      var notifiableNewEpisodes = 0
       var newEpisodeDetails: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)] = []
 
       // Sync all podcasts in parallel (up to 6 at a time) for faster refresh
@@ -284,6 +285,7 @@ class BackgroundSyncManager {
                 result, podcasts: podcasts,
                 episodesWithUserData: episodesWithUserData,
                 totalNewEpisodes: &totalNewEpisodes,
+                notifiableNewEpisodes: &notifiableNewEpisodes,
                 newEpisodeDetails: &newEpisodeDetails
               )
               syncProgressCurrent += 1
@@ -312,6 +314,7 @@ class BackgroundSyncManager {
             result, podcasts: podcasts,
             episodesWithUserData: episodesWithUserData,
             totalNewEpisodes: &totalNewEpisodes,
+            notifiableNewEpisodes: &notifiableNewEpisodes,
             newEpisodeDetails: &newEpisodeDetails
           )
           syncProgressCurrent += 1
@@ -331,7 +334,9 @@ class BackgroundSyncManager {
       lastSyncDate = Date()
       UserDefaults.standard.set(lastSyncDate, forKey: Keys.lastSyncDate)
 
-      await publishSyncResults(totalNewEpisodes: totalNewEpisodes, details: newEpisodeDetails, podcasts: podcasts)
+      await publishSyncResults(
+        totalNewEpisodes: totalNewEpisodes, notifiableNewEpisodes: notifiableNewEpisodes,
+        details: newEpisodeDetails, podcasts: podcasts)
 
       logger.info("Sync completed. Found \(totalNewEpisodes) new episodes total.")
       return true
@@ -377,6 +382,7 @@ class BackgroundSyncManager {
   /// notify the user, and tell the UI (always, so timestamps refresh).
   private func publishSyncResults(
     totalNewEpisodes: Int,
+    notifiableNewEpisodes: Int,
     details: [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)],
     podcasts: [PodcastInfoModel]
   ) async {
@@ -394,11 +400,12 @@ class BackgroundSyncManager {
       await enqueueAutoAddEpisodes(details, podcasts: podcasts)
     }
 
-    // Send push notification if there are new episodes and enabled
-    if totalNewEpisodes > 0 && isNotificationsEnabled && notificationPermissionStatus == .authorized {
+    // Notify only for shows whose per-show notification switch is on.
+    if notifiableNewEpisodes > 0 && isNotificationsEnabled && notificationPermissionStatus == .authorized {
+      let notifiable = Set(podcasts.filter(\.notifyNewEpisodes).map(\.title))
       await sendNewEpisodesNotification(
-        totalCount: totalNewEpisodes,
-        details: details
+        totalCount: notifiableNewEpisodes,
+        details: details.filter { notifiable.contains($0.podcastTitle) }
       )
     }
 
@@ -420,6 +427,7 @@ class BackgroundSyncManager {
     podcasts: [PodcastInfoModel],
     episodesWithUserData: Set<String>,
     totalNewEpisodes: inout Int,
+    notifiableNewEpisodes: inout Int,
     newEpisodeDetails: inout [(podcastTitle: String, episodeTitle: String, audioURL: String?, imageURL: String?, language: String, summary: String?)]
   ) {
     let podcast = podcasts[result.index]
@@ -465,6 +473,7 @@ class BackgroundSyncManager {
 
     if !newEpisodes.isEmpty {
       totalNewEpisodes += newEpisodes.count
+      if podcast.notifyNewEpisodes { notifiableNewEpisodes += newEpisodes.count }
       for episode in newEpisodes.prefix(3) {
         newEpisodeDetails.append((
           podcastTitle: updatedPodcast.title,
@@ -478,28 +487,9 @@ class BackgroundSyncManager {
 
       logger.info("Found \(newEpisodes.count) new episodes for \(updatedPodcast.title)")
 
-      // Auto-enqueue transcription for shows the user opted into.
-      // We only fire here when the engine is YAP, since YAP can transcribe
-      // from a remote URL — no local audio file is needed. Local engines
-      // (Whisper / AppleSpeech) require the downloaded file, so they are
-      // handled by DownloadManager once the audio lands on disk.
-      if podcast.autoTranscribeNewEpisodes,
-         let engine = TranscriptManager.shared.engineForAutoEnqueue(podcastTitle: updatedPodcast.title),
-         engine == .yapServer {
-        for episode in newEpisodes {
-          guard !TranscriptManager.shared.isGenerating(
-            episodeTitle: episode.title, podcastTitle: updatedPodcast.title
-          ) else { continue }
-          TranscriptManager.shared.queueAutoTranscript(
-            episodeTitle: episode.title,
-            podcastTitle: updatedPodcast.title,
-            audioPath: "",
-            audioRemoteURL: episode.audioURL,
-            language: updatedPodcast.language,
-            engine: .yapServer
-          )
-        }
-        logger.info("Auto-enqueued \(newEpisodes.count) YAP transcript jobs for \(updatedPodcast.title)")
+      if podcast.autoTranscribeNewEpisodes {
+        TranscriptManager.shared.autoTranscribeNewEpisodes(
+          newEpisodes, podcastTitle: updatedPodcast.title, language: updatedPodcast.language)
       }
     }
   }

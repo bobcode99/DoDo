@@ -314,43 +314,10 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
               "localPath": destinationURL.path
             ]
           )
-
-          // Trigger auto-transcript if enabled (global engine).
-          // queueAutoTranscript skips silently when the episode already has a caption file.
-          if SubtitleSettingsManager.shared.autoGenerateTranscripts {
-            TranscriptManager.shared.queueAutoTranscript(
-              episodeTitle: episodeTitle,
-              podcastTitle: podcastTitle,
-              audioPath: destinationURL.path,
-              language: language
-            )
-          }
-
-          // Per-podcast auto-transcribe: resolve engine at run time (YAP / local / skip).
-          let container = DownloadManager.shared.modelContainer
-          if let container {
-            let ctx = ModelContext(container)
-            let title = podcastTitle
-            let descriptor = FetchDescriptor<PodcastInfoModel>(
-              predicate: #Predicate { $0.title == title && $0.isSubscribed == true }
-            )
-            if let podcast = try? ctx.fetch(descriptor).first,
-               podcast.autoTranscribeNewEpisodes,
-               !TranscriptManager.shared.isGenerating(episodeTitle: episodeTitle, podcastTitle: podcastTitle),
-               let engine = TranscriptManager.shared.engineForAutoEnqueue(podcastTitle: podcastTitle) {
-              TranscriptManager.shared.queueAutoTranscript(
-                episodeTitle: episodeTitle,
-                podcastTitle: podcastTitle,
-                audioPath: destinationURL.path,
-                audioRemoteURL: nil,
-                language: language,
-                engine: engine
-              )
-            }
-          }
         }
 
         // Auto-download RSS transcript if enabled and available
+        var savedFeedTranscript = false
         if let info = transcriptInfo,
            let url = URL(string: info.url) {
           let settings = await MainActor.run { SubtitleSettingsManager.shared }
@@ -362,11 +329,22 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
                 episodeTitle: episodeTitle,
                 podcastTitle: podcastTitle
               )
+              savedFeedTranscript = true
               logger.info("Auto-downloaded RSS transcript for: \(episodeTitle, privacy: .public)")
             } catch {
               logger.warning("Auto-download RSS transcript failed: \(error.localizedDescription, privacy: .public)")
             }
           }
+        }
+
+        // Generate one only when the feed didn't supply it.
+        if !savedFeedTranscript {
+          await TranscriptManager.shared.autoTranscribeDownload(
+            episodeTitle: episodeTitle,
+            podcastTitle: podcastTitle,
+            localPath: destinationURL.path,
+            language: language
+          )
         }
 
         logger.info("Download completed successfully: \(episodeTitle, privacy: .public)")
@@ -443,7 +421,9 @@ private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegat
 final class DownloadManager {
   static let shared = DownloadManager()
 
-  var downloadStates: [String: DownloadState] = [:]
+  var downloadStates: [String: DownloadState] = [:] {
+    didSet { TranscriptManager.shared.downloadStatesChanged(downloadStates) }
+  }
 
   @ObservationIgnored
   private let sessionDelegate = DownloadSessionDelegate()
@@ -699,6 +679,10 @@ final class DownloadManager {
       await sessionDelegate.cancelDownload(episodeTitle: episodeTitle, podcastTitle: podcastTitle)
       inFlightProgress.removeValue(forKey: episodeKey)
       downloadStates[episodeKey] = .notDownloaded
+      // A transcript waiting on this download can no longer start.
+      if TranscriptManager.shared.activeJobs[episodeKey]?.status == .waitingForDownload {
+        TranscriptManager.shared.cancelJob(episodeTitle: episodeTitle, podcastTitle: podcastTitle)
+      }
       logger.info("Cancelled download: \(episodeTitle, privacy: .public)")
     }
   }

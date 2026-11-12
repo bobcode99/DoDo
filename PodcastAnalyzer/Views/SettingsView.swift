@@ -142,6 +142,7 @@ extension SettingsView {
     case .appearance: AppearanceSettingsScreen(viewModel: viewModel)
     case .general: GeneralSettingsScreen(viewModel: viewModel)
     case .autoDownloadShows: AutoDownloadShowsView()
+    case .notifyShows: NotifyShowsView()
     case .autoTranscription: AutoTranscribeManagementView()
     case .transcriptContext: TranscriptContextManagementView()
     #if DEBUG

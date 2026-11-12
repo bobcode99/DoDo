@@ -21,6 +21,7 @@ struct UpNextListView: View {
   @Environment(\.modelContext) private var modelContext
   @State private var episodeToDelete: LibraryEpisode?
   @State private var episodeModels: [String: EpisodeDownloadModel] = [:]
+  @State private var showTranscribeSheet = false
 
   // Access singleton directly to determine now-playing without creating a timer
   private var audioManager: EnhancedAudioManager { .shared }
@@ -46,6 +47,19 @@ struct UpNextListView: View {
     #if os(iOS)
     .navigationBarTitleDisplayMode(.inline)
     #endif
+    .toolbar {
+      Button("Transcribe Episodes", systemImage: "waveform") { showTranscribeSheet = true }
+        .disabled(episodes.isEmpty)
+    }
+    .sheet(isPresented: $showTranscribeSheet) {
+      TranscribeBackfillSheet(
+        title: .appLocalized("Up Next"),
+        items: episodes.map {
+          BatchTranscriptItem(episode: $0.episodeInfo, podcastTitle: $0.podcastTitle, language: $0.language)
+        },
+        order: .upNext
+      )
+    }
     .confirmationDialog("Delete Download", item: $episodeToDelete, titleVisibility: .visible) { episode in
       Button("Delete", role: .destructive) {
         onDeleteDownload(episode)

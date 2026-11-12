@@ -3,15 +3,15 @@
 //  PodcastAnalyzer
 //
 //  Every automatic-transcription setting on one screen. There are two, and they
-//  used to sit in different Settings sections under names that did not
-//  distinguish them ("Auto-Generate Transcripts" vs "Auto-transcribe
-//  Podcasts"). They answer different questions:
+//  answer different questions:
 //
 //    - all podcasts  — transcribe whatever gets downloaded, whichever show
-//    - per podcast   — follow these shows, and with a Yap server transcribe
-//                      new episodes straight from the feed, no download needed
+//    - per podcast   — follow these shows: use the feed's transcript when it
+//                      has one, else the engine picked in Settings: Yap straight
+//                      from the feed, on-device once the episode downloads
 //
-//  Showing them adjacent, with footers that name the trigger, is the fix.
+//  Both go through TranscriptManager.autoTranscribeDownload, and anything the
+//  power gates skip is picked up by catchUpAutoTranscripts.
 //
 
 import SwiftData
@@ -29,6 +29,15 @@ struct AutoTranscribeManagementView: View {
   @State private var syncManager = TranscriptManager.shared
   @Bindable private var subtitleSettings = SubtitleSettingsManager.shared
   @State private var showDisableAllConfirmation = false
+  @State private var backfill: BackfillRequest?
+
+  private struct BackfillRequest: Identifiable {
+    let podcast: PodcastInfoModel
+    let offersNone: Bool
+    var id: PersistentIdentifier { podcast.persistentModelID }
+  }
+
+  private var usesYap: Bool { TranscriptManager.defaultEngine == .yapServer }
   @State private var searchText: String = ""
 
   private var enabledPodcasts: [PodcastInfoModel] {
@@ -52,7 +61,7 @@ struct AutoTranscribeManagementView: View {
       } header: {
         Text("All Podcasts")
       } footer: {
-        Text("Every episode you download gets a transcript, whichever podcast it came from.")
+        Text("Every episode you download gets a transcript, whichever podcast it came from. On-device engines wait until this device is charging.")
       }
 
       if subscribedPodcasts.isEmpty {
@@ -72,7 +81,7 @@ struct AutoTranscribeManagementView: View {
           } header: {
             Text("Following (\(enabledPodcasts.count))")
           } footer: {
-            Text("New episodes are transcribed as soon as they appear — with a Yap server no download is needed, otherwise the episode is transcribed on device once downloaded and charging.")
+            Text("New episodes use the show's own transcript when its feed has one. Otherwise, Yap transcribes them straight from the feed, and on-device engines transcribe them once downloaded, while charging.")
               .font(.footnote)
           }
         }
@@ -100,6 +109,9 @@ struct AutoTranscribeManagementView: View {
       }
     }
     .searchable(text: $searchText, prompt: "Search podcasts")
+    .sheet(item: $backfill) { request in
+      TranscribeBackfillSheet(podcast: request.podcast.podcastInfo, offersNone: request.offersNone)
+    }
     .navigationTitle("Automatic Transcription")
     .toolbar {
       if subscribedPodcasts.contains(where: { $0.autoTranscribeNewEpisodes }) {
@@ -143,7 +155,9 @@ struct AutoTranscribeManagementView: View {
         Text(title)
           .font(.body)
           .lineLimit(1)
-        Text(subtitle(enabled: enabled, pending: pending, episodes: podcast.episodeCount))
+        Text(subtitle(
+          enabled: enabled, pending: pending, episodes: podcast.episodeCount,
+          waitsForManualDownloads: !usesYap && !podcast.downloadsNewEpisodes))
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -155,27 +169,32 @@ struct AutoTranscribeManagementView: View {
         set: { newValue in
           podcast.autoTranscribeNewEpisodes = newValue
           modelContext.saveOrLog()
+          if newValue { backfill = BackfillRequest(podcast: podcast, offersNone: true) }
         }
       ))
       .labelsHidden()
     }
+    .contextMenu {
+      Button("Transcribe Episodes…", systemImage: "waveform") {
+        backfill = BackfillRequest(podcast: podcast, offersNone: false)
+      }
+    }
   }
 
-  private func subtitle(enabled: Bool, pending: Int, episodes: Int) -> LocalizedStringKey {
+  private func subtitle(
+    enabled: Bool, pending: Int, episodes: Int, waitsForManualDownloads: Bool
+  ) -> LocalizedStringKey {
     if enabled {
       if pending > 0 { return "\(pending) in progress" }
+      // Without Yap or auto-download, new episodes only get a transcript
+      // (beyond the feed's own) when the user downloads them.
+      if waitsForManualDownloads { return "Transcribes episodes you download" }
       return "Listening for new episodes"
     }
     return "\(episodes) episodes"
   }
 
   private func activeCount(for podcastTitle: String) -> Int {
-    syncManager.activeJobs.values.filter { job in
-      guard job.podcastTitle == podcastTitle else { return false }
-      switch job.status {
-      case .queued, .downloadingModel, .transcribing: return true
-      case .completed, .failed: return false
-      }
-    }.count
+    syncManager.activeJobs.values.count { $0.podcastTitle == podcastTitle && $0.status.isInFlight }
   }
 }

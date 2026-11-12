@@ -460,6 +460,10 @@ final class MCPDataGateway {
     switch status {
     case .queued:
       return MCPTranscriptJobDTO(status: "queued", progress: nil, message: message, jobKey: jobKey, error: nil)
+    case .waitingForDownload:
+      return MCPTranscriptJobDTO(
+        status: "waiting_for_download", progress: nil,
+        message: "Downloading the episode before transcribing.", jobKey: jobKey, error: nil)
     case .downloadingModel(let progress):
       return MCPTranscriptJobDTO(
         status: "downloading_model", progress: progress,

@@ -62,12 +62,12 @@ enum EpisodeFilter: String, CaseIterable {
 /// the time it presents.
 enum EpisodeListSheet: Identifiable {
   case episodeFilter(PodcastInfoModel)
-  case transcribeBackfill(PodcastInfoModel)
+  case transcribeBackfill(PodcastInfoModel, offersNone: Bool)
 
   var id: String {
     switch self {
     case .episodeFilter(let model): return "filter-\(model.id)"
-    case .transcribeBackfill(let model): return "backfill-\(model.id)"
+    case .transcribeBackfill(let model, _): return "backfill-\(model.id)"
     }
   }
 }
@@ -557,12 +557,8 @@ extension EpisodeListView {
           viewModel?.selectedFilter = .custom
         }
       }
-    case .transcribeBackfill(let model):
-      TranscribeBackfillSheet(
-        podcastTitle: model.podcastInfo.title,
-        podcastLanguage: model.podcastInfo.language,
-        episodes: model.podcastInfo.episodes
-      )
+    case .transcribeBackfill(let model, let offersNone):
+      TranscribeBackfillSheet(podcast: model.podcastInfo, offersNone: offersNone)
     }
   }
 
@@ -847,7 +843,7 @@ extension EpisodeListView {
         podcastModel?.autoTranscribeNewEpisodes.toggle()
         modelContext.saveOrLog()
         if wasOff, podcastModel?.autoTranscribeNewEpisodes == true, let model = podcastModel {
-          activeSheet = .transcribeBackfill(model)
+          activeSheet = .transcribeBackfill(model, offersNone: true)
         }
       } label: {
         if podcastModel?.autoTranscribeNewEpisodes == true {
@@ -855,6 +851,12 @@ extension EpisodeListView {
         } else {
           Label("Auto-transcribe: Off", systemImage: "waveform")
         }
+      }
+
+      Button {
+        if let model = podcastModel { activeSheet = .transcribeBackfill(model, offersNone: false) }
+      } label: {
+        Label("Transcribe Episodes\u{2026}", systemImage: "waveform")
       }
 
       Button {

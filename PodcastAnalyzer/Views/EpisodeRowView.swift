@@ -653,7 +653,7 @@ private struct EpisodeRowTranscriptIndicator: View {
               .foregroundStyle(.purple.opacity(0.7))
           }
         }
-      case .queued:
+      case .queued, .waitingForDownload:
         HStack(spacing: 2) {
           ProgressView().scaleEffect(0.35)
         }

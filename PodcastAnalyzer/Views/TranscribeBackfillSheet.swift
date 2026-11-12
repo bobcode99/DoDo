@@ -2,63 +2,60 @@
 //  TranscribeBackfillSheet.swift
 //  PodcastAnalyzer
 //
-//  Shown when the user enables "Auto-transcribe new episodes" on a podcast.
-//  Lets the user choose how far back to backfill, resolves the engine, and
-//  enqueues jobs in TranscriptManager.
+//  Queues transcripts for several episodes at once: a show's latest episodes
+//  (from the show menu, or right after "Auto-transcribe new episodes" is
+//  switched on) or the Up Next list. Resolves the engine and hands the
+//  episodes to TranscriptManager.queueBatch.
 //
 
 import SwiftUI
 
 struct TranscribeBackfillSheet: View {
-  let podcastTitle: String
-  let podcastLanguage: String
-  let episodes: [PodcastEpisodeInfo]
+  let title: String
+  /// Highest priority first: newest for a show, list order for Up Next.
+  let items: [BatchTranscriptItem]
+  var order: Order = .newest
+  /// Adds "None — only future episodes", for when auto-transcribe was just enabled.
+  var offersNone = false
+
+  enum Order { case newest, upNext }
 
   @Environment(\.dismiss) private var dismiss
 
-  @State private var selectedRange: BackfillRange = .none
+  @State private var limit: Int?
+  @State private var needsTranscript: [Bool] = []
   @State private var blockedReason: String?
 
-  enum BackfillRange: String, CaseIterable, Identifiable {
-    case none, last7, last30, all
-    var id: String { rawValue }
-    var label: LocalizedStringResource {
-      switch self {
-      case .none:   return "None — only future episodes"
-      case .last7:  return "Last 7 days"
-      case .last30: return "Last 30 days"
-      case .all:    return "All episodes"
-      }
-    }
-    var cutoff: Date? {
-      switch self {
-      case .none:   return Date.distantFuture     // matches nothing
-      case .last7:  return Date(timeIntervalSinceNow: -7 * 24 * 3600)
-      case .last30: return Date(timeIntervalSinceNow: -30 * 24 * 3600)
-      case .all:    return Date.distantPast
-      }
-    }
+  /// How many of `items` to queue: 0 = none, `items.count` = all.
+  private var presets: [Int] {
+    (offersNone ? [0] : []) + [5, 10, 25].filter { $0 < items.count } + [items.count]
+  }
+
+  private var selectedLimit: Int {
+    limit ?? (offersNone ? 0 : min(10, items.count))
   }
 
   var body: some View {
     NavigationStack {
       Form {
         Section {
-          Text("Pick how many existing episodes to queue for transcription. New episodes that arrive in future feed refreshes are queued automatically.")
+          Text(offersNone
+            ? "Pick how many existing episodes to queue for transcription. New episodes that arrive in future feed refreshes are queued automatically."
+            : "Episodes that already have a transcript are skipped, and a show's own transcript is used when its feed has one. On-device engines download episodes first.")
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
 
-        Section("Backfill range") {
-          ForEach(BackfillRange.allCases) { range in
-            Button { selectedRange = range } label: {
+        Section("Episodes") {
+          ForEach(presets, id: \.self) { preset in
+            Button { limit = preset } label: {
               HStack {
-                Text(range.label)
+                Text(label(for: preset))
                 Spacer()
-                Text("\(countForRange(range))")
+                Text("\(toQueueCount(preset))")
                   .foregroundStyle(.secondary)
                   .monospacedDigit()
-                if selectedRange == range {
+                if selectedLimit == preset {
                   Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
                     .accessibilityHidden(true)
@@ -67,39 +64,46 @@ struct TranscribeBackfillSheet: View {
               .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityAddTraits(selectedRange == range ? .isSelected : [])
+            .accessibilityAddTraits(selectedLimit == preset ? .isSelected : [])
           }
         }
 
+        // Shown up front, so tapping Transcribe means "run on battery anyway".
         if let reason = blockedReason {
           Section {
             VStack(alignment: .leading, spacing: 6) {
               Label("Local transcription uses significant battery", systemImage: "battery.25percent")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.orange)
-              Text(reason)
+              Text("\(reason) Plug in to save battery, or tap Transcribe to start anyway.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-              Button("Continue this session") {
-                TranscriptManager.shared.setAllowLocalOnBattery(true)
-                blockedReason = nil
-                confirm()
-              }
-              .buttonStyle(.accentProminent)
-              .controlSize(.small)
-              .padding(.top, 4)
             }
             .padding(.vertical, 4)
           }
         }
       }
-      .navigationTitle(podcastTitle)
+      .navigationTitle(title)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Confirm") { confirm() }
+          Button(offersNone ? "Confirm" : "Transcribe") { confirm() }
+            .disabled(!offersNone && toQueueCount(selectedLimit) == 0)
+        }
+      }
+      .onAppear {
+        if case .blocked(let reason) = TranscriptManager.shared.resolveAutoTranscribeEngine() {
+          blockedReason = reason
+        }
+        // One transcript fetch for the whole list, not one per row per render.
+        let existing = TranscriptStore.shared.existingEpisodeIds()
+        needsTranscript = items.map { item in
+          !existing.contains(EpisodeKeyUtils.makeKey(
+            podcastTitle: item.podcastTitle, episodeTitle: item.episode.title))
+            && !TranscriptManager.shared.isGenerating(
+              episodeTitle: item.episode.title, podcastTitle: item.podcastTitle)
         }
       }
     }
@@ -107,42 +111,42 @@ struct TranscribeBackfillSheet: View {
 
   // MARK: - Helpers
 
-  private func countForRange(_ range: BackfillRange) -> Int {
-    guard let cutoff = range.cutoff, range != .none else { return 0 }
-    return episodes.count(where: { ($0.pubDate ?? .distantPast) >= cutoff })
+  private func label(for preset: Int) -> LocalizedStringResource {
+    switch preset {
+    case 0: "None — only future episodes"
+    case items.count: order == .newest ? "All episodes" : "All in Up Next"
+    default: order == .newest ? "Latest \(preset)" : "Next \(preset)"
+    }
+  }
+
+  /// Episodes in the first `preset` that still need a transcript.
+  private func toQueueCount(_ preset: Int) -> Int {
+    needsTranscript.prefix(preset).count(where: \.self)
   }
 
   private func confirm() {
-    let decision = TranscriptManager.shared.resolveAutoTranscribeEngine()
-    if case .blocked(let reason) = decision {
-      blockedReason = reason
-      return
+    guard selectedLimit > 0 else { return dismiss() }
+    // .blocked only means "not charging"; the caution was already on screen,
+    // so this one batch runs on battery. Auto transcribe still waits to charge.
+    let engine: TranscriptEngine = switch TranscriptManager.shared.resolveAutoTranscribeEngine() {
+    case .yap: .yapServer
+    case .local(let local): local
+    case .blocked: TranscriptManager.defaultEngine
     }
-
-    let cutoff = selectedRange.cutoff ?? .distantFuture
-    let toQueue = episodes.filter { ($0.pubDate ?? .distantPast) >= cutoff }
-
-    let engine: TranscriptEngine?
-    switch decision {
-    case .yap:               engine = .yapServer
-    case .local(let local):  engine = local
-    case .blocked:           return  // handled above
-    }
-
-    for ep in toQueue {
-      guard !TranscriptManager.shared.isGenerating(
-        episodeTitle: ep.title, podcastTitle: podcastTitle
-      ) else { continue }
-
-      TranscriptManager.shared.queueAutoTranscript(
-        episodeTitle: ep.title,
-        podcastTitle: podcastTitle,
-        audioPath: "",                       // YAP can use remote; local will fall back to .failed if no local file
-        audioRemoteURL: ep.audioURL,
-        language: podcastLanguage,
-        engine: engine
-      )
-    }
+    TranscriptManager.shared.queueBatch(Array(items.prefix(selectedLimit)), engine: engine)
     dismiss()
+  }
+}
+
+extension TranscribeBackfillSheet {
+  /// A show's episodes, newest first.
+  init(podcast: PodcastInfo, offersNone: Bool = false) {
+    self.init(
+      title: podcast.title,
+      items: podcast.episodes
+        .sorted { ($0.pubDate ?? .distantPast) > ($1.pubDate ?? .distantPast) }
+        .map { BatchTranscriptItem(episode: $0, podcastTitle: podcast.title, language: podcast.language) },
+      offersNone: offersNone
+    )
   }
 }

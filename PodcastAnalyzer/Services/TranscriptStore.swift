@@ -48,6 +48,15 @@ final class TranscriptStore {
     fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle) != nil
   }
 
+  /// Episode keys of every stored transcript, in one fetch — for checking a
+  /// whole show's episodes without a fetch per episode.
+  func existingEpisodeIds() -> Set<String> {
+    guard let context else { return [] }
+    var descriptor = FetchDescriptor<EpisodeTranscriptModel>()
+    descriptor.propertiesToFetch = [\.episodeId]
+    return Set(((try? context.fetch(descriptor)) ?? []).map(\.episodeId))
+  }
+
   func generatedAt(episodeTitle: String, podcastTitle: String) -> Date? {
     fetch(episodeTitle: episodeTitle, podcastTitle: podcastTitle)?.generatedAt
   }

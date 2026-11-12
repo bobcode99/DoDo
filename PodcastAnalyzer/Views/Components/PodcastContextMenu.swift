@@ -9,11 +9,7 @@ import SwiftData
 import SwiftUI
 
 struct PodcastContextMenu: ViewModifier {
-  // @Bindable, not `let`: PodcastInfoModel is an @Model and therefore already
-  // Observable, so its properties vend bindings directly. The hand-rolled
-  // Binding(get:set:) this replaces was rebuilt on every evaluation of this
-  // modifier — 3,406 of them in library-timeprofile-0829.trace.
-  @Bindable var podcast: PodcastInfoModel
+  let podcast: PodcastInfoModel
   let modelContext: ModelContext
   var onError: ((String) -> Void)?
   var onUnsubscribed: (() -> Void)?
@@ -22,15 +18,11 @@ struct PodcastContextMenu: ViewModifier {
   @State private var showEpisodeFilterSheet = false
   @State private var showPlaybackSettingsSheet = false
   @State private var showTranscribeBackfillSheet = false
+  @State private var backfillOffersNone = false
 
   func body(content: Content) -> some View {
     content
       .contextMenu { menuItems }
-      .onChange(of: podcast.autoTranscribeNewEpisodes) { _, isOn in
-        modelContext.saveOrLog()
-        // Offer to backfill only when switching on, not when switching off.
-        if isOn { showTranscribeBackfillSheet = true }
-      }
       .sheet(isPresented: $showEpisodeFilterSheet) {
         PodcastEpisodeFilterView(podcast: podcast, modelContext: modelContext)
       }
@@ -38,11 +30,7 @@ struct PodcastContextMenu: ViewModifier {
         PodcastPlaybackSettingsView(podcast: podcast, modelContext: modelContext)
       }
       .sheet(isPresented: $showTranscribeBackfillSheet) {
-        TranscribeBackfillSheet(
-          podcastTitle: podcast.podcastInfo.title,
-          podcastLanguage: podcast.podcastInfo.language,
-          episodes: podcast.podcastInfo.episodes
-        )
+        TranscribeBackfillSheet(podcast: podcast.podcastInfo, offersNone: backfillOffersNone)
       }
       .confirmationDialog(
         "Unsubscribe from Podcast",
@@ -86,8 +74,26 @@ struct PodcastContextMenu: ViewModifier {
     Divider()
 
     // Auto-transcribe new episodes — engine resolved at run time (YAP → local).
-    Toggle(isOn: $podcast.autoTranscribeNewEpisodes) {
-      Label("Auto-transcribe new episodes", systemImage: "waveform.badge.plus")
+    // Offered from the tap, not observed with onChange: every Library cell
+    // would otherwise pop the sheet when the flag changes anywhere else.
+    Button {
+      podcast.autoTranscribeNewEpisodes.toggle()
+      modelContext.saveOrLog()
+      if podcast.autoTranscribeNewEpisodes {
+        backfillOffersNone = true
+        showTranscribeBackfillSheet = true
+      }
+    } label: {
+      Label(
+        "Auto-transcribe new episodes",
+        systemImage: podcast.autoTranscribeNewEpisodes ? "checkmark" : "waveform.badge.plus")
+    }
+
+    Button {
+      backfillOffersNone = false
+      showTranscribeBackfillSheet = true
+    } label: {
+      Label("Transcribe Episodes…", systemImage: "waveform")
     }
 
     autoDownloadMenu
