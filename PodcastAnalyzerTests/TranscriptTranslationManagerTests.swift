@@ -39,8 +39,11 @@ struct TranscriptTranslationManagerTests {
     }
 
     /// The job runs in its own task; give it a bounded chance to get there.
+    /// Returns as soon as the condition holds. The deadline is generous because
+    /// the full suite shares the main actor, and on a loaded CI runner the job's
+    /// task can wait seconds for its turn.
     private func waitUntil(_ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
         while !condition(), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }

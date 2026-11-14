@@ -24,6 +24,8 @@ struct YapReachabilityTests {
         }
 
         #expect(error?.code == .cannotConnectToHost)
-        #expect(ContinuousClock.now - start < .seconds(5))
+        // Well under URLSession.shared's 60s default. Not tighter: a runner that
+        // drops the SYN instead of refusing it waits out AIProbe.timeout.
+        #expect(ContinuousClock.now - start < .seconds(30))
     }
 }
